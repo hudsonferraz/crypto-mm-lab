@@ -12,7 +12,14 @@ def build_strategy(settings: Settings):
             quote_size=settings.quote_size,
         )
     if settings.strategy == "inventory_skew":
-        return InventorySkewStrategy()
+        return InventorySkewStrategy(
+            symbol=settings.symbol,
+            spread_bps=settings.quote_spread_bps,
+            quote_size=settings.quote_size,
+            target_base=settings.inventory_target_base,
+            max_position_base=settings.max_position_base,
+            skew_bps=settings.inventory_skew_bps,
+        )
     if settings.strategy == "volatility_spread":
         return VolatilitySpreadStrategy()
     raise ValueError(f"Unknown strategy: {settings.strategy}")

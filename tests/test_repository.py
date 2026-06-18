@@ -27,6 +27,7 @@ def test_repository_creates_all_tables(tmp_path) -> None:
         "fills",
         "positions",
         "pnl_snapshots",
+        "opportunities",
     }
     repo.close()
 

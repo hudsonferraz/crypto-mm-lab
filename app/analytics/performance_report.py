@@ -1,4 +1,4 @@
-from app.models.domain import OrderBookSnapshot, PnLSnapshot, Position
+from app.models.domain import AmmPoolSnapshot, Opportunity, OrderBookSnapshot, PnLSnapshot, Position
 
 
 def format_performance_report(
@@ -9,6 +9,9 @@ def format_performance_report(
     pnl: PnLSnapshot | None,
     open_quotes: int,
     kill_switch_active: bool,
+    pool_snapshot: AmmPoolSnapshot | None = None,
+    compare_mid: float | None = None,
+    opportunities: list[Opportunity] | None = None,
 ) -> str:
     lines = [
         f"Tick {tick}",
@@ -21,6 +24,22 @@ def format_performance_report(
         best_ask = snapshot.asks[0].price if snapshot.asks else None
         stale = " (stale)" if snapshot.is_stale else ""
         lines.append(f"Market{stale}: bid={best_bid} ask={best_ask}")
+
+    if compare_mid is not None and pool_snapshot is not None:
+        stale = " (stale)" if pool_snapshot.is_stale else ""
+        spread_bps = 0.0
+        if compare_mid > 0:
+            spread_bps = abs(pool_snapshot.spot_price - compare_mid) / compare_mid * 10_000
+        lines.append(
+            f"DEX{stale}: cex_mid={compare_mid:.2f} "
+            f"amm={pool_snapshot.spot_price:.2f} spread={spread_bps:.2f}bps"
+        )
+
+    if opportunities:
+        latest = opportunities[0]
+        lines.append(
+            f"Opportunity: {latest.direction.value} net_edge={latest.net_edge_bps:.2f}bps"
+        )
 
     if position is not None:
         lines.append(
@@ -50,6 +69,9 @@ def performance_report_dict(
     open_quotes: int,
     kill_switch_active: bool,
     last_tick_at: str | None,
+    pool_snapshot: AmmPoolSnapshot | None = None,
+    compare_mid: float | None = None,
+    opportunities: list[Opportunity] | None = None,
 ) -> dict:
     best_bid = snapshot.bids[0].price if snapshot and snapshot.bids else None
     best_ask = snapshot.asks[0].price if snapshot and snapshot.asks else None
@@ -59,6 +81,10 @@ def performance_report_dict(
         mid = (best_bid + best_ask) / 2
         if mid > 0:
             spread_bps = ((best_ask - best_bid) / mid) * 10_000
+
+    dex_spread_bps = None
+    if compare_mid is not None and pool_snapshot is not None and compare_mid > 0:
+        dex_spread_bps = abs(pool_snapshot.spot_price - compare_mid) / compare_mid * 10_000
 
     return {
         "tick": tick,
@@ -74,6 +100,23 @@ def performance_report_dict(
             "spread_bps": spread_bps,
             "is_stale": snapshot.is_stale if snapshot else None,
         },
+        "dex": {
+            "cex_compare_mid": compare_mid,
+            "amm_price": pool_snapshot.spot_price if pool_snapshot else None,
+            "spread_bps": dex_spread_bps,
+            "is_stale": pool_snapshot.is_stale if pool_snapshot else None,
+            "pool_address": pool_snapshot.pool_address if pool_snapshot else None,
+        },
+        "opportunities": [
+            {
+                "direction": opportunity.direction.value,
+                "net_edge_bps": opportunity.net_edge_bps,
+                "net_edge": opportunity.net_edge,
+                "trial_trade_size": opportunity.trial_trade_size,
+                "timestamp": opportunity.timestamp.isoformat(),
+            }
+            for opportunity in (opportunities or [])
+        ],
         "position": {
             "base_amount": position.base_amount if position else None,
             "quote_amount": position.quote_amount if position else None,
@@ -85,4 +128,21 @@ def performance_report_dict(
             "fees": pnl.total_fees if pnl else None,
             "total": pnl.total_pnl if pnl else None,
         },
+    }
+
+
+def opportunity_to_dict(opportunity: Opportunity) -> dict:
+    return {
+        "direction": opportunity.direction.value,
+        "cex_mid": opportunity.cex_mid,
+        "amm_price": opportunity.amm_price,
+        "trial_trade_size": opportunity.trial_trade_size,
+        "gross_edge": opportunity.gross_edge,
+        "cex_fee": opportunity.cex_fee,
+        "amm_fee": opportunity.amm_fee,
+        "gas_cost": opportunity.gas_cost,
+        "slippage_cost": opportunity.slippage_cost,
+        "net_edge": opportunity.net_edge,
+        "net_edge_bps": opportunity.net_edge_bps,
+        "timestamp": opportunity.timestamp.isoformat(),
     }

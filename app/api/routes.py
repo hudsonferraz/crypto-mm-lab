@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from app.analytics.performance_report import performance_report_dict
+from app.analytics.performance_report import opportunity_to_dict, performance_report_dict
 from app.market_data.orderbook import best_ask, best_bid, mid_price, spread_bps
 from app.services.market_maker_loop import MarketMakerLoop
 
@@ -102,7 +102,53 @@ async def report(request: Request) -> dict:
         open_quotes=loop.open_quote_count,
         kill_switch_active=loop.kill_switch.active,
         last_tick_at=last_tick_at,
+        pool_snapshot=loop.last_pool_snapshot,
+        compare_mid=loop.last_compare_mid,
+        opportunities=loop.last_opportunities,
     )
+
+
+@router.get("/amm")
+async def amm(request: Request) -> dict:
+    loop = _get_loop(request)
+    pool_snapshot = loop.last_pool_snapshot
+    compare_mid = loop.last_compare_mid
+    if pool_snapshot is None:
+        return {
+            "pool_address": None,
+            "spot_price": None,
+            "base_reserve": None,
+            "quote_reserve": None,
+            "cex_compare_mid": compare_mid,
+            "spread_bps": None,
+            "is_stale": None,
+        }
+
+    spread_bps_value = None
+    if compare_mid is not None and compare_mid > 0:
+        spread_bps_value = abs(pool_snapshot.spot_price - compare_mid) / compare_mid * 10_000
+
+    return {
+        "pool_address": pool_snapshot.pool_address,
+        "spot_price": pool_snapshot.spot_price,
+        "base_reserve": pool_snapshot.base_reserve,
+        "quote_reserve": pool_snapshot.quote_reserve,
+        "cex_compare_mid": compare_mid,
+        "spread_bps": spread_bps_value,
+        "is_stale": pool_snapshot.is_stale,
+        "timestamp": pool_snapshot.timestamp.isoformat(),
+    }
+
+
+@router.get("/opportunities")
+async def opportunities(request: Request, limit: int = 10) -> dict:
+    loop = _get_loop(request)
+    stored = loop.repository.get_latest_opportunities(limit=limit)
+    latest = loop.last_opportunities
+    return {
+        "latest_tick": [opportunity_to_dict(item) for item in latest],
+        "recent": [opportunity_to_dict(item) for item in stored],
+    }
 
 
 class KillSwitchRequest(BaseModel):

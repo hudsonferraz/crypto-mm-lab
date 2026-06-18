@@ -25,6 +25,20 @@ class Settings(BaseSettings):
     max_position_notional: float = 1_000.0
     report_interval_ticks: int = 5
 
+    dex_enabled: bool = True
+    eth_rpc_url: str = "https://ethereum.publicnode.com"
+    dex_pool_address: str = "0xB4e16d0168e52d35CaC2c6185b44281Ec1C50942"
+    cex_compare_symbol: str = "ETH/USDT"
+    amm_fee_bps: float = 30.0
+    arbitrage_trial_trade_size: float = 0.1
+    arbitrage_min_edge_bps: float = 5.0
+    gas_limit_units: int = 200_000
+    gas_price_gwei: float = 30.0
+    pool_base_decimals: int = 18
+    pool_quote_decimals: int = 6
+    inventory_target_base: float = 0.0
+    inventory_skew_bps: float = 20.0
+
 
 @lru_cache
 def get_settings() -> Settings:

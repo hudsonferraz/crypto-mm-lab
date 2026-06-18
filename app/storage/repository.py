@@ -11,7 +11,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from app.models.domain import (
+    ArbitrageDirection,
     Fill,
+    Opportunity,
     OrderBookLevel,
     OrderBookSnapshot,
     PnLSnapshot,
@@ -82,6 +84,24 @@ class PnLSnapshotRow(Base):
     unrealized_pnl: Mapped[float] = mapped_column(Float, nullable=False)
     total_fees: Mapped[float] = mapped_column(Float, nullable=False)
     total_pnl: Mapped[float] = mapped_column(Float, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class OpportunityRow(Base):
+    __tablename__ = "opportunities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    direction: Mapped[str] = mapped_column(String(32), nullable=False)
+    cex_mid: Mapped[float] = mapped_column(Float, nullable=False)
+    amm_price: Mapped[float] = mapped_column(Float, nullable=False)
+    trial_trade_size: Mapped[float] = mapped_column(Float, nullable=False)
+    gross_edge: Mapped[float] = mapped_column(Float, nullable=False)
+    cex_fee: Mapped[float] = mapped_column(Float, nullable=False)
+    amm_fee: Mapped[float] = mapped_column(Float, nullable=False)
+    gas_cost: Mapped[float] = mapped_column(Float, nullable=False)
+    slippage_cost: Mapped[float] = mapped_column(Float, nullable=False)
+    net_edge: Mapped[float] = mapped_column(Float, nullable=False)
+    net_edge_bps: Mapped[float] = mapped_column(Float, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -192,6 +212,54 @@ class Repository:
         with self._session() as session:
             session.add(row)
             session.commit()
+
+    def save_opportunities(self, opportunities: list[Opportunity]) -> None:
+        rows = [
+            OpportunityRow(
+                direction=opportunity.direction.value,
+                cex_mid=opportunity.cex_mid,
+                amm_price=opportunity.amm_price,
+                trial_trade_size=opportunity.trial_trade_size,
+                gross_edge=opportunity.gross_edge,
+                cex_fee=opportunity.cex_fee,
+                amm_fee=opportunity.amm_fee,
+                gas_cost=opportunity.gas_cost,
+                slippage_cost=opportunity.slippage_cost,
+                net_edge=opportunity.net_edge,
+                net_edge_bps=opportunity.net_edge_bps,
+                timestamp=opportunity.timestamp,
+            )
+            for opportunity in opportunities
+        ]
+        with self._session() as session:
+            session.add_all(rows)
+            session.commit()
+
+    def get_latest_opportunities(self, limit: int = 10) -> list[Opportunity]:
+        with self._session() as session:
+            rows = (
+                session.query(OpportunityRow)
+                .order_by(OpportunityRow.id.desc())
+                .limit(limit)
+                .all()
+            )
+            return [
+                Opportunity(
+                    direction=ArbitrageDirection(row.direction),
+                    cex_mid=row.cex_mid,
+                    amm_price=row.amm_price,
+                    trial_trade_size=row.trial_trade_size,
+                    gross_edge=row.gross_edge,
+                    cex_fee=row.cex_fee,
+                    amm_fee=row.amm_fee,
+                    gas_cost=row.gas_cost,
+                    slippage_cost=row.slippage_cost,
+                    net_edge=row.net_edge,
+                    net_edge_bps=row.net_edge_bps,
+                    timestamp=row.timestamp,
+                )
+                for row in rows
+            ]
 
     def _session(self) -> Session:
         return self._session_factory()

@@ -12,7 +12,7 @@
       color: #e8eaed;
     }
     body { margin: 0; padding: 2rem; }
-    h1 { margin-top: 0; }
+    h1, h2 { margin-top: 0; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
     .card {
       background: #1a1d24;
@@ -22,7 +22,6 @@
     }
     .label { color: #9aa0a6; font-size: 0.85rem; }
     .value { font-size: 1.25rem; font-weight: 600; margin-top: 0.25rem; }
-    .stale { color: #f4b400; }
     button {
       margin-top: 1rem;
       padding: 0.5rem 1rem;
@@ -34,45 +33,48 @@
     }
     button:hover { background: #3c4043; }
     #status-line { margin-bottom: 1rem; color: #9aa0a6; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #2a2f3a; }
+    th { color: #9aa0a6; font-weight: 500; }
   </style>
 </head>
 <body>
   <h1>crypto-mm-lab</h1>
   <div id="status-line">Loading...</div>
+
+  <h2>CEX (MM)</h2>
   <div class="grid">
-    <div class="card">
-      <div class="label">Best bid</div>
-      <div class="value" id="best-bid">-</div>
-    </div>
-    <div class="card">
-      <div class="label">Best ask</div>
-      <div class="value" id="best-ask">-</div>
-    </div>
-    <div class="card">
-      <div class="label">Mid</div>
-      <div class="value" id="mid">-</div>
-    </div>
-    <div class="card">
-      <div class="label">Spread (bps)</div>
-      <div class="value" id="spread">-</div>
-    </div>
-    <div class="card">
-      <div class="label">Base position</div>
-      <div class="value" id="base">-</div>
-    </div>
-    <div class="card">
-      <div class="label">Quote balance</div>
-      <div class="value" id="quote">-</div>
-    </div>
-    <div class="card">
-      <div class="label">Total PnL</div>
-      <div class="value" id="total-pnl">-</div>
-    </div>
-    <div class="card">
-      <div class="label">Realized / Unrealized</div>
-      <div class="value" id="pnl-breakdown">-</div>
-    </div>
+    <div class="card"><div class="label">Best bid</div><div class="value" id="best-bid">-</div></div>
+    <div class="card"><div class="label">Best ask</div><div class="value" id="best-ask">-</div></div>
+    <div class="card"><div class="label">Mid</div><div class="value" id="mid">-</div></div>
+    <div class="card"><div class="label">Spread (bps)</div><div class="value" id="spread">-</div></div>
   </div>
+
+  <h2>DEX vs CEX</h2>
+  <div class="grid">
+    <div class="card"><div class="label">CEX compare mid (ETH)</div><div class="value" id="cex-compare">-</div></div>
+    <div class="card"><div class="label">AMM spot (WETH/USDC)</div><div class="value" id="amm-price">-</div></div>
+    <div class="card"><div class="label">CEX–DEX spread (bps)</div><div class="value" id="dex-spread">-</div></div>
+  </div>
+
+  <h2>Position & PnL</h2>
+  <div class="grid">
+    <div class="card"><div class="label">Base position</div><div class="value" id="base">-</div></div>
+    <div class="card"><div class="label">Quote balance</div><div class="value" id="quote">-</div></div>
+    <div class="card"><div class="label">Total PnL</div><div class="value" id="total-pnl">-</div></div>
+    <div class="card"><div class="label">Realized / Unrealized</div><div class="value" id="pnl-breakdown">-</div></div>
+  </div>
+
+  <h2>Latest opportunities</h2>
+  <table>
+    <thead>
+      <tr><th>Direction</th><th>Net edge (bps)</th><th>Net edge ($)</th><th>Size</th></tr>
+    </thead>
+    <tbody id="opportunities-body">
+      <tr><td colspan="4">No opportunities yet</td></tr>
+    </tbody>
+  </table>
+
   <button id="kill-switch-btn" type="button">Toggle kill switch</button>
 
   <script>
@@ -85,28 +87,52 @@
       return response.json();
     }
 
+    function renderOpportunities(items) {
+      const body = document.getElementById("opportunities-body");
+      if (!items || items.length === 0) {
+        body.innerHTML = "<tr><td colspan='4'>No opportunities yet</td></tr>";
+        return;
+      }
+      body.innerHTML = items.map((item) => `
+        <tr>
+          <td>${item.direction}</td>
+          <td>${fmt(item.net_edge_bps, 2)}</td>
+          <td>${fmt(item.net_edge, 4)}</td>
+          <td>${fmt(item.trial_trade_size, 4)}</td>
+        </tr>
+      `).join("");
+    }
+
     async function refresh() {
       try {
-        const [status, market, position, pnl] = await Promise.all([
+        const [status, market, amm, position, pnl, opportunities] = await Promise.all([
           fetchJson("/status"),
           fetchJson("/market"),
+          fetchJson("/amm"),
           fetchJson("/position"),
           fetchJson("/pnl"),
+          fetchJson("/opportunities?limit=5"),
         ]);
 
         const stale = market.is_stale ? " (stale)" : "";
+        const dexStale = amm.is_stale ? " (stale)" : "";
         document.getElementById("status-line").textContent =
-          `Tick ${status.tick} | Running: ${status.running} | Kill switch: ${status.kill_switch_active ? "ON" : "OFF"}${stale}`;
+          `Tick ${status.tick} | Running: ${status.running} | Kill switch: ${status.kill_switch_active ? "ON" : "OFF"}${stale}${dexStale}`;
 
         document.getElementById("best-bid").textContent = fmt(market.best_bid, 2);
         document.getElementById("best-ask").textContent = fmt(market.best_ask, 2);
         document.getElementById("mid").textContent = fmt(market.mid, 2);
         document.getElementById("spread").textContent = fmt(market.spread_bps, 2);
+        document.getElementById("cex-compare").textContent = fmt(amm.cex_compare_mid, 2);
+        document.getElementById("amm-price").textContent = fmt(amm.spot_price, 2);
+        document.getElementById("dex-spread").textContent = fmt(amm.spread_bps, 2);
         document.getElementById("base").textContent = fmt(position.base_amount, 6);
         document.getElementById("quote").textContent = fmt(position.quote_amount, 2);
         document.getElementById("total-pnl").textContent = fmt(pnl.total_pnl, 4);
         document.getElementById("pnl-breakdown").textContent =
           `${fmt(pnl.realized_pnl, 4)} / ${fmt(pnl.unrealized_pnl, 4)}`;
+
+        renderOpportunities(opportunities.latest_tick.length ? opportunities.latest_tick : opportunities.recent);
 
         const btn = document.getElementById("kill-switch-btn");
         btn.textContent = status.kill_switch_active ? "Disable kill switch" : "Enable kill switch";

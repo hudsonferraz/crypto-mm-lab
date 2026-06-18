@@ -36,6 +36,8 @@ python scripts/run_mm.py
 | `GET /position` | Base/quote inventory |
 | `GET /pnl` | Realized/unrealized PnL and fees |
 | `GET /report` | Combined status JSON |
+| `GET /amm` | WETH/USDC pool price vs CEX ETH mid |
+| `GET /opportunities` | Latest arbitrage opportunities |
 | `POST /kill-switch` | Enable/disable kill switch (`{"active": true}`) |
 | `GET /dashboard` | Static monitoring UI |
 
@@ -55,6 +57,8 @@ CCXT adapter → normalizer → order book
 
 V1 is **paper-only**: no live order placement. Fills are simulated when the external book crosses resting quotes.
 
+**V2** adds read-only Uniswap V2 pool data (WETH/USDC) and compares it to CEX `ETH/USDT` mid for arbitrage opportunity detection. No on-chain transactions.
+
 ## Configuration
 
 See `.env.example` for all settings. Key variables:
@@ -62,6 +66,9 @@ See `.env.example` for all settings. Key variables:
 - `EXCHANGE`, `SYMBOL` — data source (default `binance`, `BTC/USDT`)
 - `QUOTE_SPREAD_BPS`, `QUOTE_SIZE` — strategy parameters
 - `MAX_POSITION_BASE`, `MAX_POSITION_NOTIONAL` — risk limits
+- `DEX_ENABLED`, `ETH_RPC_URL`, `DEX_POOL_ADDRESS` — on-chain pool reader
+- `CEX_COMPARE_SYMBOL` — CEX pair for DEX comparison (default `ETH/USDT`)
+- `ARBITRAGE_MIN_EDGE_BPS`, `ARBITRAGE_TRIAL_TRADE_SIZE` — opportunity scanner
 - `DB_URL` — SQLite path (default `./data/mm_lab.db`)
 
 ## Development
