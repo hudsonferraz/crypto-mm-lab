@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     maker_fee_bps: float = 10.0
     taker_fee_bps: float = 10.0
     strategy: str = Field(default="pure_mm", description="Active strategy name")
+    initial_quote_balance: float = 10_000.0
+    max_position_notional: float = 1_000.0
+    report_interval_ticks: int = 5
 
 
 @lru_cache

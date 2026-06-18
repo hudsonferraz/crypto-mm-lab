@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>crypto-mm-lab dashboard</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, sans-serif;
+      background: #0f1115;
+      color: #e8eaed;
+    }
+    body { margin: 0; padding: 2rem; }
+    h1 { margin-top: 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+    .card {
+      background: #1a1d24;
+      border: 1px solid #2a2f3a;
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    .label { color: #9aa0a6; font-size: 0.85rem; }
+    .value { font-size: 1.25rem; font-weight: 600; margin-top: 0.25rem; }
+    .stale { color: #f4b400; }
+    button {
+      margin-top: 1rem;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: 1px solid #3c4043;
+      background: #2a2f3a;
+      color: #e8eaed;
+      cursor: pointer;
+    }
+    button:hover { background: #3c4043; }
+    #status-line { margin-bottom: 1rem; color: #9aa0a6; }
+  </style>
+</head>
+<body>
+  <h1>crypto-mm-lab</h1>
+  <div id="status-line">Loading...</div>
+  <div class="grid">
+    <div class="card">
+      <div class="label">Best bid</div>
+      <div class="value" id="best-bid">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Best ask</div>
+      <div class="value" id="best-ask">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Mid</div>
+      <div class="value" id="mid">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Spread (bps)</div>
+      <div class="value" id="spread">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Base position</div>
+      <div class="value" id="base">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Quote balance</div>
+      <div class="value" id="quote">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Total PnL</div>
+      <div class="value" id="total-pnl">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Realized / Unrealized</div>
+      <div class="value" id="pnl-breakdown">-</div>
+    </div>
+  </div>
+  <button id="kill-switch-btn" type="button">Toggle kill switch</button>
+
+  <script>
+    const fmt = (value, digits = 4) =>
+      value === null || value === undefined ? "-" : Number(value).toFixed(digits);
+
+    async function fetchJson(path) {
+      const response = await fetch(path);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }
+
+    async function refresh() {
+      try {
+        const [status, market, position, pnl] = await Promise.all([
+          fetchJson("/status"),
+          fetchJson("/market"),
+          fetchJson("/position"),
+          fetchJson("/pnl"),
+        ]);
+
+        const stale = market.is_stale ? " (stale)" : "";
+        document.getElementById("status-line").textContent =
+          `Tick ${status.tick} | Running: ${status.running} | Kill switch: ${status.kill_switch_active ? "ON" : "OFF"}${stale}`;
+
+        document.getElementById("best-bid").textContent = fmt(market.best_bid, 2);
+        document.getElementById("best-ask").textContent = fmt(market.best_ask, 2);
+        document.getElementById("mid").textContent = fmt(market.mid, 2);
+        document.getElementById("spread").textContent = fmt(market.spread_bps, 2);
+        document.getElementById("base").textContent = fmt(position.base_amount, 6);
+        document.getElementById("quote").textContent = fmt(position.quote_amount, 2);
+        document.getElementById("total-pnl").textContent = fmt(pnl.total_pnl, 4);
+        document.getElementById("pnl-breakdown").textContent =
+          `${fmt(pnl.realized_pnl, 4)} / ${fmt(pnl.unrealized_pnl, 4)}`;
+
+        const btn = document.getElementById("kill-switch-btn");
+        btn.textContent = status.kill_switch_active ? "Disable kill switch" : "Enable kill switch";
+        btn.dataset.active = status.kill_switch_active ? "true" : "false";
+      } catch (error) {
+        document.getElementById("status-line").textContent = `Error: ${error.message}`;
+      }
+    }
+
+    document.getElementById("kill-switch-btn").addEventListener("click", async () => {
+      const btn = document.getElementById("kill-switch-btn");
+      const active = btn.dataset.active !== "true";
+      await fetch("/kill-switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active }),
+      });
+      await refresh();
+    });
+
+    refresh();
+    setInterval(refresh, 2000);
+  </script>
+</body>
+</html>
