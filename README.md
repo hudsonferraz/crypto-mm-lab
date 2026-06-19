@@ -2,11 +2,36 @@
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![CI](https://img.shields.io/badge/CI-ruff%20%2B%20pytest-brightgreen)
+[![CI](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml)
 
-Paper market-making lab for CEX order books with DEX price comparison. Connects to public exchange data (no API keys), runs market-making strategies, simulates fills, tracks PnL, detects CEX–DEX arbitrage opportunities, and exposes a CLI, web dashboard, Prometheus metrics, and backtest mode.
+**Paper market-making lab** that pulls live CEX order books, simulates quote placement and fills, tracks PnL, compares CEX vs Uniswap V2 prices, and ships with backtest mode plus a Docker observability stack.
 
-> Demo GIF placeholder — add a recording to `docs/images/demo.gif`
+**What it does:** end-to-end MM loop on public Binance data (no API keys).  
+**How it's built:** FastAPI, CCXT, web3.py, SQLAlchemy, Prometheus/Grafana.  
+**Production gaps:** paper-only, no auth, conservative fill model — see [design decisions](docs/design-decisions.md).
+
+![Demo](docs/images/demo.gif)
+
+## Screenshots
+
+| Dashboard (live) | Kill switch |
+|------------------|-------------|
+| ![Dashboard](docs/images/dashboard.png) | ![Kill switch](docs/images/dashboard-killswitch.png) |
+
+| Architecture | Backtest report |
+|--------------|-----------------|
+| ![Architecture](docs/images/architecture.png) | ![Backtest](docs/images/backtest.png) |
+
+| Docker stack (live) | Grafana metrics |
+|---------------------|-----------------|
+| ![Docker dashboard](docs/images/dashboard-docker.png) | ![Grafana](docs/images/grafana.png) |
+
+## Highlights
+
+- **44 automated tests** — order book math, fill model, PnL, AMM, arbitrage scanner, backtest
+- **3 evolution stages** — V1 CEX paper MM → V2 DEX comparison → V3 Docker + metrics + backtest
+- **Observable** — Prometheus `/metrics`, Grafana dashboard, structured logging
+- **Replayable** — backtest from SQLite/Postgres snapshots or CSV fixtures (Sharpe, drawdown, fill rate)
 
 ## Features
 
@@ -22,11 +47,6 @@ Requires Python 3.11+.
 cd crypto-mm-lab
 python -m pip install -e ".[dev]"
 cp .env.example .env
-```
-
-### Web dashboard
-
-```bash
 uvicorn app.main:app --reload
 ```
 
@@ -41,10 +61,7 @@ python scripts/run_mm.py
 ### Backtest
 
 ```bash
-# From CSV fixture
 python scripts/run_backtest.py --fixture tests/fixtures/orderbook_snapshots.csv --strategy pure_mm
-
-# From stored snapshots
 python scripts/run_backtest.py --from 2026-01-01 --strategy pure_mm
 ```
 
@@ -59,8 +76,6 @@ docker compose up --build
 | App + dashboard | [http://localhost:8000/dashboard](http://localhost:8000/dashboard) |
 | Prometheus | [http://localhost:9090](http://localhost:9090) |
 | Grafana | [http://localhost:3000](http://localhost:3000) (admin/admin) |
-
-Uses PostgreSQL instead of SQLite. Set `DEX_ENABLED=false` in `docker-compose.yml` to skip RPC calls.
 
 ## API
 
@@ -80,13 +95,7 @@ Uses PostgreSQL instead of SQLite. Set `DEX_ENABLED=false` in `docker-compose.ym
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for diagrams and data flow.
-
-```
-CCXT + Web3 → market maker loop → strategy → paper broker → analytics → SQLite/Postgres
-                                      ↓
-                              FastAPI + Prometheus + Grafana
-```
+See [docs/architecture.md](docs/architecture.md) for the full diagram and data flow.
 
 ## Configuration
 
@@ -105,6 +114,12 @@ See `.env.example`. Key variables:
 ```bash
 ruff check .
 pytest -v
+```
+
+Regenerate portfolio screenshots and demo GIF (requires a running app for live dashboard captures):
+
+```bash
+python scripts/build_portfolio_assets.py
 ```
 
 ## Design decisions
