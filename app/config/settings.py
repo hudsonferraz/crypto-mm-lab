@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,13 +17,18 @@ class Settings(BaseSettings):
     quote_spread_bps: float = 10.0
     quote_size: float = 0.001
     max_position_base: float = 0.01
-    db_url: str = "sqlite:///./data/mm_lab.db"
+    db_url: str = Field(
+        default="sqlite:///./data/mm_lab.db",
+        validation_alias=AliasChoices("DB_URL", "DATABASE_URL"),
+    )
     maker_fee_bps: float = 10.0
     taker_fee_bps: float = 10.0
     strategy: str = Field(default="pure_mm", description="Active strategy name")
     initial_quote_balance: float = 10_000.0
     max_position_notional: float = 1_000.0
     report_interval_ticks: int = 5
+    metrics_enabled: bool = True
+    loop_enabled: bool = True
 
     dex_enabled: bool = True
     eth_rpc_url: str = "https://ethereum.publicnode.com"

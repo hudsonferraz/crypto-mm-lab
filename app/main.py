@@ -18,9 +18,11 @@ async def lifespan(app: FastAPI):
     loop = MarketMakerLoop(settings)
     loop.initialize()
     app.state.market_maker_loop = loop
-    await loop.start()
+    if settings.loop_enabled:
+        await loop.start()
     yield
-    await loop.stop()
+    if settings.loop_enabled:
+        await loop.stop()
 
 
 def create_app() -> FastAPI:

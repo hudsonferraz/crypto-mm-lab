@@ -1,4 +1,12 @@
-from app.models.domain import AmmPoolSnapshot, Opportunity, OrderBookSnapshot, PnLSnapshot, Position
+from app.analytics.backtest_metrics import BacktestMetrics
+from app.models.domain import (
+    AmmPoolSnapshot,
+    Fill,
+    Opportunity,
+    OrderBookSnapshot,
+    PnLSnapshot,
+    Position,
+)
 
 
 def format_performance_report(
@@ -145,4 +153,35 @@ def opportunity_to_dict(opportunity: Opportunity) -> dict:
         "net_edge": opportunity.net_edge,
         "net_edge_bps": opportunity.net_edge_bps,
         "timestamp": opportunity.timestamp.isoformat(),
+    }
+
+
+def format_backtest_report(metrics: BacktestMetrics, fills: list[Fill]) -> str:
+    lines = [
+        "=== Backtest Report ===",
+        f"Ticks: {metrics.tick_count}",
+        f"Fills: {metrics.fill_count}",
+        f"Quotes submitted: {metrics.quote_count}",
+        f"Fill rate: {metrics.fill_rate:.2%}",
+        f"Total PnL: {metrics.total_pnl:.4f}",
+        f"Max drawdown: {metrics.max_drawdown:.4f}",
+        f"Sharpe ratio (annualized): {metrics.sharpe_ratio:.4f}",
+        f"Final base: {metrics.final_base:.6f}",
+        f"Final quote: {metrics.final_quote:.2f}",
+        f"Trade log entries: {len(fills)}",
+    ]
+    return "\n".join(lines)
+
+
+def backtest_metrics_dict(metrics: BacktestMetrics) -> dict:
+    return {
+        "tick_count": metrics.tick_count,
+        "fill_count": metrics.fill_count,
+        "quote_count": metrics.quote_count,
+        "fill_rate": metrics.fill_rate,
+        "total_pnl": metrics.total_pnl,
+        "max_drawdown": metrics.max_drawdown,
+        "sharpe_ratio": metrics.sharpe_ratio,
+        "final_base": metrics.final_base,
+        "final_quote": metrics.final_quote,
     }

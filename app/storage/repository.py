@@ -6,7 +6,6 @@ from sqlalchemy import (
     Float,
     Integer,
     String,
-    create_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -20,6 +19,7 @@ from app.models.domain import (
     Position,
     Quote,
 )
+from app.storage.database import create_db_engine
 
 
 class Base(DeclarativeBase):
@@ -106,7 +106,7 @@ class OpportunityRow(Base):
 
 
 def create_tables(db_url: str) -> None:
-    engine = create_engine(db_url)
+    engine = create_db_engine(db_url)
     Base.metadata.create_all(engine)
     engine.dispose()
 
@@ -129,7 +129,7 @@ def _mid_and_spread_bps(snapshot: OrderBookSnapshot) -> tuple[float, float]:
 
 class Repository:
     def __init__(self, db_url: str) -> None:
-        self._engine = create_engine(db_url)
+        self._engine = create_db_engine(db_url)
         self._session_factory = sessionmaker(bind=self._engine, expire_on_commit=False)
 
     def initialize(self) -> None:
@@ -260,6 +260,49 @@ class Repository:
                 )
                 for row in rows
             ]
+
+    def load_orderbook_snapshots(
+        self,
+        *,
+        symbol: str,
+        from_timestamp: datetime | None = None,
+        to_timestamp: datetime | None = None,
+        limit: int | None = None,
+    ) -> list[OrderBookSnapshot]:
+        with self._session() as session:
+            query = session.query(OrderBookSnapshotRow).filter(
+                OrderBookSnapshotRow.symbol == symbol
+            )
+            if from_timestamp is not None:
+                query = query.filter(OrderBookSnapshotRow.timestamp >= from_timestamp)
+            if to_timestamp is not None:
+                query = query.filter(OrderBookSnapshotRow.timestamp <= to_timestamp)
+            query = query.order_by(OrderBookSnapshotRow.timestamp.asc())
+            if limit is not None:
+                query = query.limit(limit)
+            rows = query.all()
+
+        snapshots: list[OrderBookSnapshot] = []
+        for row in rows:
+            spread = row.best_ask - row.best_bid
+            bids = (
+                OrderBookLevel(row.best_bid, 1.0),
+                OrderBookLevel(row.best_bid - spread * 0.1, 1.0),
+            )
+            asks = (
+                OrderBookLevel(row.best_ask, 1.0),
+                OrderBookLevel(row.best_ask + spread * 0.1, 1.0),
+            )
+            snapshots.append(
+                OrderBookSnapshot(
+                    symbol=row.symbol,
+                    bids=bids,
+                    asks=asks,
+                    timestamp=row.timestamp,
+                    is_stale=row.is_stale,
+                )
+            )
+        return snapshots
 
     def _session(self) -> Session:
         return self._session_factory()

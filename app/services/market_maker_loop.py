@@ -1,4 +1,5 @@
 import asyncio
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from app.config.settings import Settings
 from app.execution.paper_broker import PaperBroker
 from app.market_data.orderbook import mid_price
 from app.models.domain import AmmPoolSnapshot, Opportunity, OrderBookSnapshot, PnLSnapshot, Position
+from app.observability import metrics as prom
 from app.risk.kill_switch import KillSwitch
 from app.risk.limits import filter_quotes_by_position_limit
 from app.services.arbitrage_scanner import scan_arbitrage_opportunities
@@ -139,6 +141,7 @@ class MarketMakerLoop:
             await asyncio.sleep(self._settings.poll_interval_sec)
 
     async def _tick_once(self) -> None:
+        start = time.perf_counter()
         now = datetime.now(UTC)
         snapshot = await self._data_source.fetch_orderbook()
         self._last_snapshot = snapshot
@@ -189,6 +192,9 @@ class MarketMakerLoop:
         self._tick += 1
         self._last_tick_at = now
 
+        if self._settings.metrics_enabled:
+            self._record_metrics(start, fills, position, pnl)
+
         if self._tick % self._settings.report_interval_ticks == 0:
             report = format_performance_report(
                 tick=self._tick,
@@ -202,6 +208,29 @@ class MarketMakerLoop:
                 opportunities=self._last_opportunities,
             )
             logger.info("performance_report", report=report)
+
+    def _record_metrics(
+        self,
+        start: float,
+        fills: list,
+        position: Position,
+        pnl: PnLSnapshot,
+    ) -> None:
+        elapsed = time.perf_counter() - start
+        prom.TICK_LATENCY.observe(elapsed)
+        prom.TICK_TOTAL.inc()
+        prom.FILLS_TOTAL.inc(len(fills))
+        prom.POSITION_BASE.set(position.base_amount)
+        prom.POSITION_QUOTE.set(position.quote_amount)
+        prom.PNL_TOTAL.set(pnl.total_pnl)
+        prom.PNL_REALIZED.set(pnl.realized_pnl)
+        prom.PNL_UNREALIZED.set(pnl.unrealized_pnl)
+        prom.OPEN_QUOTES.set(self._broker.open_quote_count)
+        prom.OPPORTUNITY_COUNT.set(len(self._last_opportunities))
+        prom.KILL_SWITCH_ACTIVE.set(1 if self._kill_switch.active else 0)
+        mid = mid_price(self._last_snapshot) if self._last_snapshot else None
+        if mid is not None:
+            prom.MID_PRICE.set(mid)
 
     def _scan_opportunities(
         self,

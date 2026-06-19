@@ -1,8 +1,20 @@
 # crypto-mm-lab
 
-Paper market-making lab for CEX order books. Connects to public exchange data (no API keys), runs a pure market-making strategy, simulates fills, tracks PnL, and exposes a CLI plus minimal web dashboard.
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![CI](https://img.shields.io/badge/CI-ruff%20%2B%20pytest-brightgreen)
 
-## Quickstart
+Paper market-making lab for CEX order books with DEX price comparison. Connects to public exchange data (no API keys), runs market-making strategies, simulates fills, tracks PnL, detects CEX–DEX arbitrage opportunities, and exposes a CLI, web dashboard, Prometheus metrics, and backtest mode.
+
+> Demo GIF placeholder — add a recording to `docs/images/demo.gif`
+
+## Features
+
+- **V1** — CEX paper market maker (CCXT, pure MM strategy, fill simulation, PnL, dashboard)
+- **V2** — Uniswap V2 pool reader, AMM math, arbitrage scanner, inventory skew strategy
+- **V3** — Docker Compose stack, PostgreSQL, Prometheus/Grafana, backtest runner
+
+## Quickstart (local)
 
 Requires Python 3.11+.
 
@@ -12,7 +24,7 @@ python -m pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-### Run the web dashboard
+### Web dashboard
 
 ```bash
 uvicorn app.main:app --reload
@@ -20,17 +32,42 @@ uvicorn app.main:app --reload
 
 Open [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard).
 
-### Run the CLI loop
+### CLI loop
 
 ```bash
 python scripts/run_mm.py
 ```
+
+### Backtest
+
+```bash
+# From CSV fixture
+python scripts/run_backtest.py --fixture tests/fixtures/orderbook_snapshots.csv --strategy pure_mm
+
+# From stored snapshots
+python scripts/run_backtest.py --from 2026-01-01 --strategy pure_mm
+```
+
+## Docker Compose (full stack)
+
+```bash
+docker compose up --build
+```
+
+| Service | URL |
+|---------|-----|
+| App + dashboard | [http://localhost:8000/dashboard](http://localhost:8000/dashboard) |
+| Prometheus | [http://localhost:9090](http://localhost:9090) |
+| Grafana | [http://localhost:3000](http://localhost:3000) (admin/admin) |
+
+Uses PostgreSQL instead of SQLite. Set `DEX_ENABLED=false` in `docker-compose.yml` to skip RPC calls.
 
 ## API
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /health` | Health check |
+| `GET /metrics` | Prometheus metrics |
 | `GET /status` | Loop status, tick count, kill switch |
 | `GET /market` | Best bid/ask, mid, spread |
 | `GET /position` | Base/quote inventory |
@@ -43,33 +80,25 @@ python scripts/run_mm.py
 
 ## Architecture
 
-```
-CCXT adapter → normalizer → order book
-                ↓
-         market maker loop
-                ↓
-    strategy → risk limits → paper broker
-                ↓
-         analytics / SQLite
-                ↓
-           FastAPI + CLI
-```
+See [docs/architecture.md](docs/architecture.md) for diagrams and data flow.
 
-V1 is **paper-only**: no live order placement. Fills are simulated when the external book crosses resting quotes.
-
-**V2** adds read-only Uniswap V2 pool data (WETH/USDC) and compares it to CEX `ETH/USDT` mid for arbitrage opportunity detection. No on-chain transactions.
+```
+CCXT + Web3 → market maker loop → strategy → paper broker → analytics → SQLite/Postgres
+                                      ↓
+                              FastAPI + Prometheus + Grafana
+```
 
 ## Configuration
 
-See `.env.example` for all settings. Key variables:
+See `.env.example`. Key variables:
 
-- `EXCHANGE`, `SYMBOL` — data source (default `binance`, `BTC/USDT`)
-- `QUOTE_SPREAD_BPS`, `QUOTE_SIZE` — strategy parameters
-- `MAX_POSITION_BASE`, `MAX_POSITION_NOTIONAL` — risk limits
-- `DEX_ENABLED`, `ETH_RPC_URL`, `DEX_POOL_ADDRESS` — on-chain pool reader
-- `CEX_COMPARE_SYMBOL` — CEX pair for DEX comparison (default `ETH/USDT`)
-- `ARBITRAGE_MIN_EDGE_BPS`, `ARBITRAGE_TRIAL_TRADE_SIZE` — opportunity scanner
-- `DB_URL` — SQLite path (default `./data/mm_lab.db`)
+| Variable | Description |
+|----------|-------------|
+| `EXCHANGE`, `SYMBOL` | CEX data source (default `binance`, `BTC/USDT`) |
+| `DB_URL` / `DATABASE_URL` | SQLite (local) or PostgreSQL (Docker) |
+| `STRATEGY` | `pure_mm`, `inventory_skew`, or `volatility_spread` |
+| `DEX_ENABLED` | Enable on-chain pool reader + arbitrage scanner |
+| `METRICS_ENABLED` | Export Prometheus metrics from the loop |
 
 ## Development
 
@@ -77,6 +106,10 @@ See `.env.example` for all settings. Key variables:
 ruff check .
 pytest -v
 ```
+
+## Design decisions
+
+See [docs/design-decisions.md](docs/design-decisions.md).
 
 ## License
 

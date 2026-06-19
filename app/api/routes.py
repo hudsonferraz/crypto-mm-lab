@@ -1,4 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
 
 from app.analytics.performance_report import opportunity_to_dict, performance_report_dict
@@ -18,6 +20,12 @@ def _get_loop(request: Request) -> MarketMakerLoop:
 @router.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/metrics")
+async def metrics() -> Response:
+    payload = generate_latest()
+    return Response(content=payload, media_type=CONTENT_TYPE_LATEST)
 
 
 @router.get("/status")
