@@ -47,3 +47,7 @@ Prometheus scrapes the app's `/metrics` endpoint directly. No sidecar or push ga
 ## Backtest snapshot reconstruction
 
 Stored order book rows contain best bid/ask (not full L2). Backtest replay reconstructs a minimal two-level book from best prices. Sufficient because strategies only use mid price in V1/V2.
+
+## Volatility-adjusted spread
+
+`volatility_spread` widens quotes when recent mid-price returns are volatile. The strategy keeps a rolling window of mids, computes the sample standard deviation of simple returns (in bps), and sets `effective_spread = base_spread + multiplier × vol_bps`. No external vol feed is required — it adapts from the same order book stream used by the other strategies.

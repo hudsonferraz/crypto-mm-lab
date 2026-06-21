@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     pool_quote_decimals: int = 6
     inventory_target_base: float = 0.0
     inventory_skew_bps: float = 20.0
+    volatility_window: int = 20
+    volatility_spread_multiplier: float = 1.0
 
 
 @lru_cache

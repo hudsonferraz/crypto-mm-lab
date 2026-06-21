@@ -21,5 +21,11 @@ def build_strategy(settings: Settings):
             skew_bps=settings.inventory_skew_bps,
         )
     if settings.strategy == "volatility_spread":
-        return VolatilitySpreadStrategy()
+        return VolatilitySpreadStrategy(
+            symbol=settings.symbol,
+            spread_bps=settings.quote_spread_bps,
+            quote_size=settings.quote_size,
+            volatility_window=settings.volatility_window,
+            volatility_spread_multiplier=settings.volatility_spread_multiplier,
+        )
     raise ValueError(f"Unknown strategy: {settings.strategy}")
