@@ -16,6 +16,10 @@ Realized PnL uses average-cost accounting rather than FIFO. Simpler to implement
 
 Fills occur when the external best bid/ask crosses our resting quote price (full fill at quote size). No queue-position modeling. This is intentionally conservative — real maker fills depend on queue priority and order flow.
 
+## Cash-account execution
+
+The paper broker uses a **cash account** model: you cannot sell base you do not own, and bids must be fully funded from quote balance including maker fees. Risk filters enforce this before quotes are submitted; inventory updates reject any fill that would overdraw balances. Short selling and margin are not supported.
+
 ## Uniswap V2 first
 
 Constant-product AMM math (`x * y = k`) is easier to test and reason about than V3 concentrated liquidity. The web3 adapter reads `getReserves()` from a WETH/USDC pair and compares against CEX ETH/USDT mid.

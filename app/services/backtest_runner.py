@@ -141,6 +141,7 @@ class BacktestRunner:
                 position,
                 self._settings.max_position_base,
                 self._settings.max_position_notional,
+                maker_fee_bps=self._settings.maker_fee_bps,
             )
             quote_count += len(approved)
             self._broker.submit_quotes(approved)
