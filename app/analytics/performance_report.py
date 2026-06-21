@@ -156,6 +156,29 @@ def opportunity_to_dict(opportunity: Opportunity) -> dict:
     }
 
 
+def fill_to_dict(fill: Fill) -> dict:
+    return {
+        "symbol": fill.symbol,
+        "side": fill.side.value,
+        "price": fill.price,
+        "size": fill.size,
+        "fee": fill.fee,
+        "quote_id": fill.quote_id,
+        "timestamp": fill.timestamp.isoformat(),
+    }
+
+
+def pnl_history_point(pnl: PnLSnapshot) -> dict:
+    return {
+        "symbol": pnl.symbol,
+        "total_pnl": pnl.total_pnl,
+        "realized_pnl": pnl.realized_pnl,
+        "unrealized_pnl": pnl.unrealized_pnl,
+        "total_fees": pnl.total_fees,
+        "timestamp": pnl.timestamp.isoformat(),
+    }
+
+
 def format_backtest_report(metrics: BacktestMetrics, fills: list[Fill]) -> str:
     lines = [
         "=== Backtest Report ===",

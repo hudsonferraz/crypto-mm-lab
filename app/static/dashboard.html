@@ -13,12 +13,16 @@
     }
     body { margin: 0; padding: 2rem; }
     h1, h2 { margin-top: 0; }
+    h2 { margin-top: 2rem; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
     .card {
       background: #1a1d24;
       border: 1px solid #2a2f3a;
       border-radius: 8px;
       padding: 1rem;
+    }
+    .chart-card {
+      padding: 0.75rem 1rem 1rem;
     }
     .label { color: #9aa0a6; font-size: 0.85rem; }
     .value { font-size: 1.25rem; font-weight: 600; margin-top: 0.25rem; }
@@ -36,6 +40,27 @@
     table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
     th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #2a2f3a; }
     th { color: #9aa0a6; font-weight: 500; }
+    td.numeric { font-variant-numeric: tabular-nums; }
+    .side-bid { color: #34d399; }
+    .side-ask { color: #f87171; }
+    #equity-curve {
+      display: block;
+      width: 100%;
+      height: 180px;
+    }
+    .chart-empty {
+      display: none;
+      margin-top: 0.5rem;
+      text-align: center;
+    }
+    .chart-meta {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      color: #9aa0a6;
+    }
+    .mono { font-family: ui-monospace, monospace; font-size: 0.85rem; }
   </style>
 </head>
 <body>
@@ -65,6 +90,33 @@
     <div class="card"><div class="label">Realized / Unrealized</div><div class="value" id="pnl-breakdown">-</div></div>
   </div>
 
+  <h2>Equity curve</h2>
+  <div class="card chart-card">
+    <canvas id="equity-curve" height="180"></canvas>
+    <div class="label chart-empty" id="equity-empty">No PnL history yet</div>
+    <div class="chart-meta">
+      <span id="equity-start">-</span>
+      <span id="equity-end">-</span>
+    </div>
+  </div>
+
+  <h2>Recent fills</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Side</th>
+        <th>Price</th>
+        <th>Size</th>
+        <th>Fee</th>
+        <th>Quote ID</th>
+      </tr>
+    </thead>
+    <tbody id="fills-body">
+      <tr><td colspan="6">No fills yet</td></tr>
+    </tbody>
+  </table>
+
   <h2>Latest opportunities</h2>
   <table>
     <thead>
@@ -81,6 +133,17 @@
     const fmt = (value, digits = 4) =>
       value === null || value === undefined ? "-" : Number(value).toFixed(digits);
 
+    const fmtTime = (iso) => {
+      if (!iso) return "-";
+      const date = new Date(iso);
+      return Number.isNaN(date.getTime()) ? iso : date.toLocaleTimeString();
+    };
+
+    const shortId = (value) => {
+      if (!value) return "-";
+      return value.length > 10 ? `${value.slice(0, 8)}…` : value;
+    };
+
     async function fetchJson(path) {
       const response = await fetch(path);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -96,23 +159,107 @@
       body.innerHTML = items.map((item) => `
         <tr>
           <td>${item.direction}</td>
-          <td>${fmt(item.net_edge_bps, 2)}</td>
-          <td>${fmt(item.net_edge, 4)}</td>
-          <td>${fmt(item.trial_trade_size, 4)}</td>
+          <td class="numeric">${fmt(item.net_edge_bps, 2)}</td>
+          <td class="numeric">${fmt(item.net_edge, 4)}</td>
+          <td class="numeric">${fmt(item.trial_trade_size, 4)}</td>
         </tr>
       `).join("");
     }
 
+    function renderFills(items) {
+      const body = document.getElementById("fills-body");
+      if (!items || items.length === 0) {
+        body.innerHTML = "<tr><td colspan='6'>No fills yet</td></tr>";
+        return;
+      }
+      body.innerHTML = items.map((item) => `
+        <tr>
+          <td>${fmtTime(item.timestamp)}</td>
+          <td class="side-${item.side}">${item.side}</td>
+          <td class="numeric">${fmt(item.price, 2)}</td>
+          <td class="numeric">${fmt(item.size, 6)}</td>
+          <td class="numeric">${fmt(item.fee, 4)}</td>
+          <td class="mono" title="${item.quote_id || ""}">${shortId(item.quote_id)}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderEquityCurve(points) {
+      const canvas = document.getElementById("equity-curve");
+      const empty = document.getElementById("equity-empty");
+      const startLabel = document.getElementById("equity-start");
+      const endLabel = document.getElementById("equity-end");
+
+      if (!points || points.length < 2) {
+        canvas.style.display = "none";
+        empty.style.display = "block";
+        startLabel.textContent = "-";
+        endLabel.textContent = "-";
+        return;
+      }
+
+      canvas.style.display = "block";
+      empty.style.display = "none";
+
+      const width = canvas.clientWidth || canvas.parentElement.clientWidth;
+      const height = 180;
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = width * ratio;
+      canvas.height = height * ratio;
+
+      const context = canvas.getContext("2d");
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.clearRect(0, 0, width, height);
+
+      const values = points.map((point) => point.total_pnl);
+      const minValue = Math.min(...values);
+      const maxValue = Math.max(...values);
+      const range = maxValue - minValue || 1;
+      const padding = 16;
+
+      const xForIndex = (index) =>
+        padding + (index / (points.length - 1)) * (width - padding * 2);
+      const yForValue = (value) =>
+        height - padding - ((value - minValue) / range) * (height - padding * 2);
+
+      if (minValue < 0 && maxValue > 0) {
+        const zeroY = yForValue(0);
+        context.strokeStyle = "#2a2f3a";
+        context.lineWidth = 1;
+        context.beginPath();
+        context.moveTo(padding, zeroY);
+        context.lineTo(width - padding, zeroY);
+        context.stroke();
+      }
+
+      context.strokeStyle = "#3b82f6";
+      context.lineWidth = 2;
+      context.beginPath();
+      points.forEach((point, index) => {
+        const x = xForIndex(index);
+        const y = yForValue(point.total_pnl);
+        if (index === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      });
+      context.stroke();
+
+      startLabel.textContent = `Start: ${fmt(points[0].total_pnl, 4)}`;
+      endLabel.textContent = `Latest: ${fmt(points[points.length - 1].total_pnl, 4)}`;
+    }
+
     async function refresh() {
       try {
-        const [status, market, amm, position, pnl, opportunities] = await Promise.all([
-          fetchJson("/status"),
-          fetchJson("/market"),
-          fetchJson("/amm"),
-          fetchJson("/position"),
-          fetchJson("/pnl"),
-          fetchJson("/opportunities?limit=5"),
-        ]);
+        const [status, market, amm, position, pnl, pnlHistory, fills, opportunities] =
+          await Promise.all([
+            fetchJson("/status"),
+            fetchJson("/market"),
+            fetchJson("/amm"),
+            fetchJson("/position"),
+            fetchJson("/pnl"),
+            fetchJson("/pnl/history?limit=200"),
+            fetchJson("/fills?limit=20"),
+            fetchJson("/opportunities?limit=5"),
+          ]);
 
         const stale = market.is_stale ? " (stale)" : "";
         const dexStale = amm.is_stale ? " (stale)" : "";
@@ -132,7 +279,11 @@
         document.getElementById("pnl-breakdown").textContent =
           `${fmt(pnl.realized_pnl, 4)} / ${fmt(pnl.unrealized_pnl, 4)}`;
 
-        renderOpportunities(opportunities.latest_tick.length ? opportunities.latest_tick : opportunities.recent);
+        renderEquityCurve(pnlHistory.points);
+        renderFills(fills.fills);
+        renderOpportunities(
+          opportunities.latest_tick.length ? opportunities.latest_tick : opportunities.recent
+        );
 
         const btn = document.getElementById("kill-switch-btn");
         btn.textContent = status.kill_switch_active ? "Disable kill switch" : "Enable kill switch";
@@ -151,6 +302,12 @@
         body: JSON.stringify({ active }),
       });
       await refresh();
+    });
+
+    window.addEventListener("resize", () => {
+      fetchJson("/pnl/history?limit=200")
+        .then((payload) => renderEquityCurve(payload.points))
+        .catch(() => {});
     });
 
     refresh();

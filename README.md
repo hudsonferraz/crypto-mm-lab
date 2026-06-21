@@ -87,6 +87,8 @@ docker compose up --build
 | `GET /market` | Best bid/ask, mid, spread |
 | `GET /position` | Base/quote inventory |
 | `GET /pnl` | Realized/unrealized PnL and fees |
+| `GET /pnl/history` | PnL time series for equity curve (`?limit=200`) |
+| `GET /fills` | Recent trade blotter (`?limit=20`) |
 | `GET /report` | Combined status JSON |
 | `GET /amm` | WETH/USDC pool price vs CEX ETH mid |
 | `GET /opportunities` | Latest arbitrage opportunities |

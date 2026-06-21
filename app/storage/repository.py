@@ -279,6 +279,44 @@ class Repository:
                 for row in rows
             ]
 
+    def get_latest_fills(self, limit: int = 20) -> list[Fill]:
+        with self._session() as session:
+            rows = (
+                session.query(FillRow).order_by(FillRow.id.desc()).limit(limit).all()
+            )
+        return [
+            Fill(
+                symbol=row.symbol,
+                side=QuoteSide(row.side),
+                price=row.price,
+                size=row.size,
+                fee=row.fee,
+                timestamp=row.timestamp,
+                quote_id=row.quote_id,
+            )
+            for row in rows
+        ]
+
+    def get_pnl_history(self, limit: int = 200) -> list[PnLSnapshot]:
+        with self._session() as session:
+            rows = (
+                session.query(PnLSnapshotRow)
+                .order_by(PnLSnapshotRow.id.desc())
+                .limit(limit)
+                .all()
+            )
+        return [
+            PnLSnapshot(
+                symbol=row.symbol,
+                realized_pnl=row.realized_pnl,
+                unrealized_pnl=row.unrealized_pnl,
+                total_fees=row.total_fees,
+                total_pnl=row.total_pnl,
+                timestamp=row.timestamp,
+            )
+            for row in reversed(rows)
+        ]
+
     def load_orderbook_snapshots(
         self,
         *,

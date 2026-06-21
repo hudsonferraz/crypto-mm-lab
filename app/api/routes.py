@@ -1,9 +1,14 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
 
-from app.analytics.performance_report import opportunity_to_dict, performance_report_dict
+from app.analytics.performance_report import (
+    fill_to_dict,
+    opportunity_to_dict,
+    performance_report_dict,
+    pnl_history_point,
+)
 from app.market_data.orderbook import best_ask, best_bid, mid_price, spread_bps
 from app.services.market_maker_loop import MarketMakerLoop
 
@@ -95,6 +100,26 @@ async def pnl(request: Request) -> dict:
         "total_pnl": pnl_snapshot.total_pnl,
         "timestamp": pnl_snapshot.timestamp.isoformat(),
     }
+
+
+@router.get("/pnl/history")
+async def pnl_history(
+    request: Request,
+    limit: int = Query(default=200, ge=1, le=1000),
+) -> dict:
+    loop = _get_loop(request)
+    points = loop.repository.get_pnl_history(limit=limit)
+    return {"points": [pnl_history_point(point) for point in points]}
+
+
+@router.get("/fills")
+async def fills(
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> dict:
+    loop = _get_loop(request)
+    stored_fills = loop.repository.get_latest_fills(limit=limit)
+    return {"fills": [fill_to_dict(fill) for fill in stored_fills]}
 
 
 @router.get("/report")
