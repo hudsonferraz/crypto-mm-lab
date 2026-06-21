@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -23,6 +24,7 @@ class Settings(BaseSettings):
     )
     maker_fee_bps: float = 10.0
     taker_fee_bps: float = 10.0
+    fill_mode: Literal["full_cross_fill", "partial_fill"] = "full_cross_fill"
     strategy: str = Field(default="pure_mm", description="Active strategy name")
     initial_quote_balance: float = 10_000.0
     max_position_notional: float = 1_000.0

@@ -14,7 +14,14 @@ Realized PnL uses average-cost accounting rather than FIFO. Simpler to implement
 
 ## Conservative fill model
 
-Fills occur when the external best bid/ask crosses our resting quote price (full fill at quote size). No queue-position modeling. This is intentionally conservative — real maker fills depend on queue priority and order flow.
+Two fill modes are supported via `FILL_MODE`:
+
+| Mode | Behavior |
+|------|----------|
+| `full_cross_fill` (default) | When the external best bid/ask crosses our resting quote, the entire quote size fills at our price. |
+| `partial_fill` | Same cross trigger, but fill size is capped by the opposing top-of-book depth (`min(quote_size, level_size)`). Unfilled remainder stays resting until the next tick replaces quotes. |
+
+Neither mode models queue position or order-flow priority. `partial_fill` is a simple depth constraint — useful for backtests where quote size often exceeds visible liquidity.
 
 ## Cash-account execution
 

@@ -42,6 +42,7 @@ class MarketMakerLoop:
             symbol=settings.symbol,
             initial_quote_balance=settings.initial_quote_balance,
             maker_fee_bps=settings.maker_fee_bps,
+            fill_mode=settings.fill_mode,
         )
         self._kill_switch = KillSwitch()
         self._repository = Repository(settings.db_url)

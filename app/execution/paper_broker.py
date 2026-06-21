@@ -1,7 +1,8 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from app.analytics.inventory import InventoryTracker
-from app.execution.fill_model import OpenQuote, detect_fills
+from app.execution.fill_model import FillMode, OpenQuote, detect_fills
 from app.execution.quote_ids import assign_quote_id
 from app.models.domain import Fill, OrderBookSnapshot, Quote
 
@@ -12,9 +13,12 @@ class PaperBroker:
         symbol: str,
         initial_quote_balance: float,
         maker_fee_bps: float,
+        *,
+        fill_mode: FillMode = "full_cross_fill",
     ) -> None:
         self._symbol = symbol
         self._maker_fee_bps = maker_fee_bps
+        self._fill_mode = fill_mode
         self._open_quotes: list[OpenQuote] = []
         self._inventory = InventoryTracker(
             symbol=symbol,
@@ -26,14 +30,33 @@ class PaperBroker:
         return self._inventory
 
     def apply_fills(self, snapshot: OrderBookSnapshot) -> list[Fill]:
-        fills = detect_fills(self._open_quotes, snapshot, self._maker_fee_bps)
+        fills = detect_fills(
+            self._open_quotes,
+            snapshot,
+            self._maker_fee_bps,
+            fill_mode=self._fill_mode,
+        )
         if not fills:
             return []
 
-        filled_ids = {fill.quote_id for fill in fills}
-        self._open_quotes = [
-            open_quote for open_quote in self._open_quotes if open_quote.quote_id not in filled_ids
-        ]
+        fills_by_quote_id = {fill.quote_id: fill for fill in fills}
+        updated_open_quotes: list[OpenQuote] = []
+        for open_quote in self._open_quotes:
+            fill = fills_by_quote_id.get(open_quote.quote_id)
+            if fill is None:
+                updated_open_quotes.append(open_quote)
+                continue
+
+            remaining_size = open_quote.quote.size - fill.size
+            if remaining_size > 0:
+                updated_open_quotes.append(
+                    OpenQuote(
+                        quote_id=open_quote.quote_id,
+                        quote=replace(open_quote.quote, size=remaining_size),
+                    )
+                )
+
+        self._open_quotes = updated_open_quotes
 
         now = datetime.now(UTC)
         for fill in fills:

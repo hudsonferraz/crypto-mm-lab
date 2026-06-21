@@ -11,6 +11,7 @@ def test_settings_defaults() -> None:
     assert settings.max_position_base == 0.01
     assert settings.db_url == "sqlite:///./data/mm_lab.db"
     assert settings.strategy == "pure_mm"
+    assert settings.fill_mode == "full_cross_fill"
 
 
 def test_get_settings_is_cached() -> None:

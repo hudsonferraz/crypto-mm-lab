@@ -7,10 +7,22 @@ def best_bid(snapshot: OrderBookSnapshot) -> float | None:
     return snapshot.bids[0].price
 
 
+def best_bid_size(snapshot: OrderBookSnapshot) -> float | None:
+    if not snapshot.bids:
+        return None
+    return snapshot.bids[0].size
+
+
 def best_ask(snapshot: OrderBookSnapshot) -> float | None:
     if not snapshot.asks:
         return None
     return snapshot.asks[0].price
+
+
+def best_ask_size(snapshot: OrderBookSnapshot) -> float | None:
+    if not snapshot.asks:
+        return None
+    return snapshot.asks[0].size
 
 
 def mid_price(snapshot: OrderBookSnapshot) -> float | None:
