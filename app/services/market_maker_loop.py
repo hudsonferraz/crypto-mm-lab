@@ -180,9 +180,9 @@ class MarketMakerLoop:
                 self._settings.max_position_notional,
                 maker_fee_bps=self._settings.maker_fee_bps,
             )
-            self._broker.submit_quotes(approved_quotes)
-            if approved_quotes:
-                self._repository.save_quotes(approved_quotes)
+            submitted_quotes = self._broker.submit_quotes(approved_quotes)
+            if submitted_quotes:
+                self._repository.save_quotes(submitted_quotes)
         else:
             self._broker.cancel_all_quotes()
 

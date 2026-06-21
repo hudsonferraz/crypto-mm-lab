@@ -36,6 +36,7 @@ class Quote:
     price: float
     size: float
     timestamp: datetime
+    quote_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:

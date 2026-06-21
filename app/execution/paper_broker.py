@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
-from uuid import uuid4
 
 from app.analytics.inventory import InventoryTracker
 from app.execution.fill_model import OpenQuote, detect_fills
+from app.execution.quote_ids import assign_quote_id
 from app.models.domain import Fill, OrderBookSnapshot, Quote
 
 
@@ -41,12 +41,14 @@ class PaperBroker:
 
         return fills
 
-    def submit_quotes(self, quotes: list[Quote]) -> list[Fill]:
+    def submit_quotes(self, quotes: list[Quote]) -> list[Quote]:
         self._open_quotes = []
+        submitted: list[Quote] = []
         for quote in quotes:
-            quote_id = str(uuid4())
-            self._open_quotes.append(OpenQuote(quote_id=quote_id, quote=quote))
-        return []
+            quoted = assign_quote_id(quote)
+            self._open_quotes.append(OpenQuote(quote_id=quoted.quote_id, quote=quoted))
+            submitted.append(quoted)
+        return submitted
 
     def cancel_all_quotes(self) -> None:
         self._open_quotes = []

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from app.core.protocols import Broker, MarketDataSource, Strategy
-from app.models.domain import Fill, OrderBookSnapshot, Position, Quote
+from app.models.domain import OrderBookSnapshot, Position, Quote
 
 
 class _FakeMarketDataSource:
@@ -24,8 +24,8 @@ class _FakeStrategy:
 
 
 class _FakeBroker:
-    def submit_quotes(self, quotes: list[Quote]) -> list[Fill]:
-        return []
+    def submit_quotes(self, quotes: list[Quote]) -> list[Quote]:
+        return quotes
 
 
 def test_protocol_runtime_checkable() -> None:

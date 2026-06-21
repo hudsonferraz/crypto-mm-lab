@@ -20,6 +20,10 @@ Fills occur when the external best bid/ask crosses our resting quote price (full
 
 The paper broker uses a **cash account** model: you cannot sell base you do not own, and bids must be fully funded from quote balance including maker fees. Risk filters enforce this before quotes are submitted; inventory updates reject any fill that would overdraw balances. Short selling and margin are not supported.
 
+## Auditable quote and fill IDs
+
+Each resting quote receives a UUID at submission time in the paper broker. The same `quote_id` is persisted in the `quotes` table and copied onto any resulting `fills`, so trade logs can be joined reliably for replay and debugging.
+
 ## Uniswap V2 first
 
 Constant-product AMM math (`x * y = k`) is easier to test and reason about than V3 concentrated liquidity. The web3 adapter reads `getReserves()` from a WETH/USDC pair and compares against CEX ETH/USDT mid.

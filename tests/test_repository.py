@@ -50,6 +50,7 @@ def test_repository_persists_records(tmp_path) -> None:
         price=99.0,
         size=0.001,
         timestamp=now,
+        quote_id="quote-1",
     )
     fill = Fill(
         symbol="BTC/USDT",

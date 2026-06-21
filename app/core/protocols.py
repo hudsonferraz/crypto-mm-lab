@@ -1,6 +1,6 @@
 from typing import Protocol, runtime_checkable
 
-from app.models.domain import Fill, OrderBookSnapshot, Position, Quote
+from app.models.domain import OrderBookSnapshot, Position, Quote
 
 
 @runtime_checkable
@@ -19,4 +19,4 @@ class Strategy(Protocol):
 
 @runtime_checkable
 class Broker(Protocol):
-    def submit_quotes(self, quotes: list[Quote]) -> list[Fill]: ...
+    def submit_quotes(self, quotes: list[Quote]) -> list[Quote]: ...

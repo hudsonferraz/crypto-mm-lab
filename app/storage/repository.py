@@ -18,6 +18,7 @@ from app.models.domain import (
     PnLSnapshot,
     Position,
     Quote,
+    QuoteSide,
 )
 from app.storage.database import create_db_engine
 
@@ -156,20 +157,37 @@ class Repository:
             session.commit()
 
     def save_quotes(self, quotes: list[Quote]) -> None:
-        rows = [
-            QuoteRow(
-                quote_id=f"{quote.symbol}-{quote.side.value}-{quote.timestamp.isoformat()}",
-                symbol=quote.symbol,
-                side=quote.side.value,
-                price=quote.price,
-                size=quote.size,
-                timestamp=quote.timestamp,
+        rows = []
+        for quote in quotes:
+            if quote.quote_id is None:
+                raise ValueError("quote_id is required to persist a quote")
+            rows.append(
+                QuoteRow(
+                    quote_id=quote.quote_id,
+                    symbol=quote.symbol,
+                    side=quote.side.value,
+                    price=quote.price,
+                    size=quote.size,
+                    timestamp=quote.timestamp,
+                )
             )
-            for quote in quotes
-        ]
         with self._session() as session:
             session.add_all(rows)
             session.commit()
+
+    def get_quote_by_id(self, quote_id: str) -> Quote | None:
+        with self._session() as session:
+            row = session.query(QuoteRow).filter(QuoteRow.quote_id == quote_id).one_or_none()
+            if row is None:
+                return None
+            return Quote(
+                symbol=row.symbol,
+                side=QuoteSide(row.side),
+                price=row.price,
+                size=row.size,
+                timestamp=row.timestamp,
+                quote_id=row.quote_id,
+            )
 
     def save_fills(self, fills: list[Fill]) -> None:
         rows = [
