@@ -231,6 +231,77 @@ class Repository:
             session.add(row)
             session.commit()
 
+    def persist_tick(
+        self,
+        *,
+        snapshot: OrderBookSnapshot,
+        fills: list[Fill],
+        quotes: list[Quote],
+        position: Position,
+        pnl: PnLSnapshot,
+    ) -> None:
+        """Persist all tick execution artifacts in a single database transaction."""
+        with self._session() as session:
+            best_bid = _best_price(snapshot.bids)
+            best_ask = _best_price(snapshot.asks)
+            mid, spread_bps = _mid_and_spread_bps(snapshot)
+            session.add(
+                OrderBookSnapshotRow(
+                    symbol=snapshot.symbol,
+                    best_bid=best_bid,
+                    best_ask=best_ask,
+                    mid_price=mid,
+                    spread_bps=spread_bps,
+                    is_stale=snapshot.is_stale,
+                    timestamp=snapshot.timestamp,
+                )
+            )
+            for fill in fills:
+                session.add(
+                    FillRow(
+                        quote_id=fill.quote_id,
+                        symbol=fill.symbol,
+                        side=fill.side.value,
+                        price=fill.price,
+                        size=fill.size,
+                        fee=fill.fee,
+                        timestamp=fill.timestamp,
+                    )
+                )
+            for quote in quotes:
+                if quote.quote_id is None:
+                    raise ValueError("quote_id is required to persist a quote")
+                session.add(
+                    QuoteRow(
+                        quote_id=quote.quote_id,
+                        symbol=quote.symbol,
+                        side=quote.side.value,
+                        price=quote.price,
+                        size=quote.size,
+                        timestamp=quote.timestamp,
+                    )
+                )
+            session.add(
+                PositionRow(
+                    symbol=position.symbol,
+                    base_amount=position.base_amount,
+                    quote_amount=position.quote_amount,
+                    average_entry_price=position.average_entry_price,
+                    timestamp=position.timestamp,
+                )
+            )
+            session.add(
+                PnLSnapshotRow(
+                    symbol=pnl.symbol,
+                    realized_pnl=pnl.realized_pnl,
+                    unrealized_pnl=pnl.unrealized_pnl,
+                    total_fees=pnl.total_fees,
+                    total_pnl=pnl.total_pnl,
+                    timestamp=pnl.timestamp,
+                )
+            )
+            session.commit()
+
     def save_opportunities(self, opportunities: list[Opportunity]) -> None:
         rows = [
             OpportunityRow(

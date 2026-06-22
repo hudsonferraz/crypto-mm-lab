@@ -1,9 +1,21 @@
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from datetime import datetime
 
 from app.analytics.inventory import InventoryTracker
 from app.execution.fill_model import FillMode, OpenQuote, detect_fills
 from app.execution.quote_ids import assign_quote_id
 from app.models.domain import Fill, OrderBookSnapshot, Quote
+
+
+@dataclass(frozen=True, slots=True)
+class BrokerCheckpoint:
+    base_amount: float
+    quote_amount: float
+    average_entry_price: float
+    realized_pnl: float
+    total_fees: float
+    last_updated: datetime | None
+    open_quotes: tuple[OpenQuote, ...]
 
 
 class PaperBroker:
@@ -27,6 +39,35 @@ class PaperBroker:
     @property
     def inventory(self) -> InventoryTracker:
         return self._inventory
+
+    def checkpoint(self) -> BrokerCheckpoint:
+        inventory = self._inventory
+        return BrokerCheckpoint(
+            base_amount=inventory.base_amount,
+            quote_amount=inventory.quote_amount,
+            average_entry_price=inventory.average_entry_price,
+            realized_pnl=inventory.realized_pnl,
+            total_fees=inventory.total_fees,
+            last_updated=inventory.last_updated,
+            open_quotes=tuple(
+                OpenQuote(quote_id=open_quote.quote_id, quote=open_quote.quote)
+                for open_quote in self._open_quotes
+            ),
+        )
+
+    def restore_checkpoint(self, checkpoint: BrokerCheckpoint) -> None:
+        self._inventory.restore_state(
+            base_amount=checkpoint.base_amount,
+            quote_amount=checkpoint.quote_amount,
+            average_entry_price=checkpoint.average_entry_price,
+            realized_pnl=checkpoint.realized_pnl,
+            total_fees=checkpoint.total_fees,
+            last_updated=checkpoint.last_updated,
+        )
+        self._open_quotes = [
+            OpenQuote(quote_id=open_quote.quote_id, quote=open_quote.quote)
+            for open_quote in checkpoint.open_quotes
+        ]
 
     def apply_fills(self, snapshot: OrderBookSnapshot) -> list[Fill]:
         fills = detect_fills(

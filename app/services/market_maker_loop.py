@@ -12,7 +12,14 @@ from app.analytics.pnl import compute_pnl_snapshot
 from app.config.settings import Settings
 from app.execution.paper_broker import PaperBroker
 from app.market_data.orderbook import mid_price
-from app.models.domain import AmmPoolSnapshot, Opportunity, OrderBookSnapshot, PnLSnapshot, Position
+from app.models.domain import (
+    AmmPoolSnapshot,
+    Opportunity,
+    OrderBookSnapshot,
+    PnLSnapshot,
+    Position,
+    Quote,
+)
 from app.observability import metrics as prom
 from app.risk.kill_switch import KillSwitch
 from app.risk.limits import filter_quotes_by_position_limit
@@ -194,50 +201,64 @@ class MarketMakerLoop:
                 self._repository.save_opportunities(self._last_opportunities)
 
         if snapshot.is_stale:
-            self._broker.cancel_all_quotes()
-            if self._settings.metrics_enabled:
-                prom.STALE_TICKS.inc()
-            position = self._broker.inventory.to_position(now)
-            self._last_position = position
-            pnl = compute_pnl_snapshot(self._broker.inventory, snapshot, now)
-            self._last_pnl = pnl
-            self._repository.save_orderbook_snapshot(snapshot)
-            self._repository.save_position(position)
-            self._repository.save_pnl_snapshot(pnl)
+            broker_checkpoint = self._broker.checkpoint()
+            try:
+                self._broker.cancel_all_quotes()
+                if self._settings.metrics_enabled:
+                    prom.STALE_TICKS.inc()
+                position = self._broker.inventory.to_position(now)
+                self._last_position = position
+                pnl = compute_pnl_snapshot(self._broker.inventory, snapshot, now)
+                self._last_pnl = pnl
+                self._repository.persist_tick(
+                    snapshot=snapshot,
+                    fills=[],
+                    quotes=[],
+                    position=position,
+                    pnl=pnl,
+                )
+            except Exception:
+                self._broker.restore_checkpoint(broker_checkpoint)
+                raise
             self._tick += 1
             self._last_tick_at = now
             if self._settings.metrics_enabled:
                 self._record_metrics(start, [], position, pnl)
             return
 
-        fills = self._broker.apply_fills(snapshot)
-        if fills:
-            self._repository.save_fills(fills)
+        broker_checkpoint = self._broker.checkpoint()
+        try:
+            fills = self._broker.apply_fills(snapshot)
+            position = self._broker.inventory.to_position(now)
+            self._last_position = position
 
-        position = self._broker.inventory.to_position(now)
-        self._last_position = position
+            pnl = compute_pnl_snapshot(self._broker.inventory, snapshot, now)
+            self._last_pnl = pnl
 
-        pnl = compute_pnl_snapshot(self._broker.inventory, snapshot, now)
-        self._last_pnl = pnl
+            submitted_quotes: list[Quote] = []
+            if not self._kill_switch.active:
+                quotes = self._strategy.generate_quotes(snapshot, position)
+                approved_quotes = filter_quotes_by_position_limit(
+                    quotes,
+                    position,
+                    self._settings.max_position_base,
+                    self._settings.max_position_notional,
+                    maker_fee_bps=self._settings.maker_fee_bps,
+                )
+                submitted_quotes = self._broker.submit_quotes(approved_quotes)
+            else:
+                self._broker.cancel_all_quotes()
 
-        if not self._kill_switch.active:
-            quotes = self._strategy.generate_quotes(snapshot, position)
-            approved_quotes = filter_quotes_by_position_limit(
-                quotes,
-                position,
-                self._settings.max_position_base,
-                self._settings.max_position_notional,
-                maker_fee_bps=self._settings.maker_fee_bps,
+            self._repository.persist_tick(
+                snapshot=snapshot,
+                fills=fills,
+                quotes=submitted_quotes,
+                position=position,
+                pnl=pnl,
             )
-            submitted_quotes = self._broker.submit_quotes(approved_quotes)
-            if submitted_quotes:
-                self._repository.save_quotes(submitted_quotes)
-        else:
-            self._broker.cancel_all_quotes()
-
-        self._repository.save_orderbook_snapshot(snapshot)
-        self._repository.save_position(position)
-        self._repository.save_pnl_snapshot(pnl)
+        except Exception:
+            self._broker.restore_checkpoint(broker_checkpoint)
+            raise
 
         self._tick += 1
         self._last_tick_at = now

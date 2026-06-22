@@ -33,6 +33,27 @@ class InventoryTracker:
     def total_fees(self) -> float:
         return self._total_fees
 
+    @property
+    def last_updated(self) -> datetime | None:
+        return self._last_updated
+
+    def restore_state(
+        self,
+        *,
+        base_amount: float,
+        quote_amount: float,
+        average_entry_price: float,
+        realized_pnl: float,
+        total_fees: float,
+        last_updated: datetime | None,
+    ) -> None:
+        self._base_amount = base_amount
+        self._quote_amount = quote_amount
+        self._average_entry_price = average_entry_price
+        self._realized_pnl = realized_pnl
+        self._total_fees = total_fees
+        self._last_updated = last_updated
+
     def apply_fill(self, fill: Fill, timestamp: datetime) -> bool:
         notional = fill.price * fill.size
         self._last_updated = timestamp
