@@ -129,6 +129,14 @@ class BacktestRunner:
 
         for snapshot in snapshots:
             now = snapshot.timestamp
+
+            if snapshot.is_stale:
+                self._broker.cancel_all_quotes()
+                position = self._broker.inventory.to_position(now)
+                pnl = compute_pnl_snapshot(self._broker.inventory, snapshot, now)
+                pnl_series.append(pnl.total_pnl)
+                continue
+
             fills = self._broker.apply_fills(snapshot)
             all_fills.extend(fills)
 
