@@ -8,9 +8,20 @@
 
 **What it does:** end-to-end MM loop on public Binance data (no API keys).  
 **How it's built:** FastAPI, CCXT, web3.py, SQLAlchemy, Prometheus/Grafana.  
-**Production gaps:** paper-only, no auth, conservative fill model — see [Simulation assumptions](#simulation-assumptions) and [design decisions](docs/design-decisions.md).
+**Scope and safety:** paper-only, no auth, conservative fill model — see [Simulation assumptions](#simulation-assumptions) and [design decisions](docs/design-decisions.md).
 
 ![Demo](docs/images/demo.gif)
+
+## Highlights
+
+- **72 automated tests** — order book math, fill model, PnL, AMM, arbitrage scanner, backtest, API routes, stale-data guards, loop recovery
+- **Execution simulation** — cash-account fills (`full_cross_fill` or `partial_fill`), auditable quote/fill IDs, replay timestamps aligned to market data
+- **Risk and inventory controls** — position caps, cumulative cash reservation, kill switch, stale-tick safeguards that cancel quotes and skip execution
+- **Strategy research** — pure MM, inventory skew, and volatility-adjusted spread strategies over the same mid-price feed
+- **CEX/DEX analytics** — Uniswap V2 pool reader, arbitrage scanner with transparent edge accounting
+- **Backtesting** — replay from SQLite/Postgres snapshots or CSV fixtures; annualized Sharpe-like ratio from per-tick PnL changes (frequency inferred from timestamps), drawdown, fill rate
+- **Observability** — Prometheus `/metrics`, Grafana dashboard, structured logging, `last_error` on `/status`
+- **Loop resilience** — bounded exponential backoff on tick failures, last-error visibility, automatic shutdown after repeated failures
 
 ## Screenshots
 
@@ -26,18 +37,24 @@
 |---------------------|-----------------|
 | ![Docker dashboard](docs/images/dashboard-docker.png) | ![Grafana](docs/images/grafana.png) |
 
-## Highlights
+## Capabilities
 
-- **66 automated tests** — order book math, fill model, PnL, AMM, arbitrage scanner, backtest, API routes
-- **3 evolution stages** — V1 CEX paper MM → V2 DEX comparison → V3 Docker + metrics + backtest
-- **Observable** — Prometheus `/metrics`, Grafana dashboard, structured logging
-- **Replayable** — backtest from SQLite/Postgres snapshots or CSV fixtures (Sharpe, drawdown, fill rate)
+| Area | What you get |
+|------|----------------|
+| **Execution simulation** | Paper broker, fill modes, quote lifecycle, cash-account enforcement |
+| **Risk and inventory controls** | Position/notional limits, cumulative balance checks, kill switch |
+| **Strategy research** | Pluggable strategies over shared mid-price and inventory state |
+| **CEX/DEX analytics** | Live order books, pool reserves, arbitrage opportunity scanning |
+| **Backtesting** | Historical replay, performance metrics, strategy comparison |
+| **Observability** | Metrics, dashboard, trade blotter, equity curve, structured logs |
 
-## Features
+### Strategies
 
-- **V1** — CEX paper market maker (CCXT, pure MM strategy, fill simulation, PnL, dashboard)
-- **V2** — Uniswap V2 pool reader, AMM math, arbitrage scanner, inventory skew strategy
-- **V3** — Docker Compose stack, PostgreSQL, Prometheus/Grafana, backtest runner
+| Strategy | Behavior |
+|----------|----------|
+| `pure_mm` | Fixed symmetric spread around mid |
+| `inventory_skew` | Shifts quotes away from inventory imbalance |
+| `volatility_spread` | Widens spread using rolling mid-return volatility |
 
 ## Quickstart (local)
 
@@ -83,7 +100,7 @@ docker compose up --build
 |----------|-------------|
 | `GET /health` | Health check |
 | `GET /metrics` | Prometheus metrics |
-| `GET /status` | Loop status, tick count, kill switch |
+| `GET /status` | Loop status, tick count, kill switch, last error |
 | `GET /market` | Best bid/ask, mid, spread |
 | `GET /position` | Base/quote inventory |
 | `GET /pnl` | Realized/unrealized PnL and fees |
@@ -106,34 +123,39 @@ This project is a **paper-trading lab**, not a production market-making system. 
 ### Execution
 
 - **No live orders** — quotes and fills are simulated locally. CEX access is read-only (public order books via CCXT). DEX access is read-only (`getReserves()` over RPC).
-- **Cash account only** — you cannot sell base you do not own or bid beyond available quote balance (including fees). No margin, leverage, or short selling.
+- **Cash account only** — you cannot sell base you do not own or bid beyond available quote balance (including fees). Risk filters reserve aggregate exposure across multiple quotes on the same tick. No margin, leverage, or short selling.
 - **Fill model** (`FILL_MODE`):
   - `full_cross_fill` (default) — if the external best bid/ask crosses your resting quote, the full quote size fills at your price.
   - `partial_fill` — same trigger, but fill size is capped by opposing top-of-book depth.
   - Neither mode models queue position, order-flow priority, or latency.
-- **Quote lifecycle** — resting quotes are replaced each tick; partial remainders persist only until the next submission.
+- **Quote lifecycle** — resting quotes are replaced each tick; partial remainders persist only until the next submission. Each quote receives a UUID at submission; fills carry the same ID for audit joins.
 
 ### Market data
 
 - **Polling, not websockets** — order books refresh on a fixed interval (default 2s).
 - **Top-of-book focus** — strategies quote from mid price; stored snapshots keep best bid/ask only. Backtests reconstruct a minimal two-level book from those prices.
-- **Stale fallback** — if a CEX fetch fails, the adapter may reuse the last cached book (flagged `is_stale`).
+- **Stale fallback** — if a CEX fetch fails, the adapter may reuse the last cached book (flagged `is_stale`). Stale ticks cancel resting quotes, skip fills and new quoting, increment `mm_stale_ticks_total`, and suppress DEX arbitrage opportunities when either the primary or compare CEX snapshot is stale. Stale books remain observable in storage and on the dashboard, but they are never executable.
 
 ### PnL and fees
 
-- **Average-cost accounting** — realized PnL uses average entry price, not FIFO.
-- **Configurable fees** — maker/taker fees are flat basis-point rates (`MAKER_FEE_BPS`, `TAKER_FEE_BPS`). DEX arbitrage estimates include AMM fee, gas, and slippage assumptions.
+- **Average-cost accounting** — realized PnL uses average entry price for deterministic inventory state. There is no lot-level attribution.
+- **Configurable fees** — maker/taker fees are flat basis-point rates (`MAKER_FEE_BPS`, `TAKER_FEE_BPS`). DEX arbitrage estimates include AMM fee, gas, and slippage attribution fields; AMM fee and price impact are already embedded in swap output and are not deducted twice from net edge.
 - **Unrealized PnL** — mark-to-market on base inventory using current mid.
 
-### DEX comparison (V2)
+### DEX comparison
 
 - **Uniswap V2 only** — constant-product pool math on a single WETH/USDC pair vs CEX ETH/USDT mid.
 - **Arbitrage is observational** — opportunities are scanned and logged; no on-chain execution.
+
+### Backtest metrics
+
+- **Sharpe-like ratio** — computed from per-tick PnL *changes* (not portfolio returns), annualized using the average interval between snapshot timestamps. This is a useful lab statistic for comparing replay runs, but it is not a textbook portfolio Sharpe ratio. Drawdown and fill rate are reported alongside it.
 
 ### Security and ops
 
 - **No API authentication** — dashboard, kill switch, and JSON endpoints are open on localhost/Docker. Not suitable for exposed deployments without a reverse proxy and auth.
 - **No wallet keys** — by design; nothing signs transactions.
+- **Loop failure handling** — tick errors are retried with bounded exponential backoff; `/status` exposes `last_error`. After repeated consecutive failures the loop stops rather than reporting a false healthy state.
 
 For rationale and trade-offs behind each choice, see [docs/design-decisions.md](docs/design-decisions.md).
 
