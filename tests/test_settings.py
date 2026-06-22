@@ -14,6 +14,14 @@ def test_settings_defaults() -> None:
     assert settings.fill_mode == "full_cross_fill"
 
 
+def test_explicit_db_url_overrides_default() -> None:
+    db_url = "sqlite:///test.db"
+
+    settings = Settings(db_url=db_url)
+
+    assert settings.db_url == db_url
+
+
 def test_get_settings_is_cached() -> None:
     get_settings.cache_clear()
     first = get_settings()
