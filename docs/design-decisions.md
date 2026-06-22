@@ -19,9 +19,9 @@ Two fill modes are supported via `FILL_MODE`:
 | Mode | Behavior |
 |------|----------|
 | `full_cross_fill` (default) | When the external best bid/ask crosses our resting quote, the entire quote size fills at our price. |
-| `partial_fill` | Same cross trigger, but fill size is capped by the opposing top-of-book depth (`min(quote_size, level_size)`). Unfilled remainder stays resting until the next tick replaces quotes. |
+| `partial_fill` | Same cross trigger, but fill size is capped by the opposing top-of-book depth (`min(quote_size, level_size)`). Any unfilled remainder is dropped when new quotes are submitted on the same tick. |
 
-Neither mode models queue position or order-flow priority. `partial_fill` is a simple depth constraint — useful for backtests where quote size often exceeds visible liquidity.
+Neither mode models queue position or order-flow priority. Backtest replay stores best bid/ask only and reconstructs depth as `1.0`, so `partial_fill` mainly affects the live loop where CCXT provides real level sizes.
 
 ## Cash-account execution
 

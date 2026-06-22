@@ -57,8 +57,8 @@ flowchart TB
 
 1. **Fetch** — CCXT public order book (+ optional DEX pool via web3).
 2. **Apply fills** — paper broker checks if external prices crossed resting quotes.
-3. **Strategy** — generate new bid/ask quotes around mid (pure MM or inventory skew).
-4. **Risk** — filter quotes that breach position limits.
+3. **Strategy** — generate new bid/ask quotes (pure MM, inventory skew, or volatility-adjusted spread).
+4. **Risk** — filter quotes that breach position limits and cash-account constraints.
 5. **Persist** — snapshots, fills, positions, PnL, opportunities to SQLite/Postgres.
 6. **Metrics** — expose Prometheus gauges/counters on `/metrics`.
 

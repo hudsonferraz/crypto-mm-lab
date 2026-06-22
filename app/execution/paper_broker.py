@@ -39,14 +39,22 @@ class PaperBroker:
         if not fills:
             return []
 
+        now = datetime.now(UTC)
         fills_by_quote_id = {fill.quote_id: fill for fill in fills}
         updated_open_quotes: list[OpenQuote] = []
+        accepted_fills: list[Fill] = []
+
         for open_quote in self._open_quotes:
             fill = fills_by_quote_id.get(open_quote.quote_id)
             if fill is None:
                 updated_open_quotes.append(open_quote)
                 continue
 
+            if not self._inventory.apply_fill(fill, now):
+                updated_open_quotes.append(open_quote)
+                continue
+
+            accepted_fills.append(fill)
             remaining_size = open_quote.quote.size - fill.size
             if remaining_size > 0:
                 updated_open_quotes.append(
@@ -57,12 +65,7 @@ class PaperBroker:
                 )
 
         self._open_quotes = updated_open_quotes
-
-        now = datetime.now(UTC)
-        for fill in fills:
-            self._inventory.apply_fill(fill, now)
-
-        return fills
+        return accepted_fills
 
     def submit_quotes(self, quotes: list[Quote]) -> list[Quote]:
         self._open_quotes = []

@@ -19,7 +19,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run backtest from DB snapshots or fixture file")
     parser.add_argument("--from", dest="from_date", help="Start timestamp (ISO8601)")
     parser.add_argument("--to", dest="to_date", help="End timestamp (ISO8601)")
-    parser.add_argument("--strategy", help="Override strategy (pure_mm, inventory_skew)")
+    parser.add_argument("--strategy", help="Override strategy (pure_mm, inventory_skew, volatility_spread)")
     parser.add_argument("--fixture", help="Path to CSV or Parquet fixture")
     parser.add_argument("--limit", type=int, help="Max snapshots to replay")
     args = parser.parse_args()
