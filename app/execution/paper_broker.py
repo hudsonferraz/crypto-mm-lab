@@ -1,5 +1,4 @@
 from dataclasses import replace
-from datetime import UTC, datetime
 
 from app.analytics.inventory import InventoryTracker
 from app.execution.fill_model import FillMode, OpenQuote, detect_fills
@@ -39,7 +38,7 @@ class PaperBroker:
         if not fills:
             return []
 
-        now = datetime.now(UTC)
+        fill_timestamp = snapshot.timestamp
         fills_by_quote_id = {fill.quote_id: fill for fill in fills}
         updated_open_quotes: list[OpenQuote] = []
         accepted_fills: list[Fill] = []
@@ -50,7 +49,7 @@ class PaperBroker:
                 updated_open_quotes.append(open_quote)
                 continue
 
-            if not self._inventory.apply_fill(fill, now):
+            if not self._inventory.apply_fill(fill, fill_timestamp):
                 updated_open_quotes.append(open_quote)
                 continue
 

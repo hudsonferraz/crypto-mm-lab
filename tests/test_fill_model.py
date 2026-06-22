@@ -96,3 +96,22 @@ def test_partial_fill_skips_cross_when_opposing_depth_is_zero() -> None:
         fill_mode=FILL_MODE_PARTIAL,
     )
     assert fills == []
+
+
+def test_fill_timestamp_matches_snapshot_not_wall_clock() -> None:
+    replay_time = datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
+    open_quotes = [
+        OpenQuote(
+            quote_id="bid-1",
+            quote=Quote("BTC/USDT", QuoteSide.BID, 100.0, 0.001, replay_time),
+        )
+    ]
+    snapshot = OrderBookSnapshot(
+        symbol="BTC/USDT",
+        bids=(OrderBookLevel(99.0, 1.0),),
+        asks=(OrderBookLevel(100.0, 1.0),),
+        timestamp=replay_time,
+    )
+    fills = detect_fills(open_quotes, snapshot, maker_fee_bps=10.0)
+    assert len(fills) == 1
+    assert fills[0].timestamp == replay_time

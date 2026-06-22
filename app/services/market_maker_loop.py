@@ -56,6 +56,17 @@ class MarketMakerLoop:
         self._last_position: Position | None = None
         self._last_pnl: PnLSnapshot | None = None
         self._last_tick_at: datetime | None = None
+        self._last_error: str | None = None
+        self._consecutive_errors = 0
+        self._max_consecutive_errors = 3
+
+    @property
+    def last_error(self) -> str | None:
+        return self._last_error
+
+    @property
+    def task_alive(self) -> bool:
+        return self._task is not None and not self._task.done()
 
     @property
     def kill_switch(self) -> KillSwitch:
@@ -138,7 +149,25 @@ class MarketMakerLoop:
 
     async def _run(self) -> None:
         while self._running:
-            await self._tick_once()
+            try:
+                await self._tick_once()
+                self._consecutive_errors = 0
+                self._last_error = None
+            except Exception as error:
+                self._consecutive_errors += 1
+                self._last_error = str(error)
+                logger.exception(
+                    "tick_failed",
+                    error=str(error),
+                    consecutive_errors=self._consecutive_errors,
+                )
+                if self._consecutive_errors >= self._max_consecutive_errors:
+                    self._running = False
+                    break
+                backoff_seconds = min(2**self._consecutive_errors, 30)
+                await asyncio.sleep(backoff_seconds)
+                continue
+
             await asyncio.sleep(self._settings.poll_interval_sec)
 
     async def _tick_once(self) -> None:
@@ -147,6 +176,7 @@ class MarketMakerLoop:
         snapshot = await self._data_source.fetch_orderbook()
         self._last_snapshot = snapshot
 
+        compare_snapshot: OrderBookSnapshot | None = None
         if self._settings.dex_enabled and self._pool_adapter is not None:
             compare_snapshot, pool_snapshot = await asyncio.gather(
                 self._compare_source.fetch_orderbook(),
@@ -156,11 +186,29 @@ class MarketMakerLoop:
             self._last_compare_mid = mid_price(compare_snapshot)
             self._last_opportunities = self._scan_opportunities(
                 cex_mid=self._last_compare_mid,
+                compare_is_stale=compare_snapshot.is_stale,
                 pool_snapshot=pool_snapshot,
                 eth_price_usd=self._last_compare_mid or 0.0,
             )
             if self._last_opportunities:
                 self._repository.save_opportunities(self._last_opportunities)
+
+        if snapshot.is_stale:
+            self._broker.cancel_all_quotes()
+            if self._settings.metrics_enabled:
+                prom.STALE_TICKS.inc()
+            position = self._broker.inventory.to_position(now)
+            self._last_position = position
+            pnl = compute_pnl_snapshot(self._broker.inventory, snapshot, now)
+            self._last_pnl = pnl
+            self._repository.save_orderbook_snapshot(snapshot)
+            self._repository.save_position(position)
+            self._repository.save_pnl_snapshot(pnl)
+            self._tick += 1
+            self._last_tick_at = now
+            if self._settings.metrics_enabled:
+                self._record_metrics(start, [], position, pnl)
+            return
 
         fills = self._broker.apply_fills(snapshot)
         if fills:
@@ -238,10 +286,16 @@ class MarketMakerLoop:
         self,
         *,
         cex_mid: float | None,
+        compare_is_stale: bool,
         pool_snapshot: AmmPoolSnapshot,
         eth_price_usd: float,
     ) -> list[Opportunity]:
-        if cex_mid is None or cex_mid <= 0 or pool_snapshot.is_stale:
+        if (
+            cex_mid is None
+            or cex_mid <= 0
+            or compare_is_stale
+            or pool_snapshot.is_stale
+        ):
             return []
 
         return scan_arbitrage_opportunities(

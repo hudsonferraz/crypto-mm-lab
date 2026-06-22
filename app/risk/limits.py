@@ -17,26 +17,32 @@ def filter_quotes_by_position_limit(
 ) -> list[Quote]:
     """Filter quotes by position caps and cash-account balance constraints."""
     approved: list[Quote] = []
+    projected_base = position.base_amount
+    available_base = position.base_amount
+    available_quote = position.quote_amount
 
     for quote in quotes:
         if quote.side == QuoteSide.BID:
-            projected_base = position.base_amount + quote.size
+            next_base = projected_base + quote.size
         else:
-            projected_base = position.base_amount - quote.size
+            next_base = projected_base - quote.size
 
-        if abs(projected_base) > max_position_base:
+        if abs(next_base) > max_position_base:
             continue
-        if abs(projected_base * quote.price) > max_position_notional:
-            continue
-
-        if quote.side == QuoteSide.ASK and position.base_amount < quote.size:
+        if abs(next_base * quote.price) > max_position_notional:
             continue
 
-        if quote.side == QuoteSide.BID:
-            required_quote = _bid_required_quote(quote, maker_fee_bps)
-            if position.quote_amount < required_quote:
+        if quote.side == QuoteSide.ASK:
+            if available_base < quote.size:
                 continue
+            available_base -= quote.size
+        else:
+            required_quote = _bid_required_quote(quote, maker_fee_bps)
+            if available_quote < required_quote:
+                continue
+            available_quote -= required_quote
 
+        projected_base = next_base
         approved.append(quote)
 
     return approved

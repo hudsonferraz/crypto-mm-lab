@@ -38,11 +38,12 @@ async def status(request: Request) -> dict:
     loop = _get_loop(request)
     last_tick_at = loop.last_tick_at.isoformat() if loop.last_tick_at else None
     return {
-        "running": loop.running,
+        "running": loop.running and loop.task_alive,
         "tick": loop.tick,
         "last_tick_at": last_tick_at,
         "kill_switch_active": loop.kill_switch.active,
         "open_quotes": loop.open_quote_count,
+        "last_error": loop.last_error,
     }
 
 

@@ -77,3 +77,19 @@ def test_cash_account_allows_both_sides_when_funded() -> None:
         maker_fee_bps=10.0,
     )
     assert len(approved) == 2
+
+
+def test_cumulative_cash_reserves_quote_across_multiple_bids() -> None:
+    now = datetime.now(UTC)
+    bids = [
+        Quote("BTC/USDT", QuoteSide.BID, 100.0, 0.05, now),
+        Quote("BTC/USDT", QuoteSide.BID, 100.0, 0.05, now),
+    ]
+    approved = filter_quotes_by_position_limit(
+        bids,
+        _position(base=0.0, quote=10.0),
+        max_position_base=1.0,
+        max_position_notional=10_000.0,
+        maker_fee_bps=10.0,
+    )
+    assert len(approved) == 1

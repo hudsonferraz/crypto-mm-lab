@@ -62,3 +62,41 @@ def test_detects_buy_cex_sell_amm_when_cex_cheaper() -> None:
     )
     directions = {item.direction for item in opportunities}
     assert ArbitrageDirection.BUY_CEX_SELL_AMM in directions
+
+
+def test_net_edge_excludes_only_cex_fee_and_gas() -> None:
+    opportunities = scan_arbitrage_opportunities(
+        cex_mid=3100.0,
+        pool_snapshot=_pool_snapshot(3000.0),
+        trial_trade_size=1.0,
+        cex_taker_fee_bps=10.0,
+        amm_fee_bps=30.0,
+        gas_limit=200_000,
+        gas_price_gwei=1.0,
+        eth_price_usd=3000.0,
+        min_edge_bps=-1000.0,
+    )
+    assert opportunities
+    opportunity = opportunities[0]
+    expected_net = opportunity.gross_edge - opportunity.cex_fee - opportunity.gas_cost
+    assert opportunity.net_edge == expected_net
+    assert opportunity.amm_fee > 0
+    assert opportunity.slippage_cost >= 0
+
+
+def test_quote_to_base_slippage_is_positive_for_impacted_swap() -> None:
+    opportunities = scan_arbitrage_opportunities(
+        cex_mid=3100.0,
+        pool_snapshot=_pool_snapshot(3000.0),
+        trial_trade_size=10.0,
+        cex_taker_fee_bps=10.0,
+        amm_fee_bps=30.0,
+        gas_limit=200_000,
+        gas_price_gwei=1.0,
+        eth_price_usd=3000.0,
+        min_edge_bps=-1000.0,
+    )
+    buy_amm = next(
+        item for item in opportunities if item.direction == ArbitrageDirection.BUY_AMM_SELL_CEX
+    )
+    assert buy_amm.slippage_cost > 0

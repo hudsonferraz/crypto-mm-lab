@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Literal
 
 from app.execution.fee_model import maker_fee
@@ -49,7 +48,7 @@ def detect_fills(
         return []
 
     fills: list[Fill] = []
-    now = datetime.now(UTC)
+    fill_timestamp = snapshot.timestamp
 
     for open_quote in open_quotes:
         quote = open_quote.quote
@@ -75,7 +74,7 @@ def detect_fills(
                 price=quote.price,
                 size=fill_size,
                 fee=maker_fee(notional, maker_fee_bps),
-                timestamp=now,
+                timestamp=fill_timestamp,
                 quote_id=open_quote.quote_id,
             )
         )

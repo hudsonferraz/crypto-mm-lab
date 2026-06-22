@@ -1,7 +1,11 @@
 import math
 from dataclasses import dataclass
+from datetime import datetime
 
 import polars as pl
+
+SECONDS_PER_YEAR = 365 * 24 * 60 * 60
+DEFAULT_TICK_INTERVAL_SEC = 2.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,11 +29,12 @@ def compute_backtest_metrics(
     quote_count: int,
     final_base: float,
     final_quote: float,
+    timestamps: list[datetime] | None = None,
 ) -> BacktestMetrics:
     total_pnl = pnl_series[-1] if pnl_series else 0.0
     fill_rate = fill_count / quote_count if quote_count > 0 else 0.0
     max_drawdown = _max_drawdown(pnl_series)
-    sharpe_ratio = _sharpe_ratio(pnl_series)
+    sharpe_ratio = _sharpe_ratio(pnl_series, timestamps=timestamps)
 
     return BacktestMetrics(
         tick_count=tick_count,
@@ -56,7 +61,27 @@ def _max_drawdown(pnl_series: list[float]) -> float:
     return max_dd
 
 
-def _sharpe_ratio(pnl_series: list[float], risk_free_rate: float = 0.0) -> float:
+def _average_tick_interval_seconds(timestamps: list[datetime] | None) -> float:
+    if timestamps is None or len(timestamps) < 2:
+        return DEFAULT_TICK_INTERVAL_SEC
+
+    deltas = [
+        (timestamps[index] - timestamps[index - 1]).total_seconds()
+        for index in range(1, len(timestamps))
+    ]
+    positive_deltas = [delta for delta in deltas if delta > 0]
+    if not positive_deltas:
+        return DEFAULT_TICK_INTERVAL_SEC
+
+    return sum(positive_deltas) / len(positive_deltas)
+
+
+def _sharpe_ratio(
+    pnl_series: list[float],
+    *,
+    timestamps: list[datetime] | None = None,
+    risk_free_rate: float = 0.0,
+) -> float:
     if len(pnl_series) < 2:
         return 0.0
 
@@ -71,9 +96,9 @@ def _sharpe_ratio(pnl_series: list[float], risk_free_rate: float = 0.0) -> float
         return 0.0
 
     excess = mean_return - risk_free_rate
-    ticks_per_year = 365 * 24 * 60 * 60 / 2
-    annualized = excess / std_dev * math.sqrt(ticks_per_year)
-    return annualized
+    average_tick_seconds = _average_tick_interval_seconds(timestamps)
+    ticks_per_year = SECONDS_PER_YEAR / average_tick_seconds
+    return excess / std_dev * math.sqrt(ticks_per_year)
 
 
 def load_snapshots_from_parquet(path: str) -> pl.DataFrame:

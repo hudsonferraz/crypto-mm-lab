@@ -81,10 +81,10 @@ def _evaluate_buy_amm_sell_cex(
 
     cex_proceeds = base_received * cex_mid
     gross_edge = cex_proceeds - quote_spent
-    amm_fee_cost = quote_spent * (pool.fee_bps / 10_000)
     cex_fee_cost = taker_fee(cex_proceeds, cex_taker_fee_bps)
+    amm_fee_cost = _amm_fee_cost_quote(pool, quote_spent)
     slippage_cost = _slippage_cost_quote(pool, quote_spent, SwapDirection.QUOTE_TO_BASE)
-    net_edge = gross_edge - cex_fee_cost - amm_fee_cost - gas_cost - slippage_cost
+    net_edge = gross_edge - cex_fee_cost - gas_cost
     notional = quote_spent
     net_edge_bps = (net_edge / notional) * 10_000 if notional > 0 else 0.0
 
@@ -125,9 +125,9 @@ def _evaluate_buy_cex_sell_amm(
         return None
 
     gross_edge = quote_received - cex_cost
-    amm_fee_cost = quote_received * (pool.fee_bps / 10_000)
+    amm_fee_cost = _amm_fee_cost_quote(pool, trial_trade_size * amm_price)
     slippage_cost = _slippage_cost_quote(pool, trial_trade_size, SwapDirection.BASE_TO_QUOTE)
-    net_edge = gross_edge - cex_fee_cost - amm_fee_cost - gas_cost - slippage_cost
+    net_edge = gross_edge - cex_fee_cost - gas_cost
     notional = cex_cost
     net_edge_bps = (net_edge / notional) * 10_000 if notional > 0 else 0.0
 
@@ -150,6 +150,10 @@ def _evaluate_buy_cex_sell_amm(
     )
 
 
+def _amm_fee_cost_quote(pool: AmmPool, input_quote_notional: float) -> float:
+    return input_quote_notional * (pool.fee_bps / 10_000)
+
+
 def _slippage_cost_quote(
     pool: AmmPool,
     amount_in: float,
@@ -168,5 +172,4 @@ def _slippage_cost_quote(
         return max(ideal_out - amount_out, 0.0)
 
     ideal_base = amount_in / spot
-    actual_base = amount_out
-    return max((actual_base - ideal_base) * spot, 0.0)
+    return max((ideal_base - amount_out) * spot, 0.0)

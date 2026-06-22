@@ -148,6 +148,7 @@ class BacktestRunner:
             self._broker.submit_quotes(approved)
 
         final_position = self._broker.inventory.to_position(snapshots[-1].timestamp)
+        snapshot_timestamps = [snapshot.timestamp for snapshot in snapshots]
         metrics = compute_backtest_metrics(
             pnl_series,
             tick_count=len(snapshots),
@@ -155,6 +156,7 @@ class BacktestRunner:
             quote_count=quote_count,
             final_base=final_position.base_amount,
             final_quote=final_position.quote_amount,
+            timestamps=snapshot_timestamps,
         )
         report = format_backtest_report(metrics, all_fills)
         return BacktestResult(
