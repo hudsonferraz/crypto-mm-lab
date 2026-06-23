@@ -98,7 +98,9 @@ docker compose up --build
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /health` | Health check |
+| `GET /health` | Liveness probe (process is up) |
+| `GET /health/live` | Liveness probe (alias) |
+| `GET /health/ready` | Readiness probe (503 when loop is enabled but not operational) |
 | `GET /metrics` | Prometheus metrics |
 | `GET /status` | Loop status, tick count, kill switch, last error |
 | `GET /market` | Best bid/ask, mid, spread |

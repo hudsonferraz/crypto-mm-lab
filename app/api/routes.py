@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
 
@@ -9,6 +9,7 @@ from app.analytics.performance_report import (
     performance_report_dict,
     pnl_history_point,
 )
+from app.config.settings import get_settings
 from app.market_data.orderbook import best_ask, best_bid, mid_price, spread_bps
 from app.services.market_maker_loop import MarketMakerLoop
 
@@ -22,9 +23,41 @@ def _get_loop(request: Request) -> MarketMakerLoop:
     return loop
 
 
+def loop_is_operational(loop: MarketMakerLoop, *, loop_enabled: bool) -> bool:
+    if not loop_enabled:
+        return True
+    return loop.running and loop.task_alive
+
+
+def _readiness_payload(loop: MarketMakerLoop, *, loop_enabled: bool) -> dict:
+    operational = loop_is_operational(loop, loop_enabled=loop_enabled)
+    return {
+        "ready": operational,
+        "running": operational,
+        "loop_enabled": loop_enabled,
+        "tick": loop.tick,
+        "last_error": loop.last_error,
+    }
+
+
 @router.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/health/live")
+async def health_live() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@router.get("/health/ready", response_model=None)
+async def health_ready(request: Request):
+    loop = _get_loop(request)
+    settings = get_settings()
+    payload = _readiness_payload(loop, loop_enabled=settings.loop_enabled)
+    if not payload["ready"]:
+        return JSONResponse(status_code=503, content=payload)
+    return payload
 
 
 @router.get("/metrics")
@@ -36,9 +69,11 @@ async def metrics() -> Response:
 @router.get("/status")
 async def status(request: Request) -> dict:
     loop = _get_loop(request)
+    settings = get_settings()
     last_tick_at = loop.last_tick_at.isoformat() if loop.last_tick_at else None
+    operational = loop_is_operational(loop, loop_enabled=settings.loop_enabled)
     return {
-        "running": loop.running and loop.task_alive,
+        "running": operational,
         "tick": loop.tick,
         "last_tick_at": last_tick_at,
         "kill_switch_active": loop.kill_switch.active,
@@ -126,10 +161,12 @@ async def fills(
 @router.get("/report")
 async def report(request: Request) -> dict:
     loop = _get_loop(request)
+    settings = get_settings()
     last_tick_at = loop.last_tick_at.isoformat() if loop.last_tick_at else None
+    operational = loop_is_operational(loop, loop_enabled=settings.loop_enabled)
     return performance_report_dict(
         tick=loop.tick,
-        running=loop.running,
+        running=operational,
         snapshot=loop.last_snapshot,
         position=loop.last_position,
         pnl=loop.last_pnl,
