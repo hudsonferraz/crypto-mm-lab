@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy import create_engine
 
+from app.config.settings import Settings
 from app.execution.paper_broker import PaperBroker
 from app.models.domain import (
     Fill,
@@ -14,6 +15,7 @@ from app.models.domain import (
     Quote,
     QuoteSide,
 )
+from app.services.market_maker_loop import MarketMakerLoop
 from app.storage.repository import Repository
 
 
@@ -135,3 +137,50 @@ def test_persist_tick_does_not_commit_partial_state(tmp_path) -> None:
             assert count == 0
     engine.dispose()
     repo.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_persist_does_not_update_api_visible_position_or_pnl(tmp_path) -> None:
+    settings = Settings(
+        db_url=f"sqlite:///{tmp_path / 'mm.db'}",
+        dex_enabled=False,
+        metrics_enabled=False,
+    )
+    loop = MarketMakerLoop(settings)
+    loop.initialize()
+    now = datetime.now(UTC)
+
+    opening_snapshot = OrderBookSnapshot(
+        symbol="BTC/USDT",
+        bids=(OrderBookLevel(100.0, 1.0),),
+        asks=(OrderBookLevel(101.0, 1.0),),
+        timestamp=now,
+        is_stale=False,
+    )
+    crossing_snapshot = OrderBookSnapshot(
+        symbol="BTC/USDT",
+        bids=(OrderBookLevel(99.0, 1.0),),
+        asks=(OrderBookLevel(100.0, 1.0),),
+        timestamp=now,
+        is_stale=False,
+    )
+
+    loop._data_source.fetch_orderbook = AsyncMock(return_value=opening_snapshot)
+    await loop.run_once()
+
+    committed_position = loop.last_position
+    committed_pnl = loop.last_pnl
+    committed_tick = loop.tick
+    assert committed_position is not None
+    assert committed_pnl is not None
+
+    loop._data_source.fetch_orderbook = AsyncMock(return_value=crossing_snapshot)
+    loop._repository.persist_tick = MagicMock(side_effect=OSError("database unavailable"))
+
+    with pytest.raises(OSError):
+        await loop.run_once()
+
+    assert loop.last_position == committed_position
+    assert loop.last_pnl == committed_pnl
+    assert loop.tick == committed_tick
+    assert loop.open_quote_count > 0

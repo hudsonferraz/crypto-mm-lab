@@ -204,9 +204,7 @@ class MarketMakerLoop:
                 if self._settings.metrics_enabled:
                     prom.STALE_TICKS.inc()
                 position = self._broker.inventory.to_position(now)
-                self._last_position = position
                 pnl = compute_pnl_snapshot(self._broker.inventory, snapshot, now)
-                self._last_pnl = pnl
                 self._repository.persist_tick(
                     snapshot=snapshot,
                     fills=[],
@@ -217,6 +215,8 @@ class MarketMakerLoop:
             except Exception:
                 self._broker.restore_checkpoint(broker_checkpoint)
                 raise
+            self._last_position = position
+            self._last_pnl = pnl
             self._tick += 1
             self._last_tick_at = now
             if self._settings.metrics_enabled:
@@ -227,10 +227,7 @@ class MarketMakerLoop:
         try:
             fills = self._broker.apply_fills(snapshot)
             position = self._broker.inventory.to_position(now)
-            self._last_position = position
-
             pnl = compute_pnl_snapshot(self._broker.inventory, snapshot, now)
-            self._last_pnl = pnl
 
             submitted_quotes: list[Quote] = []
             if not self._kill_switch.active:
@@ -257,6 +254,8 @@ class MarketMakerLoop:
             self._broker.restore_checkpoint(broker_checkpoint)
             raise
 
+        self._last_position = position
+        self._last_pnl = pnl
         self._tick += 1
         self._last_tick_at = now
 
