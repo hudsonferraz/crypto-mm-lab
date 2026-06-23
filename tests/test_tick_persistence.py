@@ -355,7 +355,7 @@ def test_persist_tick_does_not_commit_partial_state(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_failed_persist_does_not_update_api_visible_position_or_pnl(tmp_path) -> None:
+async def test_failed_persist_restores_broker_and_keeps_api_state_unchanged(tmp_path) -> None:
     settings = Settings(
         db_url=f"sqlite:///{tmp_path / 'mm.db'}",
         dex_enabled=False,
@@ -386,8 +386,15 @@ async def test_failed_persist_does_not_update_api_visible_position_or_pnl(tmp_pa
     committed_position = loop.last_position
     committed_pnl = loop.last_pnl
     committed_tick = loop.tick
+    committed_tick_id = loop.last_tick_id
+    committed_open_quotes = loop.open_quote_count
+    committed_base = loop._broker.inventory.base_amount
+    committed_quote = loop._broker.inventory.quote_amount
+    committed_realized = loop._broker.inventory.realized_pnl
+    committed_fees = loop._broker.inventory.total_fees
     assert committed_position is not None
     assert committed_pnl is not None
+    assert committed_open_quotes > 0
 
     loop._data_source.fetch_orderbook = AsyncMock(return_value=crossing_snapshot)
     loop._repository.persist_tick = MagicMock(side_effect=OSError("database unavailable"))
@@ -398,4 +405,9 @@ async def test_failed_persist_does_not_update_api_visible_position_or_pnl(tmp_pa
     assert loop.last_position == committed_position
     assert loop.last_pnl == committed_pnl
     assert loop.tick == committed_tick
-    assert loop.open_quote_count > 0
+    assert loop.last_tick_id == committed_tick_id
+    assert loop._broker.inventory.base_amount == committed_base
+    assert loop._broker.inventory.quote_amount == committed_quote
+    assert loop._broker.inventory.realized_pnl == committed_realized
+    assert loop._broker.inventory.total_fees == committed_fees
+    assert loop.open_quote_count == committed_open_quotes

@@ -89,3 +89,40 @@ def test_stale_snapshots_skip_fills_and_quotes() -> None:
     assert stale_result.metrics.fill_count == 0
     assert executable_result.metrics.quote_count > stale_result.metrics.quote_count
     assert len(stale_result.pnl_series) == 2
+
+
+def test_backtest_quote_timestamps_match_snapshot_replay_times() -> None:
+    settings = Settings(strategy="pure_mm", symbol="BTC/USDT", quote_spread_bps=10.0)
+    replay_times = [
+        datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
+        datetime(2024, 6, 1, 10, 0, 5, tzinfo=UTC),
+        datetime(2024, 6, 1, 10, 0, 10, tzinfo=UTC),
+    ]
+    snapshots = [
+        OrderBookSnapshot(
+            symbol="BTC/USDT",
+            bids=(OrderBookLevel(100.0 + index, 1.0),),
+            asks=(OrderBookLevel(101.0 + index, 1.0),),
+            timestamp=replay_time,
+            is_stale=False,
+        )
+        for index, replay_time in enumerate(replay_times)
+    ]
+
+    runner = BacktestRunner(settings)
+    submitted_quotes_by_tick: list[list] = []
+    original_submit_quotes = runner._broker.submit_quotes
+
+    def capture_submitted_quotes(quotes):
+        submitted = original_submit_quotes(quotes)
+        submitted_quotes_by_tick.append(submitted)
+        return submitted
+
+    runner._broker.submit_quotes = capture_submitted_quotes
+    result = runner._run_snapshots(snapshots)
+
+    assert result.metrics.tick_count == len(replay_times)
+    assert len(submitted_quotes_by_tick) == len(replay_times)
+    for replay_time, submitted_quotes in zip(replay_times, submitted_quotes_by_tick, strict=True):
+        assert submitted_quotes
+        assert all(quote.timestamp == replay_time for quote in submitted_quotes)
