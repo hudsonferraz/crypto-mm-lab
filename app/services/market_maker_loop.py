@@ -193,6 +193,7 @@ class MarketMakerLoop:
             self._last_compare_mid = mid_price(compare_snapshot)
             self._last_opportunities = self._scan_opportunities(
                 cex_mid=self._last_compare_mid,
+                primary_is_stale=snapshot.is_stale,
                 compare_is_stale=compare_snapshot.is_stale,
                 pool_snapshot=pool_snapshot,
                 eth_price_usd=self._last_compare_mid or 0.0,
@@ -307,6 +308,7 @@ class MarketMakerLoop:
         self,
         *,
         cex_mid: float | None,
+        primary_is_stale: bool,
         compare_is_stale: bool,
         pool_snapshot: AmmPoolSnapshot,
         eth_price_usd: float,
@@ -314,6 +316,7 @@ class MarketMakerLoop:
         if (
             cex_mid is None
             or cex_mid <= 0
+            or primary_is_stale
             or compare_is_stale
             or pool_snapshot.is_stale
         ):
