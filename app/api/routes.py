@@ -8,6 +8,7 @@ from app.analytics.performance_report import (
     opportunity_to_dict,
     performance_report_dict,
     pnl_history_point,
+    tick_audit_to_dict,
 )
 from app.config.settings import get_settings
 from app.market_data.orderbook import best_ask, best_bid, mid_price, spread_bps
@@ -76,6 +77,7 @@ async def status(request: Request) -> dict:
         "running": operational,
         "tick": loop.tick,
         "last_tick_at": last_tick_at,
+        "last_tick_id": loop.last_tick_id,
         "kill_switch_active": loop.kill_switch.active,
         "open_quotes": loop.open_quote_count,
         "last_error": loop.last_error,
@@ -96,6 +98,7 @@ async def market(request: Request) -> dict:
         "mid": mid_price(snapshot),
         "spread_bps": spread_bps(snapshot),
         "is_stale": snapshot.is_stale,
+        "tick_id": snapshot.tick_id,
         "timestamp": snapshot.timestamp.isoformat(),
     }
 
@@ -112,6 +115,7 @@ async def position(request: Request) -> dict:
         "base_amount": position_snapshot.base_amount,
         "quote_amount": position_snapshot.quote_amount,
         "average_entry_price": position_snapshot.average_entry_price,
+        "tick_id": position_snapshot.tick_id,
         "timestamp": position_snapshot.timestamp.isoformat(),
     }
 
@@ -134,6 +138,7 @@ async def pnl(request: Request) -> dict:
         "unrealized_pnl": pnl_snapshot.unrealized_pnl,
         "total_fees": pnl_snapshot.total_fees,
         "total_pnl": pnl_snapshot.total_pnl,
+        "tick_id": pnl_snapshot.tick_id,
         "timestamp": pnl_snapshot.timestamp.isoformat(),
     }
 
@@ -173,10 +178,20 @@ async def report(request: Request) -> dict:
         open_quotes=loop.open_quote_count,
         kill_switch_active=loop.kill_switch.active,
         last_tick_at=last_tick_at,
+        last_tick_id=loop.last_tick_id,
         pool_snapshot=loop.last_pool_snapshot,
         compare_mid=loop.last_compare_mid,
         opportunities=loop.last_opportunities,
     )
+
+
+@router.get("/audit/ticks/{tick_id}")
+async def tick_audit(request: Request, tick_id: str) -> dict:
+    loop = _get_loop(request)
+    bundle = loop.repository.get_tick_audit(tick_id)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail=f"No artifacts found for tick_id={tick_id}")
+    return tick_audit_to_dict(bundle)
 
 
 @router.get("/amm")

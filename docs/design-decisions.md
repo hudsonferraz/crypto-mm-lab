@@ -146,6 +146,25 @@ A production system needs graduated degradation (e.g. widen spreads instead of h
 
 ---
 
+## Tick audit (`tick_id`)
+
+**Context**  
+Operators need to prove that a given loop iteration produced a coherent bundle of market data, execution, inventory, and PnL — not isolated rows that happen to share a timestamp.
+
+**Decision**  
+- Each loop iteration generates a UUID `tick_id` before persistence.
+- `persist_tick()` writes order-book snapshot, quotes, fills, position, PnL, and opportunities in one transaction, all stamped with the same `tick_id`.
+- Domain models and API serializers expose `tick_id` on order books, quotes, fills, positions, PnL, and opportunities.
+- `GET /audit/ticks/{tick_id}` returns the full bundle for forensic review; `/status` exposes `last_tick_id` for the most recent successful tick.
+
+**Trade-off**  
+Extra column per table and one join key to propagate. The audit story is much stronger than timestamp-only correlation.
+
+**Revisit when**  
+Cross-service tracing needs OpenTelemetry span IDs instead of (or in addition to) application-level tick IDs.
+
+---
+
 ## Loop failure policy
 
 **Context**  

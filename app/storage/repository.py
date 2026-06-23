@@ -9,6 +9,13 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
+from app.analytics.performance_report import (
+    fill_to_dict,
+    opportunity_to_dict,
+    pnl_history_point,
+    position_to_dict,
+    quote_to_dict,
+)
 from app.execution.tick_ids import new_tick_id
 from app.models.domain import (
     ArbitrageDirection,
@@ -21,6 +28,7 @@ from app.models.domain import (
     Quote,
     QuoteSide,
 )
+from app.models.tick_audit import TickAuditBundle
 from app.storage.database import create_db_engine
 
 
@@ -202,6 +210,7 @@ class Repository:
                 size=row.size,
                 timestamp=row.timestamp,
                 quote_id=row.quote_id,
+                tick_id=row.tick_id,
             )
 
     def save_fills(self, fills: list[Fill], *, tick_id: str | None = None) -> None:
@@ -416,6 +425,7 @@ class Repository:
                 fee=row.fee,
                 timestamp=row.timestamp,
                 quote_id=row.quote_id,
+                tick_id=row.tick_id,
             )
             for row in rows
         ]
@@ -436,9 +446,134 @@ class Repository:
                 total_fees=row.total_fees,
                 total_pnl=row.total_pnl,
                 timestamp=row.timestamp,
+                tick_id=row.tick_id,
             )
             for row in reversed(rows)
         ]
+
+    def get_tick_audit(self, tick_id: str) -> TickAuditBundle | None:
+        with self._session() as session:
+            snapshot_rows = (
+                session.query(OrderBookSnapshotRow)
+                .filter(OrderBookSnapshotRow.tick_id == tick_id)
+                .all()
+            )
+            quote_rows = session.query(QuoteRow).filter(QuoteRow.tick_id == tick_id).all()
+            fill_rows = session.query(FillRow).filter(FillRow.tick_id == tick_id).all()
+            position_rows = (
+                session.query(PositionRow).filter(PositionRow.tick_id == tick_id).all()
+            )
+            pnl_rows = (
+                session.query(PnLSnapshotRow)
+                .filter(PnLSnapshotRow.tick_id == tick_id)
+                .all()
+            )
+            opportunity_rows = (
+                session.query(OpportunityRow)
+                .filter(OpportunityRow.tick_id == tick_id)
+                .all()
+            )
+
+        if not any(
+            [
+                snapshot_rows,
+                quote_rows,
+                fill_rows,
+                position_rows,
+                pnl_rows,
+                opportunity_rows,
+            ]
+        ):
+            return None
+
+        quotes = [
+            Quote(
+                symbol=row.symbol,
+                side=QuoteSide(row.side),
+                price=row.price,
+                size=row.size,
+                timestamp=row.timestamp,
+                quote_id=row.quote_id,
+                tick_id=row.tick_id,
+            )
+            for row in quote_rows
+        ]
+        fills = [
+            Fill(
+                symbol=row.symbol,
+                side=QuoteSide(row.side),
+                price=row.price,
+                size=row.size,
+                fee=row.fee,
+                timestamp=row.timestamp,
+                quote_id=row.quote_id,
+                tick_id=row.tick_id,
+            )
+            for row in fill_rows
+        ]
+        positions = [
+            Position(
+                symbol=row.symbol,
+                base_amount=row.base_amount,
+                quote_amount=row.quote_amount,
+                average_entry_price=row.average_entry_price,
+                timestamp=row.timestamp,
+                tick_id=row.tick_id,
+            )
+            for row in position_rows
+        ]
+        pnl_snapshots = [
+            PnLSnapshot(
+                symbol=row.symbol,
+                realized_pnl=row.realized_pnl,
+                unrealized_pnl=row.unrealized_pnl,
+                total_fees=row.total_fees,
+                total_pnl=row.total_pnl,
+                timestamp=row.timestamp,
+                tick_id=row.tick_id,
+            )
+            for row in pnl_rows
+        ]
+        opportunities = [
+            Opportunity(
+                direction=ArbitrageDirection(row.direction),
+                cex_mid=row.cex_mid,
+                amm_price=row.amm_price,
+                trial_trade_size=row.trial_trade_size,
+                gross_edge=row.gross_edge,
+                cex_fee=row.cex_fee,
+                amm_fee=row.amm_fee,
+                gas_cost=row.gas_cost,
+                slippage_cost=row.slippage_cost,
+                net_edge=row.net_edge,
+                net_edge_bps=row.net_edge_bps,
+                timestamp=row.timestamp,
+                tick_id=row.tick_id,
+            )
+            for row in opportunity_rows
+        ]
+
+        return TickAuditBundle(
+            tick_id=tick_id,
+            orderbook_snapshots=[
+                {
+                    "tick_id": row.tick_id,
+                    "symbol": row.symbol,
+                    "best_bid": row.best_bid,
+                    "best_ask": row.best_ask,
+                    "mid_price": row.mid_price,
+                    "spread_bps": row.spread_bps,
+                    "is_stale": row.is_stale,
+                    "timestamp": row.timestamp.isoformat(),
+                }
+                for row in snapshot_rows
+            ],
+            quotes=[quote_to_dict(quote) for quote in quotes],
+            fills=[fill_to_dict(fill) for fill in fills],
+            positions=[position_to_dict(position) for position in positions],
+            pnl_snapshots=[pnl_history_point(pnl) for pnl in pnl_snapshots],
+            opportunities=[opportunity_to_dict(opportunity) for opportunity in opportunities],
+        )
 
     def load_orderbook_snapshots(
         self,

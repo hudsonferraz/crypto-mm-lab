@@ -1,5 +1,6 @@
 import asyncio
 import time
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import structlog
@@ -63,6 +64,7 @@ class MarketMakerLoop:
         self._last_position: Position | None = None
         self._last_pnl: PnLSnapshot | None = None
         self._last_tick_at: datetime | None = None
+        self._last_tick_id: str | None = None
         self._last_error: str | None = None
         self._consecutive_errors = 0
         self._max_consecutive_errors = 3
@@ -116,6 +118,10 @@ class MarketMakerLoop:
         return self._last_tick_at
 
     @property
+    def last_tick_id(self) -> str | None:
+        return self._last_tick_id
+
+    @property
     def open_quote_count(self) -> int:
         return self._broker.open_quote_count
 
@@ -125,6 +131,26 @@ class MarketMakerLoop:
 
     def cancel_all_quotes(self) -> None:
         self._broker.cancel_all_quotes()
+
+    def _commit_tick_state(
+        self,
+        *,
+        tick_id: str,
+        snapshot: OrderBookSnapshot,
+        position: Position,
+        pnl: PnLSnapshot,
+        opportunities: list[Opportunity],
+        now: datetime,
+    ) -> None:
+        self._last_snapshot = replace(snapshot, tick_id=tick_id)
+        self._last_position = replace(position, tick_id=tick_id)
+        self._last_pnl = replace(pnl, tick_id=tick_id)
+        self._last_opportunities = [
+            replace(opportunity, tick_id=tick_id) for opportunity in opportunities
+        ]
+        self._last_tick_id = tick_id
+        self._tick += 1
+        self._last_tick_at = now
 
     def initialize(self) -> None:
         self._repository.initialize()
@@ -219,10 +245,14 @@ class MarketMakerLoop:
             except Exception:
                 self._broker.restore_checkpoint(broker_checkpoint)
                 raise
-            self._last_position = position
-            self._last_pnl = pnl
-            self._tick += 1
-            self._last_tick_at = now
+            self._commit_tick_state(
+                tick_id=tick_id,
+                snapshot=snapshot,
+                position=position,
+                pnl=pnl,
+                opportunities=tick_opportunities,
+                now=now,
+            )
             if self._settings.metrics_enabled:
                 self._record_metrics(start, [], position, pnl)
             return
@@ -261,10 +291,14 @@ class MarketMakerLoop:
             self._broker.restore_checkpoint(broker_checkpoint)
             raise
 
-        self._last_position = position
-        self._last_pnl = pnl
-        self._tick += 1
-        self._last_tick_at = now
+        self._commit_tick_state(
+            tick_id=tick_id,
+            snapshot=snapshot,
+            position=position,
+            pnl=pnl,
+            opportunities=tick_opportunities,
+            now=now,
+        )
 
         if self._settings.metrics_enabled:
             self._record_metrics(start, fills, position, pnl)

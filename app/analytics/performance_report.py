@@ -6,6 +6,7 @@ from app.models.domain import (
     OrderBookSnapshot,
     PnLSnapshot,
     Position,
+    Quote,
 )
 
 
@@ -77,6 +78,7 @@ def performance_report_dict(
     open_quotes: int,
     kill_switch_active: bool,
     last_tick_at: str | None,
+    last_tick_id: str | None = None,
     pool_snapshot: AmmPoolSnapshot | None = None,
     compare_mid: float | None = None,
     opportunities: list[Opportunity] | None = None,
@@ -98,6 +100,7 @@ def performance_report_dict(
         "tick": tick,
         "running": running,
         "last_tick_at": last_tick_at,
+        "last_tick_id": last_tick_id,
         "kill_switch_active": kill_switch_active,
         "open_quotes": open_quotes,
         "market": {
@@ -107,6 +110,7 @@ def performance_report_dict(
             "mid": mid,
             "spread_bps": spread_bps,
             "is_stale": snapshot.is_stale if snapshot else None,
+            "tick_id": snapshot.tick_id if snapshot else None,
         },
         "dex": {
             "cex_compare_mid": compare_mid,
@@ -121,6 +125,7 @@ def performance_report_dict(
                 "net_edge_bps": opportunity.net_edge_bps,
                 "net_edge": opportunity.net_edge,
                 "trial_trade_size": opportunity.trial_trade_size,
+                "tick_id": opportunity.tick_id,
                 "timestamp": opportunity.timestamp.isoformat(),
             }
             for opportunity in (opportunities or [])
@@ -129,13 +134,27 @@ def performance_report_dict(
             "base_amount": position.base_amount if position else None,
             "quote_amount": position.quote_amount if position else None,
             "average_entry_price": position.average_entry_price if position else None,
+            "tick_id": position.tick_id if position else None,
         },
         "pnl": {
             "realized": pnl.realized_pnl if pnl else None,
             "unrealized": pnl.unrealized_pnl if pnl else None,
             "fees": pnl.total_fees if pnl else None,
             "total": pnl.total_pnl if pnl else None,
+            "tick_id": pnl.tick_id if pnl else None,
         },
+    }
+
+
+def tick_audit_to_dict(bundle) -> dict:
+    return {
+        "tick_id": bundle.tick_id,
+        "orderbook_snapshots": bundle.orderbook_snapshots,
+        "quotes": bundle.quotes,
+        "fills": bundle.fills,
+        "positions": bundle.positions,
+        "pnl_snapshots": bundle.pnl_snapshots,
+        "opportunities": bundle.opportunities,
     }
 
 
@@ -165,7 +184,31 @@ def fill_to_dict(fill: Fill) -> dict:
         "size": fill.size,
         "fee": fill.fee,
         "quote_id": fill.quote_id,
+        "tick_id": fill.tick_id,
         "timestamp": fill.timestamp.isoformat(),
+    }
+
+
+def quote_to_dict(quote: Quote) -> dict:
+    return {
+        "symbol": quote.symbol,
+        "side": quote.side.value,
+        "price": quote.price,
+        "size": quote.size,
+        "quote_id": quote.quote_id,
+        "tick_id": quote.tick_id,
+        "timestamp": quote.timestamp.isoformat(),
+    }
+
+
+def position_to_dict(position: Position) -> dict:
+    return {
+        "symbol": position.symbol,
+        "base_amount": position.base_amount,
+        "quote_amount": position.quote_amount,
+        "average_entry_price": position.average_entry_price,
+        "tick_id": position.tick_id,
+        "timestamp": position.timestamp.isoformat(),
     }
 
 
@@ -176,6 +219,7 @@ def pnl_history_point(pnl: PnLSnapshot) -> dict:
         "realized_pnl": pnl.realized_pnl,
         "unrealized_pnl": pnl.unrealized_pnl,
         "total_fees": pnl.total_fees,
+        "tick_id": pnl.tick_id,
         "timestamp": pnl.timestamp.isoformat(),
     }
 

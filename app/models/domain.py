@@ -23,6 +23,7 @@ class OrderBookSnapshot:
     asks: tuple[OrderBookLevel, ...]
     timestamp: datetime
     is_stale: bool = False
+    tick_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:
@@ -37,6 +38,7 @@ class Quote:
     size: float
     timestamp: datetime
     quote_id: str | None = None
+    tick_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:
@@ -52,6 +54,7 @@ class Fill:
     fee: float
     timestamp: datetime
     quote_id: str | None = None
+    tick_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:
@@ -65,6 +68,7 @@ class Position:
     quote_amount: float
     average_entry_price: float
     timestamp: datetime
+    tick_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:
@@ -79,6 +83,7 @@ class PnLSnapshot:
     total_fees: float
     total_pnl: float
     timestamp: datetime
+    tick_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:

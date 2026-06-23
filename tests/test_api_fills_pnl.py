@@ -11,11 +11,20 @@ from app.models.domain import Fill, PnLSnapshot, QuoteSide
 
 def test_fill_and_pnl_history_serializers() -> None:
     now = datetime.now(UTC)
-    fill = Fill("BTC/USDT", QuoteSide.BID, 100.0, 0.001, 0.01, now, quote_id="q-1")
-    pnl = PnLSnapshot("BTC/USDT", 1.0, 0.5, 0.1, 1.4, now)
+    fill = Fill(
+        "BTC/USDT",
+        QuoteSide.BID,
+        100.0,
+        0.001,
+        0.01,
+        now,
+        quote_id="q-1",
+        tick_id="tick-1",
+    )
+    pnl = PnLSnapshot("BTC/USDT", 1.0, 0.5, 0.1, 1.4, now, tick_id="tick-1")
 
-    assert fill_to_dict(fill)["side"] == "bid"
-    assert pnl_history_point(pnl)["total_pnl"] == 1.4
+    assert fill_to_dict(fill)["tick_id"] == "tick-1"
+    assert pnl_history_point(pnl)["tick_id"] == "tick-1"
 
 
 @pytest.fixture

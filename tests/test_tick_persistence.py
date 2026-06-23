@@ -31,6 +31,108 @@ def _snapshot(now: datetime) -> OrderBookSnapshot:
     )
 
 
+def test_get_tick_audit_returns_full_bundle(tmp_path) -> None:
+    db_url = f"sqlite:///{tmp_path / 'tick.db'}"
+    repo = Repository(db_url)
+    repo.initialize()
+    now = datetime.now(UTC)
+    tick_id = new_tick_id()
+    quote = Quote(
+        symbol="BTC/USDT",
+        side=QuoteSide.BID,
+        price=100.0,
+        size=0.001,
+        timestamp=now,
+        quote_id="quote-1",
+    )
+    fill = Fill(
+        symbol="BTC/USDT",
+        side=QuoteSide.BID,
+        price=100.0,
+        size=0.001,
+        fee=0.001,
+        timestamp=now,
+        quote_id="quote-1",
+    )
+
+    repo.persist_tick(
+        tick_id=tick_id,
+        snapshot=_snapshot(now),
+        fills=[fill],
+        quotes=[quote],
+        position=Position("BTC/USDT", 0.001, 9_900.0, 100.0, now),
+        pnl=PnLSnapshot("BTC/USDT", 0.0, 0.0, 0.001, -0.001, now),
+        opportunities=[
+            Opportunity(
+                direction=ArbitrageDirection.BUY_AMM_SELL_CEX,
+                cex_mid=3100.0,
+                amm_price=3000.0,
+                trial_trade_size=0.5,
+                gross_edge=50.0,
+                cex_fee=1.0,
+                amm_fee=2.0,
+                gas_cost=3.0,
+                slippage_cost=4.0,
+                net_edge=40.0,
+                net_edge_bps=25.0,
+                timestamp=now,
+            )
+        ],
+    )
+
+    bundle = repo.get_tick_audit(tick_id)
+    assert bundle is not None
+    assert bundle.tick_id == tick_id
+    assert len(bundle.orderbook_snapshots) == 1
+    assert bundle.orderbook_snapshots[0]["tick_id"] == tick_id
+    assert len(bundle.quotes) == 1
+    assert bundle.quotes[0]["tick_id"] == tick_id
+    assert len(bundle.fills) == 1
+    assert bundle.fills[0]["tick_id"] == tick_id
+    assert len(bundle.positions) == 1
+    assert bundle.positions[0]["tick_id"] == tick_id
+    assert len(bundle.pnl_snapshots) == 1
+    assert bundle.pnl_snapshots[0]["tick_id"] == tick_id
+    assert len(bundle.opportunities) == 1
+    assert bundle.opportunities[0]["tick_id"] == tick_id
+
+    assert repo.get_tick_audit("missing-tick-id") is None
+    repo.close()
+
+
+@pytest.mark.asyncio
+async def test_loop_stamps_last_tick_id_after_successful_persist(tmp_path) -> None:
+    settings = Settings(
+        db_url=f"sqlite:///{tmp_path / 'mm.db'}",
+        dex_enabled=False,
+        metrics_enabled=False,
+    )
+    loop = MarketMakerLoop(settings)
+    loop.initialize()
+    now = datetime.now(UTC)
+    snapshot = OrderBookSnapshot(
+        symbol="BTC/USDT",
+        bids=(OrderBookLevel(100.0, 1.0),),
+        asks=(OrderBookLevel(101.0, 1.0),),
+        timestamp=now,
+        is_stale=False,
+    )
+    loop._data_source.fetch_orderbook = AsyncMock(return_value=snapshot)
+    await loop.run_once()
+
+    assert loop.last_tick_id is not None
+    assert loop.last_snapshot is not None
+    assert loop.last_snapshot.tick_id == loop.last_tick_id
+    assert loop.last_position is not None
+    assert loop.last_position.tick_id == loop.last_tick_id
+    assert loop.last_pnl is not None
+    assert loop.last_pnl.tick_id == loop.last_tick_id
+
+    bundle = loop.repository.get_tick_audit(loop.last_tick_id)
+    assert bundle is not None
+    assert bundle.tick_id == loop.last_tick_id
+
+
 def test_broker_restore_checkpoint_reverts_fills() -> None:
     broker = PaperBroker("BTC/USDT", initial_quote_balance=10_000.0, maker_fee_bps=10.0)
     now = datetime.now(UTC)

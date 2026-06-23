@@ -14,8 +14,8 @@
 
 ## Highlights
 
-- **104 automated tests** — order book math, fill model, PnL, AMM, arbitrage scanner, backtest, API routes, stale-data guards, loop recovery
-- **Execution simulation** — cash-account fills (`full_cross_fill` or `partial_fill`), auditable quote/fill IDs, replay timestamps aligned to market data
+- **109 automated tests** — order book math, fill model, PnL, AMM, arbitrage scanner, backtest, API routes, stale-data guards, loop recovery, tick audit
+- **Execution simulation** — cash-account fills (`full_cross_fill` or `partial_fill`), auditable quote/fill IDs and per-tick `tick_id` joins across order books, quotes, fills, positions, PnL, and opportunities
 - **Risk and inventory controls** — position caps, cumulative cash reservation, kill switch, stale-tick safeguards that cancel quotes and skip execution
 - **Strategy research** — pure MM, inventory skew, and volatility-adjusted spread strategies over the same mid-price feed
 - **CEX/DEX analytics** — Uniswap V2 pool reader, arbitrage scanner with transparent edge accounting
@@ -102,13 +102,14 @@ docker compose up --build
 | `GET /health/live` | Liveness probe (alias) |
 | `GET /health/ready` | Readiness probe (503 when loop is enabled but not operational) |
 | `GET /metrics` | Prometheus metrics |
-| `GET /status` | Loop status, tick count, kill switch, last error |
-| `GET /market` | Best bid/ask, mid, spread |
-| `GET /position` | Base/quote inventory |
-| `GET /pnl` | Realized/unrealized PnL and fees |
+| `GET /status` | Loop status, tick count, `last_tick_id`, kill switch, last error |
+| `GET /market` | Best bid/ask, mid, spread, `tick_id` |
+| `GET /position` | Base/quote inventory with `tick_id` |
+| `GET /pnl` | Realized/unrealized PnL and fees with `tick_id` |
 | `GET /pnl/history` | PnL time series for equity curve (`?limit=200`) |
 | `GET /fills` | Recent trade blotter (`?limit=20`) |
 | `GET /report` | Combined status JSON |
+| `GET /audit/ticks/{tick_id}` | Full tick audit bundle (order book, quotes, fills, position, PnL, opportunities) |
 | `GET /amm` | WETH/USDC pool price vs CEX ETH mid |
 | `GET /opportunities` | Latest arbitrage opportunities |
 | `POST /kill-switch` | Enable/disable kill switch (`{"active": true}`) |
@@ -130,7 +131,7 @@ This project is a **paper-trading lab**, not a production market-making system. 
   - `full_cross_fill` (default) — if the external best bid/ask crosses your resting quote, the full quote size fills at your price.
   - `partial_fill` — same trigger, but fill size is capped by opposing top-of-book depth.
   - Neither mode models queue position, order-flow priority, or latency.
-- **Quote lifecycle** — resting quotes are replaced each tick; partial remainders persist only until the next submission. Each quote receives a UUID at submission; fills carry the same ID for audit joins.
+- **Quote lifecycle** — resting quotes are replaced each tick; partial remainders persist only until the next submission. Each quote receives a UUID at submission; fills carry the same ID for audit joins. Every persisted tick receives a shared `tick_id` so operators can reconstruct the full state via `GET /audit/ticks/{tick_id}`.
 
 ### Market data
 
