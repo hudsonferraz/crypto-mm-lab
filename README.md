@@ -14,7 +14,7 @@
 
 ## Highlights
 
-- **72 automated tests** — order book math, fill model, PnL, AMM, arbitrage scanner, backtest, API routes, stale-data guards, loop recovery
+- **100 automated tests** — order book math, fill model, PnL, AMM, arbitrage scanner, backtest, API routes, stale-data guards, loop recovery
 - **Execution simulation** — cash-account fills (`full_cross_fill` or `partial_fill`), auditable quote/fill IDs, replay timestamps aligned to market data
 - **Risk and inventory controls** — position caps, cumulative cash reservation, kill switch, stale-tick safeguards that cancel quotes and skip execution
 - **Strategy research** — pure MM, inventory skew, and volatility-adjusted spread strategies over the same mid-price feed

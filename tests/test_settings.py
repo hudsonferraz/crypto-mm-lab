@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from app.config.settings import Settings, get_settings
 
 
@@ -20,6 +23,11 @@ def test_explicit_db_url_overrides_default() -> None:
     settings = Settings(db_url=db_url)
 
     assert settings.db_url == db_url
+
+
+def test_settings_reject_zero_report_interval_ticks() -> None:
+    with pytest.raises(ValidationError):
+        Settings(report_interval_ticks=0)
 
 
 def test_get_settings_is_cached() -> None:
