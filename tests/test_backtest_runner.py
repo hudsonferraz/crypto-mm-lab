@@ -23,7 +23,10 @@ def test_backtest_from_repository(tmp_path) -> None:
     from app.models.domain import OrderBookLevel, OrderBookSnapshot
     from app.storage.repository import Repository
 
-    db_url = f"sqlite:///{tmp_path / 'backtest.db'}"
+    data_dir = tmp_path / "data"
+    db_url = f"sqlite:///{data_dir / 'mm_lab.db'}"
+    assert not data_dir.exists()
+
     repo = Repository(db_url)
     repo.initialize()
 
@@ -46,6 +49,7 @@ def test_backtest_from_repository(tmp_path) -> None:
     )
 
     assert result.metrics.tick_count == 5
+    assert data_dir.exists()
     repo.close()
 
 

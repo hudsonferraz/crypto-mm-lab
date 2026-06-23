@@ -1,7 +1,6 @@
 import asyncio
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 
 import structlog
 
@@ -127,9 +126,6 @@ class MarketMakerLoop:
         self._broker.cancel_all_quotes()
 
     def initialize(self) -> None:
-        db_path = self._settings.db_url.replace("sqlite:///", "")
-        if db_path.startswith("./"):
-            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._repository.initialize()
 
     async def start(self) -> None:
