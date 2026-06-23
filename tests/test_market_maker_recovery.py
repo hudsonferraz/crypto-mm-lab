@@ -41,6 +41,7 @@ def loop_settings(tmp_path) -> Settings:
     return Settings(
         db_url=f"sqlite:///{tmp_path / 'recovery.db'}",
         dex_enabled=False,
+        loop_enabled=True,
         metrics_enabled=False,
         poll_interval_sec=0.01,
         report_interval_ticks=1,

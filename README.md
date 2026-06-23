@@ -4,7 +4,9 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml)
 
-**Paper market-making lab** that pulls live CEX order books, simulates quote placement and fills, tracks PnL, compares CEX vs Uniswap V2 prices, and ships with backtest mode plus a Docker observability stack.
+**Paper market-making research lab** that pulls live CEX order books, simulates quote placement and fills, tracks PnL, compares CEX vs Uniswap V2 prices, and ships with backtest mode plus a Docker observability stack.
+
+This is an **education and research project** — useful for exploring MM mechanics, execution models, and CEX/DEX comparison. It is **not** production trading infrastructure.
 
 **What it does:** end-to-end MM loop on public Binance data (no API keys).  
 **How it's built:** FastAPI, CCXT, web3.py, SQLAlchemy, Prometheus/Grafana.  

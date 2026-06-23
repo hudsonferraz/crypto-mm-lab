@@ -1,9 +1,12 @@
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.api.routes import loop_is_operational
-from app.config.settings import get_settings
+from app.config.settings import Settings, get_settings
 from app.main import create_app
+from app.models.domain import OrderBookLevel, OrderBookSnapshot
 from app.services.market_maker_loop import MarketMakerLoop
 
 
@@ -21,7 +24,21 @@ def api_client(tmp_path, monkeypatch):
 def api_client_loop_enabled(tmp_path, monkeypatch):
     monkeypatch.setenv("DB_URL", f"sqlite:///{tmp_path / 'api.db'}")
     monkeypatch.setenv("LOOP_ENABLED", "true")
+    monkeypatch.setenv("DEX_ENABLED", "false")
     get_settings.cache_clear()
+
+    async def mock_fetch_orderbook(self):
+        return OrderBookSnapshot(
+            symbol=self._symbol,
+            bids=(OrderBookLevel(100.0, 1.0),),
+            asks=(OrderBookLevel(101.0, 1.0),),
+            timestamp=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(
+        "app.adapters.cex.ccxt_adapter.CcxtAdapter.fetch_orderbook",
+        mock_fetch_orderbook,
+    )
     app = create_app()
     with TestClient(app) as client:
         yield client, app
@@ -72,7 +89,7 @@ def test_status_and_report_share_operational_running_flag(api_client_loop_enable
 
 
 def test_loop_is_operational_respects_loop_enabled_flag() -> None:
-    loop = MarketMakerLoop(get_settings())
+    loop = MarketMakerLoop(Settings(dex_enabled=False, metrics_enabled=False))
     loop._running = False
 
     assert loop_is_operational(loop, loop_enabled=False) is True

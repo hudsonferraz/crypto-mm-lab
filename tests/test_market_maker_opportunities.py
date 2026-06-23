@@ -18,7 +18,7 @@ def _fresh_pool_snapshot(spot_price: float) -> AmmPoolSnapshot:
 
 
 def test_scan_opportunities_suppressed_when_primary_cex_is_stale() -> None:
-    loop = MarketMakerLoop(Settings(dex_enabled=True))
+    loop = MarketMakerLoop(Settings(dex_enabled=False))
     pool_snapshot = _fresh_pool_snapshot(3_000.0)
 
     opportunities = loop._scan_opportunities(
@@ -34,7 +34,11 @@ def test_scan_opportunities_suppressed_when_primary_cex_is_stale() -> None:
 
 def test_scan_opportunities_allowed_when_both_cex_sources_are_fresh() -> None:
     loop = MarketMakerLoop(
-        Settings(dex_enabled=True, arbitrage_min_edge_bps=-1_000.0, gas_price_gwei=1.0)
+        Settings(
+            dex_enabled=False,
+            arbitrage_min_edge_bps=-1_000.0,
+            gas_price_gwei=1.0,
+        )
     )
     pool_snapshot = _fresh_pool_snapshot(3_000.0)
 

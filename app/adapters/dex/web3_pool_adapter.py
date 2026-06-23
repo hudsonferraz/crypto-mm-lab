@@ -23,12 +23,8 @@ class Web3PoolAdapter:
         max_retries: int = 3,
         retry_delay_sec: float = 1.0,
     ) -> None:
-        self._web3 = Web3(Web3.HTTPProvider(rpc_url))
+        self._rpc_url = rpc_url
         self._pool_address = Web3.to_checksum_address(pool_address)
-        self._contract = self._web3.eth.contract(
-            address=self._pool_address,
-            abi=UNISWAP_V2_PAIR_ABI,
-        )
         self._base_decimals = base_decimals
         self._quote_decimals = quote_decimals
         self._amm_fee_bps = amm_fee_bps
@@ -36,6 +32,17 @@ class Web3PoolAdapter:
         self._retry_delay_sec = retry_delay_sec
         self._last_good_snapshot: AmmPoolSnapshot | None = None
         self._weth_is_token0: bool | None = None
+        self._web3: Web3 | None = None
+        self._contract = None
+
+    def _ensure_contract(self) -> None:
+        if self._contract is not None:
+            return
+        self._web3 = Web3(Web3.HTTPProvider(self._rpc_url))
+        self._contract = self._web3.eth.contract(
+            address=self._pool_address,
+            abi=UNISWAP_V2_PAIR_ABI,
+        )
 
     async def fetch_pool_snapshot(self) -> AmmPoolSnapshot:
         for attempt in range(1, self._max_retries + 1):
@@ -73,6 +80,8 @@ class Web3PoolAdapter:
         )
 
     def _read_pool_snapshot(self) -> AmmPoolSnapshot:
+        self._ensure_contract()
+        assert self._contract is not None
         if self._weth_is_token0 is None:
             token0 = self._contract.functions.token0().call()
             self._weth_is_token0 = token0.lower() == WETH_ADDRESS.lower()
