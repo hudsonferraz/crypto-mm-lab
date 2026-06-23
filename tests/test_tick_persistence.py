@@ -6,8 +6,11 @@ from sqlalchemy import create_engine
 
 from app.config.settings import Settings
 from app.execution.paper_broker import PaperBroker
+from app.execution.tick_ids import new_tick_id
 from app.models.domain import (
+    ArbitrageDirection,
     Fill,
+    Opportunity,
     OrderBookLevel,
     OrderBookSnapshot,
     PnLSnapshot,
@@ -73,8 +76,10 @@ def test_persist_tick_writes_all_records_atomically(tmp_path) -> None:
     )
     position = Position("BTC/USDT", 0.001, 9_900.0, 100.0, now)
     pnl = PnLSnapshot("BTC/USDT", 0.0, 0.0, 0.001, -0.001, now)
+    tick_id = new_tick_id()
 
     repo.persist_tick(
+        tick_id=tick_id,
         snapshot=snapshot,
         fills=[fill],
         quotes=[quote],
@@ -93,6 +98,113 @@ def test_persist_tick_writes_all_records_atomically(tmp_path) -> None:
         ):
             count = connection.exec_driver_sql(f"SELECT COUNT(*) FROM {table}").scalar_one()
             assert count == 1
+        tick_ids = connection.exec_driver_sql(
+            "SELECT DISTINCT tick_id FROM orderbook_snapshots"
+        ).fetchall()
+        assert len(tick_ids) == 1
+        assert tick_ids[0][0] == tick_id
+    engine.dispose()
+    repo.close()
+
+
+def test_persist_tick_writes_opportunities_with_shared_tick_id(tmp_path) -> None:
+    db_url = f"sqlite:///{tmp_path / 'tick.db'}"
+    repo = Repository(db_url)
+    repo.initialize()
+    now = datetime.now(UTC)
+    tick_id = new_tick_id()
+    opportunity = Opportunity(
+        direction=ArbitrageDirection.BUY_AMM_SELL_CEX,
+        cex_mid=3100.0,
+        amm_price=3000.0,
+        trial_trade_size=0.5,
+        gross_edge=50.0,
+        cex_fee=1.0,
+        amm_fee=2.0,
+        gas_cost=3.0,
+        slippage_cost=4.0,
+        net_edge=40.0,
+        net_edge_bps=25.0,
+        timestamp=now,
+    )
+
+    repo.persist_tick(
+        tick_id=tick_id,
+        snapshot=_snapshot(now),
+        fills=[],
+        quotes=[],
+        position=Position("BTC/USDT", 0.0, 10_000.0, 0.0, now),
+        pnl=PnLSnapshot("BTC/USDT", 0.0, 0.0, 0.0, 0.0, now),
+        opportunities=[opportunity],
+    )
+
+    loaded = repo.get_latest_opportunities(limit=1)
+    assert len(loaded) == 1
+    assert loaded[0].tick_id == tick_id
+
+    engine = create_engine(db_url)
+    with engine.connect() as connection:
+        snapshot_tick = connection.exec_driver_sql(
+            "SELECT tick_id FROM orderbook_snapshots LIMIT 1"
+        ).scalar_one()
+        opportunity_tick = connection.exec_driver_sql(
+            "SELECT tick_id FROM opportunities LIMIT 1"
+        ).scalar_one()
+        assert snapshot_tick == tick_id
+        assert opportunity_tick == tick_id
+    engine.dispose()
+    repo.close()
+
+
+def test_persist_tick_does_not_commit_opportunities_on_failure(tmp_path) -> None:
+    db_url = f"sqlite:///{tmp_path / 'tick.db'}"
+    repo = Repository(db_url)
+    repo.initialize()
+    now = datetime.now(UTC)
+    opportunity = Opportunity(
+        direction=ArbitrageDirection.BUY_AMM_SELL_CEX,
+        cex_mid=3100.0,
+        amm_price=3000.0,
+        trial_trade_size=0.5,
+        gross_edge=50.0,
+        cex_fee=1.0,
+        amm_fee=2.0,
+        gas_cost=3.0,
+        slippage_cost=4.0,
+        net_edge=40.0,
+        net_edge_bps=25.0,
+        timestamp=now,
+    )
+
+    failing_session = MagicMock()
+    failing_session.commit.side_effect = OSError("database unavailable")
+
+    class FailingSessionContext:
+        def __enter__(self):
+            return failing_session
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    repo._session = lambda: FailingSessionContext()
+
+    with pytest.raises(OSError):
+        repo.persist_tick(
+            tick_id=new_tick_id(),
+            snapshot=_snapshot(now),
+            fills=[],
+            quotes=[],
+            position=Position("BTC/USDT", 0.0, 10_000.0, 0.0, now),
+            pnl=PnLSnapshot("BTC/USDT", 0.0, 0.0, 0.0, 0.0, now),
+            opportunities=[opportunity],
+        )
+
+    engine = create_engine(db_url)
+    with engine.connect() as connection:
+        opportunity_count = connection.exec_driver_sql(
+            "SELECT COUNT(*) FROM opportunities"
+        ).scalar_one()
+        assert opportunity_count == 0
     engine.dispose()
     repo.close()
 
@@ -117,6 +229,7 @@ def test_persist_tick_does_not_commit_partial_state(tmp_path) -> None:
 
     with pytest.raises(OSError):
         repo.persist_tick(
+            tick_id=new_tick_id(),
             snapshot=_snapshot(now),
             fills=[],
             quotes=[],

@@ -152,6 +152,7 @@ def opportunity_to_dict(opportunity: Opportunity) -> dict:
         "slippage_cost": opportunity.slippage_cost,
         "net_edge": opportunity.net_edge,
         "net_edge_bps": opportunity.net_edge_bps,
+        "tick_id": opportunity.tick_id,
         "timestamp": opportunity.timestamp.isoformat(),
     }
 

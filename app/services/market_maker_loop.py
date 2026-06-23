@@ -10,6 +10,7 @@ from app.analytics.performance_report import format_performance_report
 from app.analytics.pnl import compute_pnl_snapshot
 from app.config.settings import Settings
 from app.execution.paper_broker import PaperBroker
+from app.execution.tick_ids import new_tick_id
 from app.market_data.orderbook import mid_price
 from app.models.domain import (
     AmmPoolSnapshot,
@@ -180,6 +181,7 @@ class MarketMakerLoop:
         self._last_snapshot = snapshot
 
         compare_snapshot: OrderBookSnapshot | None = None
+        tick_opportunities: list[Opportunity] = []
         if self._settings.dex_enabled and self._pool_adapter is not None:
             compare_snapshot, pool_snapshot = await asyncio.gather(
                 self._compare_source.fetch_orderbook(),
@@ -187,15 +189,14 @@ class MarketMakerLoop:
             )
             self._last_pool_snapshot = pool_snapshot
             self._last_compare_mid = mid_price(compare_snapshot)
-            self._last_opportunities = self._scan_opportunities(
+            tick_opportunities = self._scan_opportunities(
                 cex_mid=self._last_compare_mid,
                 primary_is_stale=snapshot.is_stale,
                 compare_is_stale=compare_snapshot.is_stale,
                 pool_snapshot=pool_snapshot,
                 eth_price_usd=self._last_compare_mid or 0.0,
             )
-            if self._last_opportunities:
-                self._repository.save_opportunities(self._last_opportunities)
+            self._last_opportunities = tick_opportunities
 
         if snapshot.is_stale:
             broker_checkpoint = self._broker.checkpoint()
@@ -205,12 +206,15 @@ class MarketMakerLoop:
                     prom.STALE_TICKS.inc()
                 position = self._broker.inventory.to_position(now)
                 pnl = compute_pnl_snapshot(self._broker.inventory, snapshot, now)
+                tick_id = new_tick_id()
                 self._repository.persist_tick(
+                    tick_id=tick_id,
                     snapshot=snapshot,
                     fills=[],
                     quotes=[],
                     position=position,
                     pnl=pnl,
+                    opportunities=tick_opportunities,
                 )
             except Exception:
                 self._broker.restore_checkpoint(broker_checkpoint)
@@ -243,12 +247,15 @@ class MarketMakerLoop:
             else:
                 self._broker.cancel_all_quotes()
 
+            tick_id = new_tick_id()
             self._repository.persist_tick(
+                tick_id=tick_id,
                 snapshot=snapshot,
                 fills=fills,
                 quotes=submitted_quotes,
                 position=position,
                 pnl=pnl,
+                opportunities=tick_opportunities,
             )
         except Exception:
             self._broker.restore_checkpoint(broker_checkpoint)

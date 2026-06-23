@@ -9,6 +9,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
+from app.execution.tick_ids import new_tick_id
 from app.models.domain import (
     ArbitrageDirection,
     Fill,
@@ -31,6 +32,7 @@ class OrderBookSnapshotRow(Base):
     __tablename__ = "orderbook_snapshots"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tick_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False)
     best_bid: Mapped[float] = mapped_column(Float, nullable=False)
     best_ask: Mapped[float] = mapped_column(Float, nullable=False)
@@ -44,6 +46,7 @@ class QuoteRow(Base):
     __tablename__ = "quotes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tick_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     quote_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False)
     side: Mapped[str] = mapped_column(String(8), nullable=False)
@@ -56,6 +59,7 @@ class FillRow(Base):
     __tablename__ = "fills"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tick_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     quote_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False)
     side: Mapped[str] = mapped_column(String(8), nullable=False)
@@ -69,6 +73,7 @@ class PositionRow(Base):
     __tablename__ = "positions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tick_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False)
     base_amount: Mapped[float] = mapped_column(Float, nullable=False)
     quote_amount: Mapped[float] = mapped_column(Float, nullable=False)
@@ -80,6 +85,7 @@ class PnLSnapshotRow(Base):
     __tablename__ = "pnl_snapshots"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tick_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False)
     realized_pnl: Mapped[float] = mapped_column(Float, nullable=False)
     unrealized_pnl: Mapped[float] = mapped_column(Float, nullable=False)
@@ -92,6 +98,7 @@ class OpportunityRow(Base):
     __tablename__ = "opportunities"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tick_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(32), nullable=False)
     cex_mid: Mapped[float] = mapped_column(Float, nullable=False)
     amm_price: Mapped[float] = mapped_column(Float, nullable=False)
@@ -139,11 +146,17 @@ class Repository:
     def close(self) -> None:
         self._engine.dispose()
 
-    def save_orderbook_snapshot(self, snapshot: OrderBookSnapshot) -> None:
+    def save_orderbook_snapshot(
+        self,
+        snapshot: OrderBookSnapshot,
+        *,
+        tick_id: str | None = None,
+    ) -> None:
         best_bid = _best_price(snapshot.bids)
         best_ask = _best_price(snapshot.asks)
         mid, spread_bps = _mid_and_spread_bps(snapshot)
         row = OrderBookSnapshotRow(
+            tick_id=tick_id or new_tick_id(),
             symbol=snapshot.symbol,
             best_bid=best_bid,
             best_ask=best_ask,
@@ -156,13 +169,15 @@ class Repository:
             session.add(row)
             session.commit()
 
-    def save_quotes(self, quotes: list[Quote]) -> None:
+    def save_quotes(self, quotes: list[Quote], *, tick_id: str | None = None) -> None:
+        resolved_tick_id = tick_id or new_tick_id()
         rows = []
         for quote in quotes:
             if quote.quote_id is None:
                 raise ValueError("quote_id is required to persist a quote")
             rows.append(
                 QuoteRow(
+                    tick_id=resolved_tick_id,
                     quote_id=quote.quote_id,
                     symbol=quote.symbol,
                     side=quote.side.value,
@@ -189,9 +204,11 @@ class Repository:
                 quote_id=row.quote_id,
             )
 
-    def save_fills(self, fills: list[Fill]) -> None:
+    def save_fills(self, fills: list[Fill], *, tick_id: str | None = None) -> None:
+        resolved_tick_id = tick_id or new_tick_id()
         rows = [
             FillRow(
+                tick_id=resolved_tick_id,
                 quote_id=fill.quote_id,
                 symbol=fill.symbol,
                 side=fill.side.value,
@@ -206,8 +223,9 @@ class Repository:
             session.add_all(rows)
             session.commit()
 
-    def save_position(self, position: Position) -> None:
+    def save_position(self, position: Position, *, tick_id: str | None = None) -> None:
         row = PositionRow(
+            tick_id=tick_id or new_tick_id(),
             symbol=position.symbol,
             base_amount=position.base_amount,
             quote_amount=position.quote_amount,
@@ -218,8 +236,9 @@ class Repository:
             session.add(row)
             session.commit()
 
-    def save_pnl_snapshot(self, pnl: PnLSnapshot) -> None:
+    def save_pnl_snapshot(self, pnl: PnLSnapshot, *, tick_id: str | None = None) -> None:
         row = PnLSnapshotRow(
+            tick_id=tick_id or new_tick_id(),
             symbol=pnl.symbol,
             realized_pnl=pnl.realized_pnl,
             unrealized_pnl=pnl.unrealized_pnl,
@@ -234,19 +253,22 @@ class Repository:
     def persist_tick(
         self,
         *,
+        tick_id: str,
         snapshot: OrderBookSnapshot,
         fills: list[Fill],
         quotes: list[Quote],
         position: Position,
         pnl: PnLSnapshot,
+        opportunities: list[Opportunity] | None = None,
     ) -> None:
-        """Persist all tick execution artifacts in a single database transaction."""
+        """Persist all tick artifacts in a single database transaction."""
         with self._session() as session:
             best_bid = _best_price(snapshot.bids)
             best_ask = _best_price(snapshot.asks)
             mid, spread_bps = _mid_and_spread_bps(snapshot)
             session.add(
                 OrderBookSnapshotRow(
+                    tick_id=tick_id,
                     symbol=snapshot.symbol,
                     best_bid=best_bid,
                     best_ask=best_ask,
@@ -259,6 +281,7 @@ class Repository:
             for fill in fills:
                 session.add(
                     FillRow(
+                        tick_id=tick_id,
                         quote_id=fill.quote_id,
                         symbol=fill.symbol,
                         side=fill.side.value,
@@ -273,6 +296,7 @@ class Repository:
                     raise ValueError("quote_id is required to persist a quote")
                 session.add(
                     QuoteRow(
+                        tick_id=tick_id,
                         quote_id=quote.quote_id,
                         symbol=quote.symbol,
                         side=quote.side.value,
@@ -283,6 +307,7 @@ class Repository:
                 )
             session.add(
                 PositionRow(
+                    tick_id=tick_id,
                     symbol=position.symbol,
                     base_amount=position.base_amount,
                     quote_amount=position.quote_amount,
@@ -292,6 +317,7 @@ class Repository:
             )
             session.add(
                 PnLSnapshotRow(
+                    tick_id=tick_id,
                     symbol=pnl.symbol,
                     realized_pnl=pnl.realized_pnl,
                     unrealized_pnl=pnl.unrealized_pnl,
@@ -300,11 +326,36 @@ class Repository:
                     timestamp=pnl.timestamp,
                 )
             )
+            for opportunity in opportunities or []:
+                session.add(
+                    OpportunityRow(
+                        tick_id=tick_id,
+                        direction=opportunity.direction.value,
+                        cex_mid=opportunity.cex_mid,
+                        amm_price=opportunity.amm_price,
+                        trial_trade_size=opportunity.trial_trade_size,
+                        gross_edge=opportunity.gross_edge,
+                        cex_fee=opportunity.cex_fee,
+                        amm_fee=opportunity.amm_fee,
+                        gas_cost=opportunity.gas_cost,
+                        slippage_cost=opportunity.slippage_cost,
+                        net_edge=opportunity.net_edge,
+                        net_edge_bps=opportunity.net_edge_bps,
+                        timestamp=opportunity.timestamp,
+                    )
+                )
             session.commit()
 
-    def save_opportunities(self, opportunities: list[Opportunity]) -> None:
+    def save_opportunities(
+        self,
+        opportunities: list[Opportunity],
+        *,
+        tick_id: str | None = None,
+    ) -> None:
+        resolved_tick_id = tick_id or new_tick_id()
         rows = [
             OpportunityRow(
+                tick_id=resolved_tick_id,
                 direction=opportunity.direction.value,
                 cex_mid=opportunity.cex_mid,
                 amm_price=opportunity.amm_price,
@@ -346,6 +397,7 @@ class Repository:
                     net_edge=row.net_edge,
                     net_edge_bps=row.net_edge_bps,
                     timestamp=row.timestamp,
+                    tick_id=row.tick_id,
                 )
                 for row in rows
             ]

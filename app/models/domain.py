@@ -118,6 +118,7 @@ class Opportunity:
     net_edge: float
     net_edge_bps: float
     timestamp: datetime
+    tick_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:
