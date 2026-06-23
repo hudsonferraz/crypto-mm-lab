@@ -1,5 +1,3 @@
-from datetime import UTC, datetime
-
 from app.market_data.orderbook import mid_price
 from app.models.domain import OrderBookSnapshot, Position, Quote, QuoteSide
 
@@ -39,7 +37,7 @@ class InventorySkewStrategy:
 
         bid_price = mid * (1 - half_spread - skew)
         ask_price = mid * (1 + half_spread - skew)
-        now = datetime.now(UTC)
+        quote_timestamp = snapshot.timestamp
 
         return [
             Quote(
@@ -47,13 +45,13 @@ class InventorySkewStrategy:
                 side=QuoteSide.BID,
                 price=bid_price,
                 size=self._quote_size,
-                timestamp=now,
+                timestamp=quote_timestamp,
             ),
             Quote(
                 symbol=self._symbol,
                 side=QuoteSide.ASK,
                 price=ask_price,
                 size=self._quote_size,
-                timestamp=now,
+                timestamp=quote_timestamp,
             ),
         ]

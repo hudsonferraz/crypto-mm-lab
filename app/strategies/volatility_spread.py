@@ -1,5 +1,4 @@
 from collections import deque
-from datetime import UTC, datetime
 
 from app.market_data.orderbook import mid_price
 from app.market_data.rolling_volatility import return_volatility_bps
@@ -41,7 +40,7 @@ class VolatilitySpreadStrategy:
         half_spread = (effective_spread_bps / 2) / 10_000
         bid_price = mid * (1 - half_spread)
         ask_price = mid * (1 + half_spread)
-        now = datetime.now(UTC)
+        quote_timestamp = snapshot.timestamp
 
         return [
             Quote(
@@ -49,13 +48,13 @@ class VolatilitySpreadStrategy:
                 side=QuoteSide.BID,
                 price=bid_price,
                 size=self._quote_size,
-                timestamp=now,
+                timestamp=quote_timestamp,
             ),
             Quote(
                 symbol=self._symbol,
                 side=QuoteSide.ASK,
                 price=ask_price,
                 size=self._quote_size,
-                timestamp=now,
+                timestamp=quote_timestamp,
             ),
         ]

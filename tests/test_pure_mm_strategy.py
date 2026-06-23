@@ -36,6 +36,25 @@ def test_pure_mm_quotes_around_mid() -> None:
     assert ask.price == mid * (1 + half_spread)
     assert bid.size == 0.001
     assert ask.size == 0.001
+    assert bid.timestamp == snapshot.timestamp
+    assert ask.timestamp == snapshot.timestamp
+
+
+def test_pure_mm_uses_snapshot_timestamp_for_quotes() -> None:
+    strategy = PureMarketMakingStrategy("BTC/USDT", 10.0, 0.001)
+    replay_time = datetime(2024, 3, 15, 12, 30, 0, tzinfo=UTC)
+    snapshot = OrderBookSnapshot(
+        symbol="BTC/USDT",
+        bids=(OrderBookLevel(100.0, 1.0),),
+        asks=(OrderBookLevel(101.0, 1.0),),
+        timestamp=replay_time,
+    )
+    position = Position("BTC/USDT", 0.0, 10_000.0, 0.0, replay_time)
+
+    quotes = strategy.generate_quotes(snapshot, position)
+
+    assert quotes
+    assert all(quote.timestamp == replay_time for quote in quotes)
 
 
 def test_pure_mm_returns_empty_on_empty_book() -> None:
