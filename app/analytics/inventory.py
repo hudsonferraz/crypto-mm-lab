@@ -56,7 +56,6 @@ class InventoryTracker:
 
     def apply_fill(self, fill: Fill, timestamp: datetime) -> bool:
         notional = fill.price * fill.size
-        self._last_updated = timestamp
 
         if fill.side == QuoteSide.BID:
             total_cost = notional + fill.fee
@@ -69,6 +68,7 @@ class InventoryTracker:
                 total_entry_cost = (self._average_entry_price * self._base_amount) + notional
                 self._average_entry_price = total_entry_cost / new_base
             self._base_amount = new_base
+            self._last_updated = timestamp
             return True
 
         if self._base_amount < fill.size:
@@ -82,6 +82,7 @@ class InventoryTracker:
         if self._base_amount <= 0:
             self._base_amount = 0.0
             self._average_entry_price = 0.0
+        self._last_updated = timestamp
         return True
 
     def to_position(self, timestamp: datetime) -> Position:

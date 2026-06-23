@@ -14,6 +14,7 @@ def test_apply_fill_rejects_ask_without_base() -> None:
     assert applied is False
     assert inventory.base_amount == 0.0
     assert inventory.quote_amount == 10_000.0
+    assert inventory.last_updated is None
 
 
 def test_apply_fill_rejects_bid_without_quote_balance() -> None:
@@ -26,6 +27,7 @@ def test_apply_fill_rejects_bid_without_quote_balance() -> None:
     assert applied is False
     assert inventory.base_amount == 0.0
     assert inventory.quote_amount == 0.1
+    assert inventory.last_updated is None
 
 
 def test_apply_fill_accepts_valid_round_trip() -> None:
@@ -36,6 +38,7 @@ def test_apply_fill_accepts_valid_round_trip() -> None:
         now,
     )
     assert inventory.base_amount == 0.001
+    assert inventory.last_updated == now
     assert inventory.apply_fill(
         Fill("BTC/USDT", QuoteSide.ASK, 101.0, 0.001, 0.001, now),
         now,

@@ -21,8 +21,7 @@ async def lifespan(app: FastAPI):
     if settings.loop_enabled:
         await loop.start()
     yield
-    if settings.loop_enabled:
-        await loop.stop()
+    await loop.stop()
 
 
 def create_app() -> FastAPI:
