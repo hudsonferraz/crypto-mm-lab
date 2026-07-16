@@ -16,7 +16,7 @@ This is an **education and research project** — useful for exploring MM mechan
 
 ## Highlights
 
-- **110 automated tests** — order book math, fill model, PnL, AMM, arbitrage scanner, backtest, API routes, stale-data guards, loop recovery, tick audit
+- **111 automated tests** — order book math, fill model, PnL, AMM, arbitrage scanner, backtest, API routes, stale-data guards, loop recovery, tick audit
 - **Execution simulation** — cash-account fills (`full_cross_fill` or `partial_fill`), auditable quote/fill IDs and per-tick `tick_id` joins across order books, quotes, fills, positions, PnL, and opportunities
 - **Risk and inventory controls** — position caps, cumulative cash reservation, kill switch, stale-tick safeguards that cancel quotes and skip execution
 - **Strategy research** — pure MM, inventory skew, and volatility-adjusted spread strategies over the same mid-price feed

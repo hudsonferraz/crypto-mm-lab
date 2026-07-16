@@ -227,7 +227,10 @@ async def amm(request: Request) -> dict:
 
 
 @router.get("/opportunities")
-async def opportunities(request: Request, limit: int = 10) -> dict:
+async def opportunities(
+    request: Request,
+    limit: int = Query(default=10, ge=1, le=100),
+) -> dict:
     loop = _get_loop(request)
     stored = loop.repository.get_latest_opportunities(limit=limit)
     latest = loop.last_opportunities
