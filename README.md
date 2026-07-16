@@ -17,10 +17,10 @@ This is an **education and research project** — useful for exploring MM mechan
 
 ## Highlights
 
-- **111 automated tests** — order book math, fill model, PnL, AMM, arbitrage scanner, backtest, API routes, stale-data guards, loop recovery, tick audit
+- **114 automated tests** — order book math, fill model, PnL, AMM, arbitrage scanner, backtest, strategy comparison, API routes, stale-data guards, loop recovery, tick audit
 - **Execution simulation** — cash-account fills (`full_cross_fill` or `partial_fill`), auditable quote/fill IDs and per-tick `tick_id` joins across order books, quotes, fills, positions, PnL, and opportunities
 - **Risk and inventory controls** — position caps, cumulative cash reservation, kill switch, stale-tick safeguards that cancel quotes and skip execution
-- **Strategy research** — pure MM, inventory skew, and volatility-adjusted spread strategies over the same mid-price feed
+- **Strategy research** — pure MM, inventory skew, and volatility-adjusted spread strategies over the same mid-price feed, with a one-command comparison table (Sharpe / drawdown / fill rate)
 - **CEX/DEX analytics** — Uniswap V2 pool reader, arbitrage scanner with transparent edge accounting
 - **Backtesting** — replay from SQLite/Postgres snapshots or CSV fixtures; annualized Sharpe-like ratio from per-tick PnL changes (frequency inferred from timestamps), drawdown, fill rate
 - **Observability** — Prometheus `/metrics`, Grafana dashboard, structured logging, `last_error` on `/status`
@@ -46,7 +46,7 @@ This is an **education and research project** — useful for exploring MM mechan
 |------|----------------|
 | **Execution simulation** | Paper broker, fill modes, quote lifecycle, cash-account enforcement |
 | **Risk and inventory controls** | Position/notional limits, cumulative balance checks, kill switch |
-| **Strategy research** | Pluggable strategies over shared mid-price and inventory state |
+| **Strategy research** | Pluggable strategies + `compare_strategies.py` side-by-side metrics |
 | **CEX/DEX analytics** | Live order books, pool reserves, arbitrage opportunity scanning |
 | **Backtesting** | Historical replay, performance metrics, strategy comparison |
 | **Observability** | Metrics, dashboard, trade blotter, equity curve, structured logs |
@@ -83,6 +83,16 @@ python scripts/run_mm.py
 ```bash
 python scripts/run_backtest.py --fixture tests/fixtures/orderbook_snapshots.csv --strategy pure_mm
 python scripts/run_backtest.py --from 2026-01-01 --strategy pure_mm
+```
+
+### Strategy comparison
+
+Run all three strategies over the same fixture (or DB window) and print a side-by-side table:
+
+```bash
+python scripts/compare_strategies.py --fixture tests/fixtures/orderbook_snapshots.csv
+python scripts/compare_strategies.py --fixture tests/fixtures/orderbook_snapshots.csv --json
+python scripts/compare_strategies.py --from 2026-01-01 --limit 500
 ```
 
 ## Docker Compose (full stack)
