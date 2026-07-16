@@ -22,6 +22,8 @@ data/
 .mypy_cache/
 htmlcov/
 .coverage
+.coverage.*
+coverage.xml
 
 # IDE
 .idea/
