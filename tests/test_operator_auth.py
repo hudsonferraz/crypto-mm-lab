@@ -5,7 +5,8 @@ from app.main import create_app
 
 
 def test_kill_switch_open_without_token(monkeypatch, tmp_path) -> None:
-    monkeypatch.delenv("OPERATOR_API_TOKEN", raising=False)
+    # Empty string overrides .env so local OPERATOR_API_TOKEN cannot leak into this case.
+    monkeypatch.setenv("OPERATOR_API_TOKEN", "")
     monkeypatch.setenv("LOOP_ENABLED", "false")
     monkeypatch.setenv("DEX_ENABLED", "false")
     monkeypatch.setenv("DB_URL", f"sqlite:///{tmp_path / 'auth.db'}")

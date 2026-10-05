@@ -38,11 +38,14 @@ class MarketMakerLoop:
             settings.exchange,
             settings.symbol,
             settings.market_data_mode,
+            fixture_fallback_enabled=settings.fixture_fallback_enabled,
+            fixture_path=settings.market_data_fixture_path,
         )
         self._compare_source = build_market_data_source(
             settings.exchange,
             settings.cex_compare_symbol,
             settings.market_data_mode,
+            fixture_fallback_enabled=settings.fixture_fallback_enabled,
         )
         self._pool_adapter: Web3PoolAdapter | None = None
         if settings.dex_enabled:

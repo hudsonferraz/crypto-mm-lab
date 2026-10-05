@@ -98,6 +98,9 @@
 </head>
 <body>
   <div class="banner">PAPER SIMULATION — no live orders, no wallet keys</div>
+  <div id="fallback-banner" class="banner" style="display:none;background:#1e3a5f;border-color:#3b82f6;color:#bfdbfe;">
+    Live CEX unavailable from this host — replaying bundled paper order books so the demo keeps moving.
+  </div>
   <h1>crypto-mm-lab</h1>
   <div id="status-line">Loading...</div>
   <div id="error-banner" class="error-banner"></div>
@@ -246,10 +249,15 @@
         `DEX: ${config.dex_enabled ? "on" : "off"}`,
         `market data: ${status.market_data_mode || config.market_data_mode}`,
       ];
-      if (status.market_data_fallback) chips.push("WS fallback: poll");
+      if (status.market_data_fallback) chips.push("data: fixture replay");
+      if (status.market_data_source === "fixture") chips.push("demo fallback on");
       document.getElementById("config-chips").innerHTML = chips
         .map((text) => `<span class="chip">${text}</span>`)
         .join("");
+      const fallbackBanner = document.getElementById("fallback-banner");
+      if (fallbackBanner) {
+        fallbackBanner.style.display = status.market_data_fallback ? "block" : "none";
+      }
     }
 
     function renderQuotes(items) {

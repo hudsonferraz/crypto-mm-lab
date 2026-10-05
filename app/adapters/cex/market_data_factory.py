@@ -1,7 +1,8 @@
 """Optional websocket-backed CEX order book source.
 
 Uses ccxt's watch_order_book when available; otherwise falls back to REST polling
-with an explicit mode label for status honesty.
+with an explicit mode label for status honesty. When live books are unusable
+(common on hosted demos), wraps a fixture replay source.
 """
 
 from __future__ import annotations
@@ -11,6 +12,11 @@ import asyncio
 import structlog
 
 from app.adapters.cex.ccxt_adapter import CcxtAdapter
+from app.adapters.cex.fixture_replay import (
+    FallbackMarketDataSource,
+    FixtureReplayAdapter,
+    resolve_fixture_path,
+)
 from app.market_data.normalizer import normalize_ccxt_orderbook
 from app.models.domain import OrderBookSnapshot
 
@@ -72,7 +78,24 @@ class WebsocketCcxtAdapter:
         self._poll_fallback.close()
 
 
-def build_market_data_source(exchange: str, symbol: str, mode: str):
+def build_market_data_source(
+    exchange: str,
+    symbol: str,
+    mode: str,
+    *,
+    fixture_fallback_enabled: bool = True,
+    fixture_path: str | None = None,
+):
     if mode == "websocket":
-        return WebsocketCcxtAdapter(exchange, symbol)
-    return CcxtAdapter(exchange, symbol)
+        primary = WebsocketCcxtAdapter(exchange, symbol)
+    else:
+        primary = CcxtAdapter(exchange, symbol)
+
+    if not fixture_fallback_enabled:
+        return primary
+
+    fallback = FixtureReplayAdapter(
+        symbol,
+        resolve_fixture_path(symbol, fixture_path),
+    )
+    return FallbackMarketDataSource(primary, fallback)

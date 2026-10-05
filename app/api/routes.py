@@ -76,11 +76,13 @@ async def status(request: Request) -> dict:
     operational = loop_is_operational(loop, loop_enabled=settings.loop_enabled)
     market_data_fallback = False
     market_data_error = None
+    market_data_source = "live"
     for source in (getattr(loop, "_data_source", None), getattr(loop, "_compare_source", None)):
         if source is None:
             continue
         if getattr(source, "using_fallback", False):
             market_data_fallback = True
+            market_data_source = "fixture"
         source_error = getattr(source, "last_error", None)
         if source_error:
             market_data_error = source_error
@@ -95,6 +97,8 @@ async def status(request: Request) -> dict:
         "paper_trading": True,
         "market_data_mode": settings.market_data_mode,
         "market_data_fallback": market_data_fallback,
+        "market_data_source": market_data_source,
+        "fixture_fallback_enabled": settings.fixture_fallback_enabled,
         "operator_auth_required": bool((settings.operator_api_token or "").strip()),
     }
 

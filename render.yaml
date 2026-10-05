@@ -36,3 +36,5 @@ services:
         value: sqlite:///./data/mm_lab.db
       - key: OPERATOR_API_TOKEN
         generateValue: true
+      - key: FIXTURE_FALLBACK_ENABLED
+        value: "true"

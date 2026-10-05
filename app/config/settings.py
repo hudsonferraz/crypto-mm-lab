@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     metrics_enabled: bool = True
     loop_enabled: bool = True
     market_data_mode: MarketDataMode = "poll"
+    fixture_fallback_enabled: bool = True
+    market_data_fixture_path: str | None = None
     operator_api_token: str | None = Field(default=None, validation_alias="OPERATOR_API_TOKEN")
 
     dex_enabled: bool = True

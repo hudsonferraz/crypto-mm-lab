@@ -43,4 +43,6 @@ DB_URL=sqlite:///./data/mm_lab.db
 
 Do **not** use Vercel — this app needs a long-running process for the paper MM loop.
 
+If the host blocks public CEX IPs (common on free Render), the app **automatically replays bundled fixture order books** so Live MM still shows mids/quotes. The dashboard labels this as fixture replay — not live Binance.
+
 Any other container host that can run the Dockerfile also works (Fly, Railway, etc.). Plug the resulting URL into the portfolio case study when ready.
