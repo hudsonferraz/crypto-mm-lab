@@ -5,9 +5,13 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://mmlab:mmlab@postgres:5432/mmlab
-      DEX_ENABLED: "false"
+      DEX_ENABLED: "true"
       LOOP_ENABLED: "true"
       METRICS_ENABLED: "true"
+      QUOTE_SPREAD_BPS: "30"
+      MAKER_FEE_BPS: "2"
+      TAKER_FEE_BPS: "5"
+      # Set OPERATOR_API_TOKEN in a real hosted deploy before exposing ports publicly.
     depends_on:
       postgres:
         condition: service_healthy

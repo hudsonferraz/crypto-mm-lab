@@ -5,7 +5,8 @@ from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 StrategyName = Literal["pure_mm", "inventory_skew", "volatility_spread"]
-FillMode = Literal["full_cross_fill", "partial_fill"]
+FillMode = Literal["full_cross_fill", "partial_fill", "latency_prob_fill"]
+MarketDataMode = Literal["poll", "websocket"]
 
 
 class Settings(BaseSettings):
@@ -19,22 +20,26 @@ class Settings(BaseSettings):
     exchange: str = "binance"
     symbol: str = "BTC/USDT"
     poll_interval_sec: float = Field(default=2.0, gt=0)
-    quote_spread_bps: float = Field(default=10.0, ge=0)
+    quote_spread_bps: float = Field(default=30.0, ge=0)
     quote_size: float = Field(default=0.001, gt=0)
     max_position_base: float = Field(default=0.01, gt=0)
     db_url: str = Field(
         default="sqlite:///./data/mm_lab.db",
         validation_alias=AliasChoices("DB_URL", "DATABASE_URL"),
     )
-    maker_fee_bps: float = Field(default=10.0, ge=0)
-    taker_fee_bps: float = Field(default=10.0, ge=0)
+    maker_fee_bps: float = Field(default=2.0, ge=0)
+    taker_fee_bps: float = Field(default=5.0, ge=0)
     fill_mode: FillMode = "full_cross_fill"
+    fill_latency_ticks: int = Field(default=2, ge=1)
+    fill_probability: float = Field(default=0.7, ge=0.0, le=1.0)
     strategy: StrategyName = "pure_mm"
     initial_quote_balance: float = Field(default=10_000.0, gt=0)
     max_position_notional: float = Field(default=1_000.0, gt=0)
     report_interval_ticks: int = Field(default=5, gt=0)
     metrics_enabled: bool = True
     loop_enabled: bool = True
+    market_data_mode: MarketDataMode = "poll"
+    operator_api_token: str | None = Field(default=None, validation_alias="OPERATOR_API_TOKEN")
 
     dex_enabled: bool = True
     eth_rpc_url: str = "https://ethereum.publicnode.com"

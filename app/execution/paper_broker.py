@@ -26,11 +26,16 @@ class PaperBroker:
         maker_fee_bps: float,
         *,
         fill_mode: FillMode = "full_cross_fill",
+        fill_latency_ticks: int = 1,
+        fill_probability: float = 1.0,
     ) -> None:
         self._symbol = symbol
         self._maker_fee_bps = maker_fee_bps
         self._fill_mode = fill_mode
+        self._fill_latency_ticks = fill_latency_ticks
+        self._fill_probability = fill_probability
         self._open_quotes: list[OpenQuote] = []
+        self._tick_index = 0
         self._inventory = InventoryTracker(
             symbol=symbol,
             initial_quote_balance=initial_quote_balance,
@@ -50,7 +55,11 @@ class PaperBroker:
             total_fees=inventory.total_fees,
             last_updated=inventory.last_updated,
             open_quotes=tuple(
-                OpenQuote(quote_id=open_quote.quote_id, quote=open_quote.quote)
+                OpenQuote(
+                    quote_id=open_quote.quote_id,
+                    quote=open_quote.quote,
+                    crossed_streak=open_quote.crossed_streak,
+                )
                 for open_quote in self._open_quotes
             ),
         )
@@ -65,16 +74,24 @@ class PaperBroker:
             last_updated=checkpoint.last_updated,
         )
         self._open_quotes = [
-            OpenQuote(quote_id=open_quote.quote_id, quote=open_quote.quote)
+            OpenQuote(
+                quote_id=open_quote.quote_id,
+                quote=open_quote.quote,
+                crossed_streak=open_quote.crossed_streak,
+            )
             for open_quote in checkpoint.open_quotes
         ]
 
     def apply_fills(self, snapshot: OrderBookSnapshot) -> list[Fill]:
+        self._tick_index += 1
         fills = detect_fills(
             self._open_quotes,
             snapshot,
             self._maker_fee_bps,
             fill_mode=self._fill_mode,
+            fill_latency_ticks=self._fill_latency_ticks,
+            fill_probability=self._fill_probability,
+            tick_index=self._tick_index,
         )
         if not fills:
             return []
@@ -101,6 +118,7 @@ class PaperBroker:
                     OpenQuote(
                         quote_id=open_quote.quote_id,
                         quote=replace(open_quote.quote, size=remaining_size),
+                        crossed_streak=0,
                     )
                 )
 
@@ -122,3 +140,7 @@ class PaperBroker:
     @property
     def open_quote_count(self) -> int:
         return len(self._open_quotes)
+
+    @property
+    def open_quotes(self) -> list[OpenQuote]:
+        return list(self._open_quotes)

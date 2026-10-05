@@ -11,18 +11,19 @@ This is an **education and research project** — useful for exploring MM mechan
 
 **What it does:** end-to-end MM loop on public Binance data (no API keys).  
 **How it's built:** FastAPI, CCXT, web3.py, SQLAlchemy, Prometheus/Grafana.  
-**Scope and safety:** paper-only, no auth, conservative fill model — see [Simulation assumptions](#simulation-assumptions) and [design decisions](docs/design-decisions.md).
+**Scope and safety:** paper-only, optional operator token for kill switch, conservative fill models — see [Simulation assumptions](#simulation-assumptions), [interview story](docs/interview-story.md), and [design decisions](docs/design-decisions.md).
 
 ![Demo](docs/images/demo.gif)
 
 ## Highlights
 
-- **114 automated tests** — order book math, fill model, PnL, AMM, arbitrage scanner, backtest, strategy comparison, API routes, stale-data guards, loop recovery, tick audit
-- **Execution simulation** — cash-account fills (`full_cross_fill` or `partial_fill`), auditable quote/fill IDs and per-tick `tick_id` joins across order books, quotes, fills, positions, PnL, and opportunities
-- **Risk and inventory controls** — position caps, cumulative cash reservation, kill switch, stale-tick safeguards that cancel quotes and skip execution
-- **Strategy research** — pure MM, inventory skew, and volatility-adjusted spread strategies over the same mid-price feed, with a one-command comparison table (Sharpe / drawdown / fill rate)
-- **CEX/DEX analytics** — Uniswap V2 pool reader, arbitrage scanner with transparent edge accounting
-- **Backtesting** — replay from SQLite/Postgres snapshots or CSV fixtures; annualized Sharpe-like ratio from per-tick PnL changes (frequency inferred from timestamps), drawdown, fill rate
+- **Automated tests + CI** — order book math, fill models (including latency/prob), PnL, AMM, arbitrage scanner, backtest, strategy comparison, research APIs, operator auth, stale-data guards, loop recovery, tick audit
+- **Product dashboard** — paper banner, config chips, Live / Opportunities / Research tabs, open quotes, kill confirm, fixture compare + scenario sweep
+- **Execution simulation** — cash-account fills (`full_cross_fill`, `partial_fill`, or toy `latency_prob_fill`), auditable quote/fill IDs and per-tick `tick_id` joins
+- **Risk and inventory controls** — position caps, cumulative cash reservation, kill switch (optional operator token), stale-tick safeguards
+- **Strategy research** — pure MM, inventory skew, volatility-adjusted spread + API/CLI comparison and sweeps
+- **CEX/DEX analytics** — Uniswap V2 pool reader, arbitrage scanner with labeled USDT/USDC basis notes
+- **Backtesting** — replay from SQLite/Postgres snapshots or CSV fixtures; Sharpe-like ratio, drawdown, fill rate
 - **Observability** — Prometheus `/metrics`, Grafana dashboard, structured logging, `last_error` on `/status`
 - **Loop resilience** — bounded exponential backoff on tick failures, last-error visibility, automatic shutdown after repeated failures
 
@@ -148,7 +149,7 @@ This project is a **paper-trading lab**, not a production market-making system. 
 
 ### Market data
 
-- **Polling, not websockets** — order books refresh on a fixed interval (default 2s).
+- **Polling by default; optional websocket** — order books refresh on a fixed interval (default 2s). `MARKET_DATA_MODE=websocket` uses `watch_order_book` when available and falls back to REST with an explicit status note.
 - **Top-of-book focus** — strategies quote from mid price; stored snapshots keep best bid/ask only. Backtests reconstruct a minimal two-level book from those prices.
 - **Stale fallback** — if a CEX fetch fails, the adapter may reuse the last cached book (flagged `is_stale`). Stale ticks cancel resting quotes, skip fills and new quoting, increment `mm_stale_ticks_total`, and suppress DEX arbitrage opportunities when either the primary or compare CEX snapshot is stale. Stale books remain observable in storage and on the dashboard, but they are never executable.
 
@@ -161,7 +162,7 @@ This project is a **paper-trading lab**, not a production market-making system. 
 ### DEX comparison
 
 - **Uniswap V2 only** — constant-product pool math on a single WETH/USDC pair vs CEX ETH/USDT mid.
-- **Arbitrage is observational** — opportunities are scanned and logged; no on-chain execution.
+- **Arbitrage is observational** — opportunities are scanned and logged; no on-chain execution. The dashboard labels MM vs compare symbols and the USDT/USDC basis risk.
 
 ### Backtest metrics
 
@@ -169,11 +170,11 @@ This project is a **paper-trading lab**, not a production market-making system. 
 
 ### Security and ops
 
-- **No API authentication** — dashboard, kill switch, and JSON endpoints are open on localhost/Docker. Not suitable for exposed deployments without a reverse proxy and auth.
+- **Local DX is open; hosted demos should set `OPERATOR_API_TOKEN`** — when set, `POST /kill-switch` requires `X-Operator-Token`. Read endpoints stay public for portfolio demos. See [docs/deploy-demo.md](docs/deploy-demo.md).
 - **No wallet keys** — by design; nothing signs transactions.
 - **Loop failure handling** — tick errors are retried with bounded exponential backoff; `/status` exposes `last_error`. After repeated consecutive failures the loop stops rather than reporting a false healthy state.
 
-For rationale and trade-offs behind each choice, see [docs/design-decisions.md](docs/design-decisions.md).
+See [docs/deploy-demo.md](docs/deploy-demo.md) and the root [`render.yaml`](render.yaml) Blueprint for a one-click Render paper demo.
 
 ## Configuration
 
@@ -184,7 +185,9 @@ See `.env.example`. Key variables:
 | `EXCHANGE`, `SYMBOL` | CEX data source (default `binance`, `BTC/USDT`) |
 | `DB_URL` / `DATABASE_URL` | SQLite (local) or PostgreSQL (Docker) |
 | `STRATEGY` | `pure_mm`, `inventory_skew`, or `volatility_spread` |
-| `FILL_MODE` | `full_cross_fill` or `partial_fill` |
+| `FILL_MODE` | `full_cross_fill`, `partial_fill`, or `latency_prob_fill` |
+| `MARKET_DATA_MODE` | `poll` (default) or `websocket` (falls back to poll if unsupported) |
+| `OPERATOR_API_TOKEN` | Optional; protects kill switch when set |
 | `DEX_ENABLED` | Enable on-chain pool reader + arbitrage scanner |
 | `METRICS_ENABLED` | Export Prometheus metrics from the loop |
 

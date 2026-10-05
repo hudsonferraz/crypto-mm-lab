@@ -1,0 +1,38 @@
+# Render Blueprint — paper MM lab demo
+# https://render.com/docs/blueprint-spec
+#
+# After first deploy: set/rotate OPERATOR_API_TOKEN in the dashboard if needed,
+# then open https://<service>.onrender.com/dashboard
+
+services:
+  - type: web
+    name: crypto-mm-lab
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: LOOP_ENABLED
+        value: "true"
+      - key: DEX_ENABLED
+        value: "true"
+      - key: MARKET_DATA_MODE
+        value: poll
+      - key: QUOTE_SPREAD_BPS
+        value: "30"
+      - key: MAKER_FEE_BPS
+        value: "2"
+      - key: TAKER_FEE_BPS
+        value: "5"
+      - key: FILL_MODE
+        value: full_cross_fill
+      - key: STRATEGY
+        value: pure_mm
+      - key: METRICS_ENABLED
+        value: "true"
+      - key: DB_URL
+        value: sqlite:///./data/mm_lab.db
+      - key: OPERATOR_API_TOKEN
+        generateValue: true

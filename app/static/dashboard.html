@@ -11,21 +11,58 @@
       background: #0f1115;
       color: #e8eaed;
     }
-    body { margin: 0; padding: 2rem; }
+    body { margin: 0; padding: 1.5rem; }
     h1, h2 { margin-top: 0; }
-    h2 { margin-top: 2rem; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+    h2 { margin-top: 1.5rem; font-size: 1.05rem; }
+    .banner {
+      background: #3b2f14;
+      border: 1px solid #b45309;
+      color: #fde68a;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin-bottom: 1rem;
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+    .chip {
+      background: #1a1d24;
+      border: 1px solid #2a2f3a;
+      border-radius: 999px;
+      padding: 0.35rem 0.75rem;
+      font-size: 0.85rem;
+      color: #cbd5e1;
+    }
+    .error-banner {
+      display: none;
+      background: #3f1d1d;
+      border: 1px solid #7f1d1d;
+      color: #fecaca;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+    }
+    .tabs { display: flex; gap: 0.5rem; margin: 1rem 0; }
+    .tab {
+      border: 1px solid #3c4043;
+      background: #1a1d24;
+      color: #e8eaed;
+      border-radius: 6px;
+      padding: 0.45rem 0.9rem;
+      cursor: pointer;
+    }
+    .tab.active { background: #2563eb; border-color: #2563eb; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
     .card {
       background: #1a1d24;
       border: 1px solid #2a2f3a;
       border-radius: 8px;
       padding: 1rem;
     }
-    .chart-card {
-      padding: 0.75rem 1rem 1rem;
-    }
     .label { color: #9aa0a6; font-size: 0.85rem; }
-    .value { font-size: 1.25rem; font-weight: 600; margin-top: 0.25rem; }
+    .value { font-size: 1.2rem; font-weight: 600; margin-top: 0.25rem; }
     button {
       margin-top: 1rem;
       padding: 0.5rem 1rem;
@@ -36,98 +73,134 @@
       cursor: pointer;
     }
     button:hover { background: #3c4043; }
-    #status-line { margin-bottom: 1rem; color: #9aa0a6; }
+    #status-line { margin-bottom: 0.75rem; color: #9aa0a6; }
     table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
     th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #2a2f3a; }
     th { color: #9aa0a6; font-weight: 500; }
     td.numeric { font-variant-numeric: tabular-nums; }
     .side-bid { color: #34d399; }
     .side-ask { color: #f87171; }
-    #equity-curve {
-      display: block;
-      width: 100%;
-      height: 180px;
-    }
-    .chart-empty {
-      display: none;
-      margin-top: 0.5rem;
-      text-align: center;
-    }
-    .chart-meta {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 0.5rem;
-      font-size: 0.85rem;
-      color: #9aa0a6;
-    }
+    #equity-curve { display: block; width: 100%; height: 180px; }
+    .chart-empty { display: none; margin-top: 0.5rem; text-align: center; }
+    .chart-meta { display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.85rem; color: #9aa0a6; }
     .mono { font-family: ui-monospace, monospace; font-size: 0.85rem; }
+    .muted { color: #9aa0a6; font-size: 0.9rem; }
+    .links a { color: #93c5fd; }
+    .note {
+      background: #111827;
+      border-left: 3px solid #6384ff;
+      padding: 0.75rem 1rem;
+      margin: 0.75rem 0 1rem;
+      color: #cbd5e1;
+      font-size: 0.9rem;
+    }
   </style>
 </head>
 <body>
+  <div class="banner">PAPER SIMULATION — no live orders, no wallet keys</div>
   <h1>crypto-mm-lab</h1>
   <div id="status-line">Loading...</div>
-
-  <h2>CEX (MM)</h2>
-  <div class="grid">
-    <div class="card"><div class="label">Best bid</div><div class="value" id="best-bid">-</div></div>
-    <div class="card"><div class="label">Best ask</div><div class="value" id="best-ask">-</div></div>
-    <div class="card"><div class="label">Mid</div><div class="value" id="mid">-</div></div>
-    <div class="card"><div class="label">Spread (bps)</div><div class="value" id="spread">-</div></div>
+  <div id="error-banner" class="error-banner"></div>
+  <div id="config-chips" class="chips"></div>
+  <div class="links muted">
+    <a href="https://github.com/hudsonferraz/crypto-mm-lab/blob/main/README.md#simulation-assumptions" target="_blank" rel="noreferrer">Simulation assumptions</a>
+    ·
+    <a href="https://github.com/hudsonferraz/crypto-mm-lab/blob/main/docs/design-decisions.md" target="_blank" rel="noreferrer">Design decisions</a>
+    ·
+    <a id="audit-link" href="#" class="mono">Tick audit</a>
   </div>
 
-  <h2>DEX vs CEX</h2>
-  <div class="grid">
-    <div class="card"><div class="label">CEX compare mid (ETH)</div><div class="value" id="cex-compare">-</div></div>
-    <div class="card"><div class="label">AMM spot (WETH/USDC)</div><div class="value" id="amm-price">-</div></div>
-    <div class="card"><div class="label">CEX–DEX spread (bps)</div><div class="value" id="dex-spread">-</div></div>
+  <div class="tabs">
+    <button class="tab active" data-tab="live" type="button">Live MM</button>
+    <button class="tab" data-tab="opportunities" type="button">Opportunities</button>
+    <button class="tab" data-tab="research" type="button">Research</button>
   </div>
 
-  <h2>Position & PnL</h2>
-  <div class="grid">
-    <div class="card"><div class="label">Base position</div><div class="value" id="base">-</div></div>
-    <div class="card"><div class="label">Quote balance</div><div class="value" id="quote">-</div></div>
-    <div class="card"><div class="label">Total PnL</div><div class="value" id="total-pnl">-</div></div>
-    <div class="card"><div class="label">Realized / Unrealized</div><div class="value" id="pnl-breakdown">-</div></div>
-  </div>
-
-  <h2>Equity curve</h2>
-  <div class="card chart-card">
-    <canvas id="equity-curve" height="180"></canvas>
-    <div class="label chart-empty" id="equity-empty">No PnL history yet</div>
-    <div class="chart-meta">
-      <span id="equity-start">-</span>
-      <span id="equity-end">-</span>
+  <section id="panel-live" class="panel active">
+    <h2>CEX (MM book)</h2>
+    <div class="grid">
+      <div class="card"><div class="label">Best bid</div><div class="value" id="best-bid">-</div></div>
+      <div class="card"><div class="label">Best ask</div><div class="value" id="best-ask">-</div></div>
+      <div class="card"><div class="label">Mid</div><div class="value" id="mid">-</div></div>
+      <div class="card"><div class="label">Spread (bps)</div><div class="value" id="spread">-</div></div>
     </div>
-  </div>
 
-  <h2>Recent fills</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Time</th>
-        <th>Side</th>
-        <th>Price</th>
-        <th>Size</th>
-        <th>Fee</th>
-        <th>Quote ID</th>
-      </tr>
-    </thead>
-    <tbody id="fills-body">
-      <tr><td colspan="6">No fills yet</td></tr>
-    </tbody>
-  </table>
+    <h2>Open quotes</h2>
+    <table>
+      <thead>
+        <tr><th>Side</th><th>Price</th><th>Size</th><th>Streak</th><th>Quote ID</th></tr>
+      </thead>
+      <tbody id="quotes-body"><tr><td colspan="5">No open quotes</td></tr></tbody>
+    </table>
 
-  <h2>Latest opportunities</h2>
-  <table>
-    <thead>
-      <tr><th>Direction</th><th>Net edge (bps)</th><th>Net edge ($)</th><th>Size</th></tr>
-    </thead>
-    <tbody id="opportunities-body">
-      <tr><td colspan="4">No opportunities yet</td></tr>
-    </tbody>
-  </table>
+    <h2>Position & PnL</h2>
+    <div class="grid">
+      <div class="card"><div class="label">Base position</div><div class="value" id="base">-</div></div>
+      <div class="card"><div class="label">Quote balance</div><div class="value" id="quote">-</div></div>
+      <div class="card"><div class="label">Total PnL</div><div class="value" id="total-pnl">-</div></div>
+      <div class="card"><div class="label">Realized / Unrealized</div><div class="value" id="pnl-breakdown">-</div></div>
+    </div>
 
-  <button id="kill-switch-btn" type="button">Toggle kill switch</button>
+    <h2>Equity curve</h2>
+    <div class="card chart-card">
+      <canvas id="equity-curve" height="180"></canvas>
+      <div class="label chart-empty" id="equity-empty">No PnL history yet</div>
+      <div class="chart-meta">
+        <span id="equity-start">-</span>
+        <span id="equity-end">-</span>
+      </div>
+    </div>
+
+    <h2>Recent fills</h2>
+    <table>
+      <thead>
+        <tr><th>Time</th><th>Side</th><th>Price</th><th>Size</th><th>Fee</th><th>Quote ID</th></tr>
+      </thead>
+      <tbody id="fills-body"><tr><td colspan="6">No fills yet</td></tr></tbody>
+    </table>
+
+    <button id="kill-switch-btn" type="button">Toggle kill switch</button>
+  </section>
+
+  <section id="panel-opportunities" class="panel">
+    <h2>DEX vs CEX (observational)</h2>
+    <div id="dex-note" class="note">Loading DEX status...</div>
+    <div class="grid">
+      <div class="card"><div class="label">CEX compare mid</div><div class="value" id="cex-compare">-</div></div>
+      <div class="card"><div class="label">AMM spot</div><div class="value" id="amm-price">-</div></div>
+      <div class="card"><div class="label">CEX–DEX spread (bps)</div><div class="value" id="dex-spread">-</div></div>
+    </div>
+    <h2>Latest opportunities</h2>
+    <table>
+      <thead>
+        <tr><th>Direction</th><th>Net edge (bps)</th><th>Net edge ($)</th><th>Size</th></tr>
+      </thead>
+      <tbody id="opportunities-body"><tr><td colspan="4">No opportunities yet</td></tr></tbody>
+    </table>
+  </section>
+
+  <section id="panel-research" class="panel">
+    <h2>Strategy comparison (fixture)</h2>
+    <p class="muted">Runs the three strategies on <span class="mono">tests/fixtures/orderbook_snapshots.csv</span>.</p>
+    <button id="run-compare-btn" type="button">Run compare</button>
+    <table>
+      <thead>
+        <tr><th>Strategy</th><th>Total PnL</th><th>Max DD</th><th>Sharpe</th><th>Fill rate</th><th>Fills</th></tr>
+      </thead>
+      <tbody id="compare-body"><tr><td colspan="6">Not run yet</td></tr></tbody>
+    </table>
+
+    <h2>Scenario sweep</h2>
+    <p class="muted">Default grid: three strategies × current spread × current fill mode. Export JSON after run.</p>
+    <button id="run-sweep-btn" type="button">Run sweep</button>
+    <button id="export-sweep-btn" type="button" disabled>Download JSON</button>
+    <table>
+      <thead>
+        <tr><th>Strategy</th><th>Spread</th><th>Fill mode</th><th>Total PnL</th><th>Sharpe</th><th>Fill rate</th></tr>
+      </thead>
+      <tbody id="sweep-body"><tr><td colspan="6">Not run yet</td></tr></tbody>
+    </table>
+  </section>
 
   <script>
     const fmt = (value, digits = 4) =>
@@ -144,14 +217,68 @@
       return value.length > 10 ? `${value.slice(0, 8)}…` : value;
     };
 
-    async function fetchJson(path) {
-      const response = await fetch(path);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    let operatorToken = null;
+    let latestSweep = null;
+    let configCache = null;
+
+    async function fetchJson(path, options = {}) {
+      const response = await fetch(path, options);
+      if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+        try {
+          const body = await response.json();
+          if (body.detail) detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+        } catch (_) {}
+        throw new Error(detail);
+      }
       return response.json();
     }
 
-    function renderOpportunities(items) {
+    function renderChips(config, status) {
+      const chips = [
+        `exchange: ${config.exchange}`,
+        `MM: ${config.mm_symbol}`,
+        `compare: ${config.cex_compare_symbol}`,
+        `strategy: ${config.strategy}`,
+        `fill: ${config.fill_mode}`,
+        `spread: ${config.quote_spread_bps} bps`,
+        `maker fee: ${config.maker_fee_bps} bps`,
+        `DEX: ${config.dex_enabled ? "on" : "off"}`,
+        `market data: ${status.market_data_mode || config.market_data_mode}`,
+      ];
+      if (status.market_data_fallback) chips.push("WS fallback: poll");
+      document.getElementById("config-chips").innerHTML = chips
+        .map((text) => `<span class="chip">${text}</span>`)
+        .join("");
+    }
+
+    function renderQuotes(items) {
+      const body = document.getElementById("quotes-body");
+      if (!items || items.length === 0) {
+        body.innerHTML = "<tr><td colspan='5'>No open quotes</td></tr>";
+        return;
+      }
+      body.innerHTML = items.map((item) => `
+        <tr>
+          <td class="side-${item.side}">${item.side}</td>
+          <td class="numeric">${fmt(item.price, 2)}</td>
+          <td class="numeric">${fmt(item.size, 6)}</td>
+          <td class="numeric">${item.crossed_streak ?? 0}</td>
+          <td class="mono" title="${item.quote_id || ""}">${shortId(item.quote_id)}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderOpportunities(payload) {
       const body = document.getElementById("opportunities-body");
+      const note = document.getElementById("dex-note");
+      if (!payload.dex_enabled) {
+        note.textContent = `DEX disabled (${payload.disabled_reason || "DEX_ENABLED=false"}). MM book is ${payload.mm_symbol}; compare symbol would be ${payload.cex_compare_symbol}.`;
+        body.innerHTML = "<tr><td colspan='4'>DEX disabled — no opportunities</td></tr>";
+        return;
+      }
+      note.textContent = `${payload.quote_asset_basis_note || ""} MM=${payload.mm_symbol}, compare=${payload.cex_compare_symbol}.`;
+      const items = payload.latest_tick?.length ? payload.latest_tick : payload.recent;
       if (!items || items.length === 0) {
         body.innerHTML = "<tr><td colspan='4'>No opportunities yet</td></tr>";
         return;
@@ -189,7 +316,6 @@
       const empty = document.getElementById("equity-empty");
       const startLabel = document.getElementById("equity-start");
       const endLabel = document.getElementById("equity-end");
-
       if (!points || points.length < 2) {
         canvas.style.display = "none";
         empty.style.display = "block";
@@ -197,41 +323,31 @@
         endLabel.textContent = "-";
         return;
       }
-
       canvas.style.display = "block";
       empty.style.display = "none";
-
       const width = canvas.clientWidth || canvas.parentElement.clientWidth;
       const height = 180;
       const ratio = window.devicePixelRatio || 1;
       canvas.width = width * ratio;
       canvas.height = height * ratio;
-
       const context = canvas.getContext("2d");
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
       context.clearRect(0, 0, width, height);
-
       const values = points.map((point) => point.total_pnl);
       const minValue = Math.min(...values);
       const maxValue = Math.max(...values);
       const range = maxValue - minValue || 1;
       const padding = 16;
-
-      const xForIndex = (index) =>
-        padding + (index / (points.length - 1)) * (width - padding * 2);
-      const yForValue = (value) =>
-        height - padding - ((value - minValue) / range) * (height - padding * 2);
-
+      const xForIndex = (index) => padding + (index / (points.length - 1)) * (width - padding * 2);
+      const yForValue = (value) => height - padding - ((value - minValue) / range) * (height - padding * 2);
       if (minValue < 0 && maxValue > 0) {
         const zeroY = yForValue(0);
         context.strokeStyle = "#2a2f3a";
-        context.lineWidth = 1;
         context.beginPath();
         context.moveTo(padding, zeroY);
         context.lineTo(width - padding, zeroY);
         context.stroke();
       }
-
       context.strokeStyle = "#3b82f6";
       context.lineWidth = 2;
       context.beginPath();
@@ -242,16 +358,52 @@
         else context.lineTo(x, y);
       });
       context.stroke();
-
       startLabel.textContent = `Start: ${fmt(points[0].total_pnl, 4)}`;
       endLabel.textContent = `Latest: ${fmt(points[points.length - 1].total_pnl, 4)}`;
     }
 
+    function renderCompare(rows) {
+      const body = document.getElementById("compare-body");
+      if (!rows?.length) {
+        body.innerHTML = "<tr><td colspan='6'>No rows</td></tr>";
+        return;
+      }
+      body.innerHTML = rows.map((row) => `
+        <tr>
+          <td>${row.strategy}</td>
+          <td class="numeric">${fmt(row.total_pnl, 4)}</td>
+          <td class="numeric">${fmt(row.max_drawdown, 4)}</td>
+          <td class="numeric">${fmt(row.sharpe_ratio, 3)}</td>
+          <td class="numeric">${fmt(row.fill_rate, 3)}</td>
+          <td class="numeric">${row.fill_count ?? "-"}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderSweep(rows) {
+      const body = document.getElementById("sweep-body");
+      if (!rows?.length) {
+        body.innerHTML = "<tr><td colspan='6'>No rows</td></tr>";
+        return;
+      }
+      body.innerHTML = rows.map((row) => `
+        <tr>
+          <td>${row.strategy}</td>
+          <td class="numeric">${fmt(row.quote_spread_bps, 1)}</td>
+          <td>${row.fill_mode}</td>
+          <td class="numeric">${fmt(row.total_pnl, 4)}</td>
+          <td class="numeric">${fmt(row.sharpe_ratio, 3)}</td>
+          <td class="numeric">${fmt(row.fill_rate, 3)}</td>
+        </tr>
+      `).join("");
+    }
+
     async function refresh() {
       try {
-        const [status, market, amm, position, pnl, pnlHistory, fills, opportunities] =
+        const [status, config, market, amm, position, pnl, pnlHistory, fills, opportunities, quotes] =
           await Promise.all([
             fetchJson("/status"),
+            fetchJson("/config"),
             fetchJson("/market"),
             fetchJson("/amm"),
             fetchJson("/position"),
@@ -259,12 +411,31 @@
             fetchJson("/pnl/history?limit=200"),
             fetchJson("/fills?limit=20"),
             fetchJson("/opportunities?limit=5"),
+            fetchJson("/quotes"),
           ]);
+        configCache = config;
+        renderChips(config, status);
+
+        const errorBanner = document.getElementById("error-banner");
+        if (status.last_error) {
+          errorBanner.style.display = "block";
+          errorBanner.textContent = `last_error: ${status.last_error}`;
+        } else {
+          errorBanner.style.display = "none";
+        }
 
         const stale = market.is_stale ? " (stale)" : "";
-        const dexStale = amm.is_stale ? " (stale)" : "";
         document.getElementById("status-line").textContent =
-          `Tick ${status.tick} | Running: ${status.running} | Kill switch: ${status.kill_switch_active ? "ON" : "OFF"}${stale}${dexStale}`;
+          `Tick ${status.tick} | Running: ${status.running} | Kill: ${status.kill_switch_active ? "ON" : "OFF"}${stale}`;
+
+        const audit = document.getElementById("audit-link");
+        if (status.last_tick_id) {
+          audit.href = `/audit/ticks/${status.last_tick_id}`;
+          audit.textContent = `Tick audit ${status.last_tick_id.slice(0, 8)}…`;
+        } else {
+          audit.href = "#";
+          audit.textContent = "Tick audit (waiting)";
+        }
 
         document.getElementById("best-bid").textContent = fmt(market.best_bid, 2);
         document.getElementById("best-ask").textContent = fmt(market.best_ask, 2);
@@ -281,27 +452,95 @@
 
         renderEquityCurve(pnlHistory.points);
         renderFills(fills.fills);
-        renderOpportunities(
-          opportunities.latest_tick.length ? opportunities.latest_tick : opportunities.recent
-        );
+        renderQuotes(quotes.quotes);
+        renderOpportunities(opportunities);
 
         const btn = document.getElementById("kill-switch-btn");
         btn.textContent = status.kill_switch_active ? "Disable kill switch" : "Enable kill switch";
         btn.dataset.active = status.kill_switch_active ? "true" : "false";
+        btn.dataset.auth = status.operator_auth_required ? "true" : "false";
       } catch (error) {
         document.getElementById("status-line").textContent = `Error: ${error.message}`;
       }
     }
 
+    document.querySelectorAll(".tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach((node) => node.classList.remove("active"));
+        document.querySelectorAll(".panel").forEach((node) => node.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
+      });
+    });
+
     document.getElementById("kill-switch-btn").addEventListener("click", async () => {
       const btn = document.getElementById("kill-switch-btn");
-      const active = btn.dataset.active !== "true";
-      await fetch("/kill-switch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active }),
-      });
-      await refresh();
+      const enabling = btn.dataset.active !== "true";
+      const action = enabling ? "ENABLE" : "DISABLE";
+      if (!window.confirm(`${action} kill switch? This cancels open quotes when enabling.`)) {
+        return;
+      }
+      const headers = { "Content-Type": "application/json" };
+      if (btn.dataset.auth === "true") {
+        if (!operatorToken) {
+          operatorToken = window.prompt("Operator token required for kill switch");
+        }
+        if (!operatorToken) return;
+        headers["X-Operator-Token"] = operatorToken;
+      }
+      try {
+        await fetchJson("/kill-switch", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ active: enabling }),
+        });
+        await refresh();
+      } catch (error) {
+        operatorToken = null;
+        window.alert(`Kill switch failed: ${error.message}`);
+      }
+    });
+
+    document.getElementById("run-compare-btn").addEventListener("click", async () => {
+      const body = document.getElementById("compare-body");
+      body.innerHTML = "<tr><td colspan='6'>Running…</td></tr>";
+      try {
+        const payload = await fetchJson("/research/compare");
+        renderCompare(payload.rows);
+      } catch (error) {
+        body.innerHTML = `<tr><td colspan='6'>Error: ${error.message}</td></tr>`;
+      }
+    });
+
+    document.getElementById("run-sweep-btn").addEventListener("click", async () => {
+      const body = document.getElementById("sweep-body");
+      body.innerHTML = "<tr><td colspan='6'>Running…</td></tr>";
+      try {
+        const payload = await fetchJson("/research/sweep", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            spreads_bps: configCache ? [configCache.quote_spread_bps, configCache.quote_spread_bps * 1.5] : [30, 45],
+            fill_modes: configCache ? [configCache.fill_mode] : ["full_cross_fill"],
+          }),
+        });
+        latestSweep = payload;
+        renderSweep(payload.rows);
+        document.getElementById("export-sweep-btn").disabled = false;
+      } catch (error) {
+        body.innerHTML = `<tr><td colspan='6'>Error: ${error.message}</td></tr>`;
+      }
+    });
+
+    document.getElementById("export-sweep-btn").addEventListener("click", () => {
+      if (!latestSweep) return;
+      const blob = new Blob([JSON.stringify(latestSweep, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "crypto-mm-lab-sweep.json";
+      link.click();
+      URL.revokeObjectURL(url);
     });
 
     window.addEventListener("resize", () => {

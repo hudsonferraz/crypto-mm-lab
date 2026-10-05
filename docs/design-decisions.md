@@ -75,20 +75,21 @@ Per-fill cost-basis reporting or strategy-level attribution requires lot trackin
 Resting quotes need a believable but pessimistic fill rule for paper trading.
 
 **Decision**  
-Two modes via `FILL_MODE`:
+Three modes via `FILL_MODE`:
 
 | Mode | Behavior |
 |------|----------|
 | `full_cross_fill` (default) | When the external best bid/ask crosses our resting quote, the entire quote size fills at our price. |
-| `partial_fill` | Same cross trigger, but fill size is capped by the opposing top-of-book depth (`min(quote_size, level_size)`). Any unfilled remainder is dropped when new quotes are submitted on the same tick. |
+| `partial_fill` | Same cross trigger, but fill size is capped by the opposing top-of-book depth (`min(quote_size, level_size)`). |
+| `latency_prob_fill` | Toy queue/latency model: quote must remain crossed for `FILL_LATENCY_TICKS`, then fills with `FILL_PROBABILITY` (deterministic hash seed). Size capped like partial fill. |
 
-Neither mode models queue position or order-flow priority. Backtest replay stores best bid/ask only and reconstructs depth as `1.0`, so `partial_fill` mainly affects the live loop where CCXT provides real level sizes.
+Neither classic mode models true exchange queue priority. `latency_prob_fill` is an explicit toy — useful for comparing optimistic vs delayed fills, not for claiming matching-engine fidelity. Backtest replay stores best bid/ask only and reconstructs depth as `1.0`.
 
 **Trade-off**  
-Fills may be optimistic (immediate full cross) or slightly more realistic (depth-capped), but neither reflects true queue priority.
+Fills may be optimistic or randomly delayed; none fully reflect production matching.
 
 **Revisit when**  
-Queue-position or probabilistic fill models are needed for strategy validation.
+Recorded L2 replay with real queue metrics is available.
 
 ---
 

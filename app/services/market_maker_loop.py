@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import structlog
 
-from app.adapters.cex.ccxt_adapter import CcxtAdapter
+from app.adapters.cex.market_data_factory import build_market_data_source
 from app.adapters.dex.web3_pool_adapter import Web3PoolAdapter
 from app.analytics.performance_report import format_performance_report
 from app.analytics.pnl import compute_pnl_snapshot
@@ -34,8 +34,16 @@ logger = structlog.get_logger(__name__)
 class MarketMakerLoop:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._data_source = CcxtAdapter(settings.exchange, settings.symbol)
-        self._compare_source = CcxtAdapter(settings.exchange, settings.cex_compare_symbol)
+        self._data_source = build_market_data_source(
+            settings.exchange,
+            settings.symbol,
+            settings.market_data_mode,
+        )
+        self._compare_source = build_market_data_source(
+            settings.exchange,
+            settings.cex_compare_symbol,
+            settings.market_data_mode,
+        )
         self._pool_adapter: Web3PoolAdapter | None = None
         if settings.dex_enabled:
             self._pool_adapter = Web3PoolAdapter(
@@ -51,6 +59,8 @@ class MarketMakerLoop:
             initial_quote_balance=settings.initial_quote_balance,
             maker_fee_bps=settings.maker_fee_bps,
             fill_mode=settings.fill_mode,
+            fill_latency_ticks=settings.fill_latency_ticks,
+            fill_probability=settings.fill_probability,
         )
         self._kill_switch = KillSwitch()
         self._repository = Repository(settings.db_url)
@@ -124,6 +134,14 @@ class MarketMakerLoop:
     @property
     def open_quote_count(self) -> int:
         return self._broker.open_quote_count
+
+    @property
+    def open_quotes(self):
+        return self._broker.open_quotes
+
+    @property
+    def settings(self) -> Settings:
+        return self._settings
 
     @property
     def repository(self) -> Repository:

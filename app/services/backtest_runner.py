@@ -71,6 +71,8 @@ class BacktestRunner:
             initial_quote_balance=settings.initial_quote_balance,
             maker_fee_bps=settings.maker_fee_bps,
             fill_mode=settings.fill_mode,
+            fill_latency_ticks=settings.fill_latency_ticks,
+            fill_probability=settings.fill_probability,
         )
         self._repository = Repository(settings.db_url)
 
