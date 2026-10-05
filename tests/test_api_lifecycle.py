@@ -51,6 +51,15 @@ def test_health_live_always_ok(api_client) -> None:
     assert client.get("/health/live").json() == {"status": "ok"}
 
 
+def test_root_redirects_to_dashboard(api_client) -> None:
+    client, _ = api_client
+
+    response = client.get("/", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "/dashboard"
+
+
 def test_ready_ok_when_loop_disabled(api_client) -> None:
     client, _ = api_client
 
