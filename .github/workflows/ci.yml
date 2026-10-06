@@ -6,10 +6,16 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
 
@@ -53,6 +59,8 @@ jobs:
 
   docker-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: lint-and-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
