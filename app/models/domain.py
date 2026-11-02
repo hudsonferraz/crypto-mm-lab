@@ -124,6 +124,10 @@ class Opportunity:
     net_edge_bps: float
     timestamp: datetime
     tick_id: str | None = None
+    venue: str = "uniswap_v2"
+    fee_tier_bps: float | None = None
+    optimal_trade_size: float | None = None
+    optimal_net_edge: float | None = None
 
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:

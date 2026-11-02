@@ -11,6 +11,7 @@ from app.analytics.performance_report import (
     tick_audit_to_dict,
 )
 from app.api.operator_auth import require_operator_token
+from app.config.redaction import rpc_provider_label
 from app.config.settings import Settings, get_settings
 from app.market_data.orderbook import best_ask, best_bid, mid_price, spread_bps
 from app.services.market_maker_loop import MarketMakerLoop
@@ -126,6 +127,13 @@ async def config() -> dict:
         "market_data_mode": settings.market_data_mode,
         "loop_enabled": settings.loop_enabled,
         "operator_auth_required": bool((settings.operator_api_token or "").strip()),
+        "v3_enabled": settings.v3_active,
+        "v3_pool_address": settings.v3_pool_address,
+        "lp_enabled": settings.lp_active,
+        "lp_capital_quote": settings.lp_capital_quote,
+        "lp_range_width_bps": settings.lp_range_width_bps,
+        "lp_rebalance_threshold_bps": settings.lp_rebalance_threshold_bps,
+        "rpc_provider": rpc_provider_label(settings.eth_rpc_url),
         "assumptions_url": "/docs/simulation-assumptions",
         "design_decisions_path": "docs/design-decisions.md",
     }

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True, slots=True)
@@ -10,3 +10,6 @@ class TickAuditBundle:
     positions: list[dict]
     pnl_snapshots: list[dict]
     opportunities: list[dict]
+    v3_pool_snapshots: list[dict] = field(default_factory=list)
+    lp_positions: list[dict] = field(default_factory=list)
+    lp_rebalances: list[dict] = field(default_factory=list)

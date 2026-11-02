@@ -155,6 +155,9 @@ def tick_audit_to_dict(bundle) -> dict:
         "positions": bundle.positions,
         "pnl_snapshots": bundle.pnl_snapshots,
         "opportunities": bundle.opportunities,
+        "v3_pool_snapshots": bundle.v3_pool_snapshots,
+        "lp_positions": bundle.lp_positions,
+        "lp_rebalances": bundle.lp_rebalances,
     }
 
 
@@ -171,6 +174,10 @@ def opportunity_to_dict(opportunity: Opportunity) -> dict:
         "slippage_cost": opportunity.slippage_cost,
         "net_edge": opportunity.net_edge,
         "net_edge_bps": opportunity.net_edge_bps,
+        "venue": opportunity.venue,
+        "fee_tier_bps": opportunity.fee_tier_bps,
+        "optimal_trade_size": opportunity.optimal_trade_size,
+        "optimal_net_edge": opportunity.optimal_net_edge,
         "tick_id": opportunity.tick_id,
         "timestamp": opportunity.timestamp.isoformat(),
     }

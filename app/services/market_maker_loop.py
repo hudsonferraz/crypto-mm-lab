@@ -6,10 +6,14 @@ from datetime import UTC, datetime
 import structlog
 
 from app.adapters.cex.market_data_factory import build_market_data_source
+from app.adapters.dex.multicall import Web3Transport
+from app.adapters.dex.v3_fixture_replay import V3FixtureReplay
+from app.adapters.dex.v3_pool_adapter import V3PoolAdapter, V3PoolUnavailable
 from app.adapters.dex.web3_pool_adapter import Web3PoolAdapter
 from app.analytics.performance_report import format_performance_report
 from app.analytics.pnl import compute_pnl_snapshot
 from app.config.settings import Settings
+from app.execution.lp_paper_book import LpPaperBook
 from app.execution.paper_broker import PaperBroker
 from app.execution.tick_ids import new_tick_id
 from app.market_data.orderbook import mid_price
@@ -21,18 +25,49 @@ from app.models.domain import (
     Position,
     Quote,
 )
+from app.models.v3 import LpPositionState, RebalanceEvent, V3PoolSnapshot
 from app.observability import metrics as prom
 from app.risk.kill_switch import KillSwitch
 from app.risk.limits import filter_quotes_by_position_limit
-from app.services.arbitrage_scanner import scan_arbitrage_opportunities
+from app.services.arbitrage_scanner import scan_arbitrage_opportunities, scan_v3_opportunities
 from app.storage.repository import Repository
+from app.strategies.concentrated_lp import ConcentratedLpStrategy
 from app.strategies.factory import build_strategy
 
 logger = structlog.get_logger(__name__)
 
+# While replaying the V3 fixture, the loop stays on fixture data for the rest of
+# the process: mixing fee-growth counters from two sources would corrupt accrual.
+_V3_FIXTURE_NOTE = "live V3 RPC unavailable; replaying recorded mainnet observations"
+
+
+def build_v3_source(settings: Settings) -> V3PoolAdapter:
+    return V3PoolAdapter(
+        Web3Transport(settings.eth_rpc_url, timeout_sec=settings.v3_rpc_timeout_sec),
+        settings.v3_pool_address,
+        window_words=settings.v3_window_words,
+        window_refresh_ticks=settings.v3_window_refresh_ticks,
+    )
+
+
+def build_lp_book(settings: Settings) -> LpPaperBook:
+    return LpPaperBook(
+        strategy=ConcentratedLpStrategy(
+            range_width_bps=settings.lp_range_width_bps,
+            rebalance_threshold_bps=settings.lp_rebalance_threshold_bps,
+            cooldown_sec=settings.lp_rebalance_cooldown_sec,
+            prefer_initialized_ticks=settings.lp_prefer_initialized_ticks,
+            snap_tolerance_spacings=settings.lp_snap_tolerance_spacings,
+        ),
+        capital_quote=settings.lp_capital_quote,
+        gas_units=settings.lp_rebalance_gas_units,
+        priority_fee_gwei=settings.lp_priority_fee_gwei,
+        fallback_gas_price_gwei=settings.gas_price_gwei,
+    )
+
 
 class MarketMakerLoop:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, *, v3_source=None) -> None:
         self._settings = settings
         self._data_source = build_market_data_source(
             settings.exchange,
@@ -81,6 +116,18 @@ class MarketMakerLoop:
         self._last_error: str | None = None
         self._consecutive_errors = 0
         self._max_consecutive_errors = 3
+
+        self._v3_source = None
+        self._lp_book: LpPaperBook | None = None
+        if settings.v3_active:
+            self._v3_source = v3_source or build_v3_source(settings)
+            if settings.lp_active:
+                self._lp_book = build_lp_book(settings)
+        self._v3_fixture_mode = False
+        self._v3_status_note: str | None = None
+        self._last_v3_snapshot: V3PoolSnapshot | None = None
+        self._last_lp_state: LpPositionState | None = None
+        self._started_at: datetime | None = None
 
     @property
     def last_error(self) -> str | None:
@@ -145,6 +192,26 @@ class MarketMakerLoop:
     @property
     def settings(self) -> Settings:
         return self._settings
+
+    @property
+    def last_v3_snapshot(self) -> V3PoolSnapshot | None:
+        return self._last_v3_snapshot
+
+    @property
+    def last_lp_state(self) -> LpPositionState | None:
+        return self._last_lp_state
+
+    @property
+    def lp_book(self) -> LpPaperBook | None:
+        return self._lp_book
+
+    @property
+    def v3_status_note(self) -> str | None:
+        return self._v3_status_note
+
+    @property
+    def started_at(self) -> datetime | None:
+        return self._started_at
 
     @property
     def repository(self) -> Repository:
@@ -245,6 +312,19 @@ class MarketMakerLoop:
             )
             self._last_opportunities = tick_opportunities
 
+        compare_is_stale = compare_snapshot is None or compare_snapshot.is_stale
+        v3_snapshot, lp_state, lp_events, v3_opportunities, lp_checkpoint = await self._v3_step(
+            compare_mid=None if compare_is_stale else self._last_compare_mid,
+            cex_is_stale=snapshot.is_stale or compare_is_stale,
+        )
+        if v3_opportunities:
+            tick_opportunities = [*tick_opportunities, *v3_opportunities]
+            self._last_opportunities = tick_opportunities
+        v3_persist = dict(v3_snapshot=v3_snapshot, lp_state=lp_state, lp_rebalances=lp_events)
+
+        if self._started_at is None:
+            self._started_at = now
+
         if snapshot.is_stale:
             broker_checkpoint = self._broker.checkpoint()
             try:
@@ -262,10 +342,13 @@ class MarketMakerLoop:
                     position=position,
                     pnl=pnl,
                     opportunities=tick_opportunities,
+                    **v3_persist,
                 )
             except Exception:
                 self._broker.restore_checkpoint(broker_checkpoint)
+                self._restore_lp(lp_checkpoint)
                 raise
+            self._commit_v3_state(tick_id, v3_snapshot, lp_state)
             self._commit_tick_state(
                 tick_id=tick_id,
                 snapshot=snapshot,
@@ -307,11 +390,14 @@ class MarketMakerLoop:
                 position=position,
                 pnl=pnl,
                 opportunities=tick_opportunities,
+                **v3_persist,
             )
         except Exception:
             self._broker.restore_checkpoint(broker_checkpoint)
+            self._restore_lp(lp_checkpoint)
             raise
 
+        self._commit_v3_state(tick_id, v3_snapshot, lp_state)
         self._commit_tick_state(
             tick_id=tick_id,
             snapshot=snapshot,
@@ -337,6 +423,111 @@ class MarketMakerLoop:
                 opportunities=self._last_opportunities,
             )
             logger.info("performance_report", report=report)
+
+    def _restore_lp(self, checkpoint) -> None:
+        if checkpoint is not None and self._lp_book is not None:
+            self._lp_book.restore(checkpoint)
+
+    def _commit_v3_state(
+        self,
+        tick_id: str,
+        v3_snapshot: V3PoolSnapshot | None,
+        lp_state: LpPositionState | None,
+    ) -> None:
+        if v3_snapshot is not None:
+            self._last_v3_snapshot = replace(v3_snapshot, tick_id=tick_id)
+        if lp_state is not None:
+            self._last_lp_state = replace(lp_state, tick_id=tick_id)
+
+    async def _fetch_v3_snapshot(self) -> V3PoolSnapshot | None:
+        assert self._v3_source is not None
+        bounds = self._lp_book.bounds if self._lp_book is not None else None
+        if not self._v3_fixture_mode:
+            try:
+                snapshot = await self._v3_source.fetch_snapshot(bounds)
+                self._v3_status_note = None
+                return snapshot
+            except V3PoolUnavailable as error:
+                self._v3_status_note = str(error)
+                if self._settings.metrics_enabled:
+                    prom.V3_SNAPSHOT_FAILURES.inc()
+                if not self._settings.fixture_fallback_enabled:
+                    return None
+                try:
+                    self._v3_source = V3FixtureReplay()
+                except (OSError, ValueError) as fixture_error:
+                    logger.warning("v3_fixture_unavailable", error=str(fixture_error))
+                    return None
+                self._v3_fixture_mode = True
+                logger.warning("v3_fixture_fallback", reason=str(error))
+        self._v3_status_note = _V3_FIXTURE_NOTE
+        return await self._v3_source.fetch_snapshot(bounds)
+
+    async def _v3_step(
+        self, *, compare_mid: float | None, cex_is_stale: bool
+    ) -> tuple[
+        V3PoolSnapshot | None,
+        LpPositionState | None,
+        list[RebalanceEvent],
+        list[Opportunity],
+        object | None,
+    ]:
+        """Read the V3 pool, advance the paper LP book, and scan V3 arbitrage."""
+        if self._v3_source is None:
+            return None, None, [], [], None
+        v3_snapshot = await self._fetch_v3_snapshot()
+        if v3_snapshot is None:
+            return None, None, [], [], None
+        if self._settings.metrics_enabled and (v3_snapshot.is_stale or v3_snapshot.is_incomplete):
+            prom.V3_SNAPSHOT_FAILURES.inc()
+
+        lp_state = None
+        lp_events: list[RebalanceEvent] = []
+        lp_checkpoint = None
+        if self._lp_book is not None:
+            lp_checkpoint = self._lp_book.checkpoint()
+            lp_state, lp_events = self._lp_book.step(
+                v3_snapshot,
+                center_price=compare_mid,
+                kill_switch_active=self._kill_switch.active,
+            )
+
+        opportunities: list[Opportunity] = []
+        if compare_mid is not None:
+            gas_price_gwei = self._settings.gas_price_gwei
+            if v3_snapshot.base_fee_wei is not None:
+                priority_gwei = self._settings.lp_priority_fee_gwei
+                gas_price_gwei = v3_snapshot.base_fee_wei / 1e9 + priority_gwei
+            opportunities = scan_v3_opportunities(
+                cex_mid=compare_mid,
+                snapshot=v3_snapshot,
+                trial_trade_size=self._settings.arbitrage_trial_trade_size,
+                cex_taker_fee_bps=self._settings.taker_fee_bps,
+                gas_limit=self._settings.gas_limit_units,
+                gas_price_gwei=gas_price_gwei,
+                min_edge_bps=self._settings.arbitrage_min_edge_bps,
+                cex_is_stale=cex_is_stale,
+            )
+
+        if self._settings.metrics_enabled:
+            self._record_v3_metrics(v3_snapshot, lp_state, lp_events)
+        return v3_snapshot, lp_state, lp_events, opportunities, lp_checkpoint
+
+    def _record_v3_metrics(
+        self,
+        snapshot: V3PoolSnapshot,
+        lp_state: LpPositionState | None,
+        lp_events: list[RebalanceEvent],
+    ) -> None:
+        prom.V3_SNAPSHOT_STALE.set(1 if snapshot.is_stale else 0)
+        prom.V3_BLOCK_NUMBER.set(snapshot.block_number)
+        prom.V3_POOL_PRICE.set(snapshot.price)
+        if lp_state is not None:
+            prom.LP_IN_RANGE.set(1 if lp_state.status == "in_range" else 0)
+            prom.LP_FEES_QUOTE.set(lp_state.fees_quote)
+            prom.LP_IL_QUOTE.set(lp_state.il_quote)
+            prom.LP_NET_PNL_QUOTE.set(lp_state.net_pnl_quote)
+        prom.LP_REBALANCES.inc(sum(1 for event in lp_events if event.reason != "open"))
 
     def _record_metrics(
         self,

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from sqlalchemy import (
@@ -6,9 +7,19 @@ from sqlalchemy import (
     Float,
     Integer,
     String,
+    Text,
+    inspect,
+    text,
 )
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
+from app.analytics.lp_report import (
+    lp_state_from_dict,
+    lp_state_to_dict,
+    rebalance_from_dict,
+    rebalance_to_dict,
+)
 from app.analytics.performance_report import (
     fill_to_dict,
     opportunity_to_dict,
@@ -29,6 +40,7 @@ from app.models.domain import (
     QuoteSide,
 )
 from app.models.tick_audit import TickAuditBundle
+from app.models.v3 import LpPositionState, RebalanceEvent, V3PoolSnapshot
 from app.storage.database import create_db_engine
 
 
@@ -119,12 +131,177 @@ class OpportunityRow(Base):
     net_edge: Mapped[float] = mapped_column(Float, nullable=False)
     net_edge_bps: Mapped[float] = mapped_column(Float, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    venue: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    fee_tier_bps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    optimal_trade_size: Mapped[float | None] = mapped_column(Float, nullable=True)
+    optimal_net_edge: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class V3PoolSnapshotRow(Base):
+    """One Uniswap V3 pool observation per tick. Big integers are decimal strings."""
+
+    __tablename__ = "v3_pool_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tick_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    pool_address: Mapped[str] = mapped_column(String(42), nullable=False)
+    fee_pips: Mapped[int] = mapped_column(Integer, nullable=False)
+    block_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    block_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sqrt_price_x96: Mapped[str] = mapped_column(String(80), nullable=False)
+    tick: Mapped[int] = mapped_column(Integer, nullable=False)
+    liquidity: Mapped[str] = mapped_column(String(80), nullable=False)
+    fee_growth_global0_x128: Mapped[str] = mapped_column(String(80), nullable=False)
+    fee_growth_global1_x128: Mapped[str] = mapped_column(String(80), nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    base_fee_wei: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    is_stale: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_incomplete: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    data_source: Mapped[str] = mapped_column(String(16), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class LpPositionStateRow(Base):
+    """LP book state per tick: queryable headline columns plus the full JSON state."""
+
+    __tablename__ = "lp_position_states"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tick_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    net_pnl_quote: Mapped[float] = mapped_column(Float, nullable=False)
+    fees_quote: Mapped[float] = mapped_column(Float, nullable=False)
+    il_quote: Mapped[float] = mapped_column(Float, nullable=False)
+    value_quote: Mapped[float] = mapped_column(Float, nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class LpRebalanceRow(Base):
+    __tablename__ = "lp_rebalances"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tick_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    reason: Mapped[str] = mapped_column(String(16), nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+def add_missing_nullable_columns(engine: Engine) -> list[str]:
+    """Idempotently add nullable columns that exist in the models but not in the DB.
+
+    The project uses ``create_all`` without migrations; this keeps databases
+    created before a nullable column was added working. Returns added columns.
+    """
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    added: list[str] = []
+    with engine.begin() as connection:
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                continue
+            present = {column["name"] for column in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in present or not column.nullable:
+                    continue
+                column_type = column.type.compile(dialect=engine.dialect)
+                connection.execute(
+                    text(f'ALTER TABLE {table.name} ADD COLUMN "{column.name}" {column_type}')
+                )
+                added.append(f"{table.name}.{column.name}")
+    return added
 
 
 def create_tables(db_url: str) -> None:
     engine = create_db_engine(db_url)
     Base.metadata.create_all(engine)
+    add_missing_nullable_columns(engine)
     engine.dispose()
+
+
+def _opportunity_row(opportunity: Opportunity, tick_id: str) -> OpportunityRow:
+    return OpportunityRow(
+        tick_id=tick_id,
+        direction=opportunity.direction.value,
+        cex_mid=opportunity.cex_mid,
+        amm_price=opportunity.amm_price,
+        trial_trade_size=opportunity.trial_trade_size,
+        gross_edge=opportunity.gross_edge,
+        cex_fee=opportunity.cex_fee,
+        amm_fee=opportunity.amm_fee,
+        gas_cost=opportunity.gas_cost,
+        slippage_cost=opportunity.slippage_cost,
+        net_edge=opportunity.net_edge,
+        net_edge_bps=opportunity.net_edge_bps,
+        timestamp=opportunity.timestamp,
+        venue=opportunity.venue,
+        fee_tier_bps=opportunity.fee_tier_bps,
+        optimal_trade_size=opportunity.optimal_trade_size,
+        optimal_net_edge=opportunity.optimal_net_edge,
+    )
+
+
+def _opportunity_from_row(row: OpportunityRow) -> Opportunity:
+    return Opportunity(
+        direction=ArbitrageDirection(row.direction),
+        cex_mid=row.cex_mid,
+        amm_price=row.amm_price,
+        trial_trade_size=row.trial_trade_size,
+        gross_edge=row.gross_edge,
+        cex_fee=row.cex_fee,
+        amm_fee=row.amm_fee,
+        gas_cost=row.gas_cost,
+        slippage_cost=row.slippage_cost,
+        net_edge=row.net_edge,
+        net_edge_bps=row.net_edge_bps,
+        timestamp=row.timestamp,
+        tick_id=row.tick_id,
+        venue=row.venue or "uniswap_v2",
+        fee_tier_bps=row.fee_tier_bps,
+        optimal_trade_size=row.optimal_trade_size,
+        optimal_net_edge=row.optimal_net_edge,
+    )
+
+
+def _v3_snapshot_row(snapshot: V3PoolSnapshot, tick_id: str) -> V3PoolSnapshotRow:
+    return V3PoolSnapshotRow(
+        tick_id=tick_id,
+        pool_address=snapshot.metadata.pool_address,
+        fee_pips=snapshot.metadata.fee_pips,
+        block_number=snapshot.block_number,
+        block_timestamp=snapshot.block_timestamp,
+        sqrt_price_x96=str(snapshot.sqrt_price_x96),
+        tick=snapshot.tick,
+        liquidity=str(snapshot.liquidity),
+        fee_growth_global0_x128=str(snapshot.fee_growth_global0_x128),
+        fee_growth_global1_x128=str(snapshot.fee_growth_global1_x128),
+        price=snapshot.price,
+        base_fee_wei=None if snapshot.base_fee_wei is None else str(snapshot.base_fee_wei),
+        is_stale=snapshot.is_stale,
+        is_incomplete=snapshot.is_incomplete,
+        data_source=snapshot.data_source,
+        timestamp=snapshot.block_timestamp,
+    )
+
+
+def _v3_row_to_dict(row: V3PoolSnapshotRow) -> dict:
+    return {
+        "tick_id": row.tick_id,
+        "pool_address": row.pool_address,
+        "fee_pips": row.fee_pips,
+        "block_number": row.block_number,
+        "block_timestamp": row.block_timestamp.isoformat(),
+        "sqrt_price_x96": row.sqrt_price_x96,
+        "tick": row.tick,
+        "liquidity": row.liquidity,
+        "fee_growth_global0_x128": row.fee_growth_global0_x128,
+        "fee_growth_global1_x128": row.fee_growth_global1_x128,
+        "price": row.price,
+        "base_fee_wei": row.base_fee_wei or "",
+        "is_stale": "true" if row.is_stale else "false",
+        "is_incomplete": row.is_incomplete,
+        "data_source": row.data_source,
+    }
 
 
 def _best_price(levels: tuple[OrderBookLevel, ...]) -> float:
@@ -150,6 +327,7 @@ class Repository:
 
     def initialize(self) -> None:
         Base.metadata.create_all(self._engine)
+        add_missing_nullable_columns(self._engine)
 
     def close(self) -> None:
         self._engine.dispose()
@@ -269,6 +447,9 @@ class Repository:
         position: Position,
         pnl: PnLSnapshot,
         opportunities: list[Opportunity] | None = None,
+        v3_snapshot: V3PoolSnapshot | None = None,
+        lp_state: LpPositionState | None = None,
+        lp_rebalances: list[RebalanceEvent] | None = None,
     ) -> None:
         """Persist all tick artifacts in a single database transaction."""
         with self._session() as session:
@@ -336,21 +517,29 @@ class Repository:
                 )
             )
             for opportunity in opportunities or []:
+                session.add(_opportunity_row(opportunity, tick_id))
+            if v3_snapshot is not None:
+                session.add(_v3_snapshot_row(v3_snapshot, tick_id))
+            if lp_state is not None:
                 session.add(
-                    OpportunityRow(
+                    LpPositionStateRow(
                         tick_id=tick_id,
-                        direction=opportunity.direction.value,
-                        cex_mid=opportunity.cex_mid,
-                        amm_price=opportunity.amm_price,
-                        trial_trade_size=opportunity.trial_trade_size,
-                        gross_edge=opportunity.gross_edge,
-                        cex_fee=opportunity.cex_fee,
-                        amm_fee=opportunity.amm_fee,
-                        gas_cost=opportunity.gas_cost,
-                        slippage_cost=opportunity.slippage_cost,
-                        net_edge=opportunity.net_edge,
-                        net_edge_bps=opportunity.net_edge_bps,
-                        timestamp=opportunity.timestamp,
+                        status=lp_state.status,
+                        net_pnl_quote=lp_state.net_pnl_quote,
+                        fees_quote=lp_state.fees_quote,
+                        il_quote=lp_state.il_quote,
+                        value_quote=lp_state.value_quote,
+                        payload=json.dumps(lp_state_to_dict(lp_state)),
+                        timestamp=lp_state.timestamp,
+                    )
+                )
+            for event in lp_rebalances or []:
+                session.add(
+                    LpRebalanceRow(
+                        tick_id=tick_id,
+                        reason=event.reason,
+                        payload=json.dumps(rebalance_to_dict(event)),
+                        timestamp=event.timestamp,
                     )
                 )
             session.commit()
@@ -362,24 +551,7 @@ class Repository:
         tick_id: str | None = None,
     ) -> None:
         resolved_tick_id = tick_id or new_tick_id()
-        rows = [
-            OpportunityRow(
-                tick_id=resolved_tick_id,
-                direction=opportunity.direction.value,
-                cex_mid=opportunity.cex_mid,
-                amm_price=opportunity.amm_price,
-                trial_trade_size=opportunity.trial_trade_size,
-                gross_edge=opportunity.gross_edge,
-                cex_fee=opportunity.cex_fee,
-                amm_fee=opportunity.amm_fee,
-                gas_cost=opportunity.gas_cost,
-                slippage_cost=opportunity.slippage_cost,
-                net_edge=opportunity.net_edge,
-                net_edge_bps=opportunity.net_edge_bps,
-                timestamp=opportunity.timestamp,
-            )
-            for opportunity in opportunities
-        ]
+        rows = [_opportunity_row(opportunity, resolved_tick_id) for opportunity in opportunities]
         with self._session() as session:
             session.add_all(rows)
             session.commit()
@@ -392,24 +564,7 @@ class Repository:
                 .limit(limit)
                 .all()
             )
-            return [
-                Opportunity(
-                    direction=ArbitrageDirection(row.direction),
-                    cex_mid=row.cex_mid,
-                    amm_price=row.amm_price,
-                    trial_trade_size=row.trial_trade_size,
-                    gross_edge=row.gross_edge,
-                    cex_fee=row.cex_fee,
-                    amm_fee=row.amm_fee,
-                    gas_cost=row.gas_cost,
-                    slippage_cost=row.slippage_cost,
-                    net_edge=row.net_edge,
-                    net_edge_bps=row.net_edge_bps,
-                    timestamp=row.timestamp,
-                    tick_id=row.tick_id,
-                )
-                for row in rows
-            ]
+            return [_opportunity_from_row(row) for row in rows]
 
     def get_latest_fills(self, limit: int = 20) -> list[Fill]:
         with self._session() as session:
@@ -473,6 +628,17 @@ class Repository:
                 .filter(OpportunityRow.tick_id == tick_id)
                 .all()
             )
+            v3_rows = (
+                session.query(V3PoolSnapshotRow).filter(V3PoolSnapshotRow.tick_id == tick_id).all()
+            )
+            lp_rows = (
+                session.query(LpPositionStateRow)
+                .filter(LpPositionStateRow.tick_id == tick_id)
+                .all()
+            )
+            rebalance_rows = (
+                session.query(LpRebalanceRow).filter(LpRebalanceRow.tick_id == tick_id).all()
+            )
 
         if not any(
             [
@@ -482,6 +648,8 @@ class Repository:
                 position_rows,
                 pnl_rows,
                 opportunity_rows,
+                v3_rows,
+                lp_rows,
             ]
         ):
             return None
@@ -534,24 +702,7 @@ class Repository:
             )
             for row in pnl_rows
         ]
-        opportunities = [
-            Opportunity(
-                direction=ArbitrageDirection(row.direction),
-                cex_mid=row.cex_mid,
-                amm_price=row.amm_price,
-                trial_trade_size=row.trial_trade_size,
-                gross_edge=row.gross_edge,
-                cex_fee=row.cex_fee,
-                amm_fee=row.amm_fee,
-                gas_cost=row.gas_cost,
-                slippage_cost=row.slippage_cost,
-                net_edge=row.net_edge,
-                net_edge_bps=row.net_edge_bps,
-                timestamp=row.timestamp,
-                tick_id=row.tick_id,
-            )
-            for row in opportunity_rows
-        ]
+        opportunities = [_opportunity_from_row(row) for row in opportunity_rows]
 
         return TickAuditBundle(
             tick_id=tick_id,
@@ -573,6 +724,9 @@ class Repository:
             positions=[position_to_dict(position) for position in positions],
             pnl_snapshots=[pnl_history_point(pnl) for pnl in pnl_snapshots],
             opportunities=[opportunity_to_dict(opportunity) for opportunity in opportunities],
+            v3_pool_snapshots=[_v3_row_to_dict(row) for row in v3_rows],
+            lp_positions=[json.loads(row.payload) for row in lp_rows],
+            lp_rebalances=[json.loads(row.payload) for row in rebalance_rows],
         )
 
     def load_orderbook_snapshots(
@@ -617,6 +771,107 @@ class Repository:
                 )
             )
         return snapshots
+
+    def get_latest_lp_state(self) -> LpPositionState | None:
+        with self._session() as session:
+            row = session.query(LpPositionStateRow).order_by(LpPositionStateRow.id.desc()).first()
+        return lp_state_from_dict(json.loads(row.payload)) if row else None
+
+    def get_lp_history(self, limit: int = 200) -> list[LpPositionState]:
+        with self._session() as session:
+            rows = (
+                session.query(LpPositionStateRow)
+                .order_by(LpPositionStateRow.id.desc())
+                .limit(limit)
+                .all()
+            )
+        return [lp_state_from_dict(json.loads(row.payload)) for row in reversed(rows)]
+
+    def get_lp_rebalances(self, limit: int = 20) -> list[RebalanceEvent]:
+        with self._session() as session:
+            rows = (
+                session.query(LpRebalanceRow).order_by(LpRebalanceRow.id.desc()).limit(limit).all()
+            )
+        return [rebalance_from_dict(json.loads(row.payload)) for row in rows]
+
+    def get_lp_state_window(
+        self, from_timestamp: datetime | None, to_timestamp: datetime | None
+    ) -> tuple[LpPositionState | None, LpPositionState | None]:
+        """First and last LP state inside [from, to]."""
+        with self._session() as session:
+            query = session.query(LpPositionStateRow)
+            if from_timestamp is not None:
+                query = query.filter(LpPositionStateRow.timestamp >= from_timestamp)
+            if to_timestamp is not None:
+                query = query.filter(LpPositionStateRow.timestamp <= to_timestamp)
+            first = query.order_by(LpPositionStateRow.id.asc()).first()
+            last = query.order_by(LpPositionStateRow.id.desc()).first()
+        return (
+            lp_state_from_dict(json.loads(first.payload)) if first else None,
+            lp_state_from_dict(json.loads(last.payload)) if last else None,
+        )
+
+    def get_pnl_window(
+        self, from_timestamp: datetime | None, to_timestamp: datetime | None
+    ) -> tuple[PnLSnapshot | None, PnLSnapshot | None]:
+        """First and last CEX PnL snapshot inside [from, to]."""
+        with self._session() as session:
+            query = session.query(PnLSnapshotRow)
+            if from_timestamp is not None:
+                query = query.filter(PnLSnapshotRow.timestamp >= from_timestamp)
+            if to_timestamp is not None:
+                query = query.filter(PnLSnapshotRow.timestamp <= to_timestamp)
+            rows = [
+                query.order_by(PnLSnapshotRow.id.asc()).first(),
+                query.order_by(PnLSnapshotRow.id.desc()).first(),
+            ]
+        snapshots = [
+            PnLSnapshot(
+                symbol=row.symbol,
+                realized_pnl=row.realized_pnl,
+                unrealized_pnl=row.unrealized_pnl,
+                total_fees=row.total_fees,
+                total_pnl=row.total_pnl,
+                timestamp=row.timestamp,
+                tick_id=row.tick_id,
+            )
+            if row
+            else None
+            for row in rows
+        ]
+        return snapshots[0], snapshots[1]
+
+    def load_v3_observations(
+        self,
+        *,
+        pool_address: str | None = None,
+        from_timestamp: datetime | None = None,
+        to_timestamp: datetime | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """Persisted live V3 snapshots as observation rows (same shape as the CSV fixture)."""
+        with self._session() as session:
+            query = session.query(V3PoolSnapshotRow).filter(
+                V3PoolSnapshotRow.data_source == "live"
+            )
+            if pool_address is not None:
+                query = query.filter(V3PoolSnapshotRow.pool_address == pool_address)
+            if from_timestamp is not None:
+                query = query.filter(V3PoolSnapshotRow.block_timestamp >= from_timestamp)
+            if to_timestamp is not None:
+                query = query.filter(V3PoolSnapshotRow.block_timestamp <= to_timestamp)
+            query = query.order_by(V3PoolSnapshotRow.id.asc())
+            if limit is not None:
+                query = query.limit(limit)
+            rows = query.all()
+        observations: list[dict] = []
+        last_block = None
+        for row in rows:
+            if row.block_number == last_block:
+                continue  # several loop ticks can land in the same block
+            last_block = row.block_number
+            observations.append(_v3_row_to_dict(row))
+        return observations
 
     def _session(self) -> Session:
         return self._session_factory()

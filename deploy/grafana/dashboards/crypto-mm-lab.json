@@ -62,6 +62,42 @@
       ],
       "title": "Market & Opportunities",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 6,
+      "targets": [
+        {"expr": "mm_lp_net_pnl_quote", "legendFormat": "LP net PnL", "refId": "A"},
+        {"expr": "mm_lp_fees_quote", "legendFormat": "LP fees", "refId": "B"},
+        {"expr": "mm_lp_il_quote", "legendFormat": "Impermanent loss", "refId": "C"}
+      ],
+      "title": "V3 LP PnL breakdown",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "id": 7,
+      "targets": [
+        {"expr": "mm_v3_pool_price", "legendFormat": "V3 pool price", "refId": "A"},
+        {"expr": "mm_lp_in_range", "legendFormat": "LP in range (1/0)", "refId": "B"}
+      ],
+      "title": "V3 pool & LP range status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "id": 8,
+      "targets": [
+        {"expr": "rate(mm_v3_snapshot_failures_total[5m])", "legendFormat": "V3 failures/s", "refId": "A"},
+        {"expr": "mm_v3_snapshot_stale", "legendFormat": "V3 stale (1/0)", "refId": "B"},
+        {"expr": "increase(mm_lp_rebalances_total[1h])", "legendFormat": "Rebalances/h", "refId": "C"}
+      ],
+      "title": "V3 data health & rebalances",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",

@@ -38,3 +38,8 @@ services:
         generateValue: true
       - key: FIXTURE_FALLBACK_ENABLED
         value: "true"
+      # Uniswap V3 reader + paper LP book on the keyless public RPC (no API key needed)
+      - key: V3_ENABLED
+        value: "true"
+      - key: LP_ENABLED
+        value: "true"

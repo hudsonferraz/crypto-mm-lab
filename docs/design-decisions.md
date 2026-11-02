@@ -215,7 +215,72 @@ Constant-product pool math (`x * y = k`). The web3 adapter reads `getReserves()`
 Does not represent modern V3 liquidity shapes.
 
 **Revisit when**  
-Tick-level or concentrated-liquidity modeling is required.
+Tick-level or concentrated-liquidity modeling is required. *(Revisited in feature 002: Uniswap V3 was added alongside V2; see the sections below.)*
+
+---
+
+## Exact Uniswap V3 math, verified against QuoterV2
+
+**Context**  
+A V3 market-making comparison is only credible if swap and liquidity math match the protocol. Floating-point approximations drift on multi-tick swaps.
+
+**Decision**  
+Port `FullMath`, `TickMath`, `SqrtPriceMath`, `SwapMath`, `TickBitmap`, `Tick.getFeeGrowthInside`, and the `UniswapV3Pool.swap` loop to pure Python integers (`app/market_data/uniswap_v3/`). The simulator stops at every bitmap word boundary as the pool does, because each stop is a separately rounded `computeSwapStep`. `scripts/verify_v3_quotes.py` compares against Uniswap's on-chain QuoterV2 at the same block; the recorded vectors (`tests/fixtures/v3_quote_vectors.json`) make that check an offline CI test with **zero wei of tolerance**.
+
+**Trade-off**  
+More code than a float approximation or a third-party SDK, but correctness is provable and the dependency surface stays unchanged.
+
+**Revisit when**  
+Uniswap V4 hooks or other AMM curves are in scope.
+
+---
+
+## Block-pinned reads through Multicall3
+
+**Context**  
+Pool state read across several RPC calls can straddle blocks (price from block N, liquidity from N+1), which silently breaks exact math. The free public endpoint also rate-limits chatty clients.
+
+**Decision**  
+One `Multicall3.tryBlockAndAggregate` `eth_call` per loop returns slot0, liquidity, fee growth, the LP bound ticks, basefee, and the block timestamp atomically with the block number. The tick window (bitmap words + initialized ticks) refreshes every `V3_WINDOW_REFRESH_TICKS` loops, pinned to that same block. Quotes report `exact: true` only when the window and state come from the same block.
+
+**Trade-off**  
+Between window refreshes, quotes use slightly older `liquidityNet` values and are labeled approximate.
+
+**Revisit when**  
+A websocket `newHeads` subscription (free tiers offer it) justifies refreshing per block.
+
+---
+
+## LP fee accounting: exact when possible, labeled when not
+
+**Context**  
+A paper position does not exist on-chain, so the pool does not track its `feeGrowthOutside` for range bounds.
+
+**Decision**  
+When both range bounds are ticks already initialized on-chain, fees use the protocol formula (`feeGrowthInside` delta × liquidity / 2¹²⁸) from the bound ticks read in the same multicall. The strategy prefers such ticks (`LP_PREFER_INITIALIZED_TICKS`). Otherwise, or when a bound tick was re-initialized between reads, accrual falls back to global fee growth weighted by in-range status. Each interval is labeled `exact` or `approximate`. Backtests use the approximate mode (recorded observations carry only global counters).
+
+**Trade-off**  
+The approximate mode misattributes fees only for intervals in which price crosses a bound, and it is labeled rather than hidden.
+
+---
+
+## Small-position assumption and range centering
+
+**Decision**  
+The paper LP position is assumed small relative to pool liquidity: it neither dilutes fee growth nor moves price. Ranges are centered on the CEX compare mid, unless a CEX-centered range would not contain the current pool price (USDT/USDC basis or a dislocated CEX), in which case the pool price is the center. An out-of-range range earns nothing and would be rebalanced on the very next tick.
+
+**PnL decomposition**  
+`value − capital = fees + IL + HODL revaluation − swap cost − gas`, checked on every observation with `value` computed independently from token balances. The residual is persisted (`reconciliation_error_quote`) and tested to stay below 0.01% of capital.
+
+---
+
+## Zero-cost data sources
+
+**Context**  
+The lab is a portfolio project with a hard no-spend constraint.
+
+**Decision**  
+All live reads use the keyless public RPC that V2 already used. API keys are optional and only improve reliability. The one feature that needs history (`scripts/backfill_v3.py`) asks for a free-tier archive URL and fails with a clear message on the public node, which serves only about 128 blocks. RPC URLs are treated as secrets: never returned by an endpoint (`/config` exposes only `rpc_provider: public|custom`) and never logged.
 
 ---
 

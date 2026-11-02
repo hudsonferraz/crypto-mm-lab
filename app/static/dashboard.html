@@ -86,6 +86,30 @@
     .mono { font-family: ui-monospace, monospace; font-size: 0.85rem; }
     .muted { color: #9aa0a6; font-size: 0.9rem; }
     .links a { color: #93c5fd; }
+    .chart-wrap { position: relative; }
+    #liquidity-chart { display: block; width: 100%; height: 200px; }
+    .chart-tooltip {
+      display: none; position: absolute; pointer-events: none; z-index: 2;
+      background: #0f1115; border: 1px solid #3c4043; border-radius: 6px;
+      padding: 0.4rem 0.6rem; font-size: 0.8rem; color: #e8eaed; min-width: 170px;
+    }
+    .chart-legend { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.5rem; font-size: 0.85rem; }
+    .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.35rem; vertical-align: middle; }
+    .swatch-line { border-left: 2px dashed #e8eaed; width: 0; height: 12px; border-radius: 0; }
+    .range-track { display: none; position: relative; height: 18px; margin: 0.75rem 0 0.25rem; background: #0f1115; border-radius: 4px; }
+    .range-band { position: absolute; top: 0; bottom: 0; background: rgba(217, 119, 6, 0.35); border: 2px solid #d97706; border-radius: 4px; }
+    .range-marker { position: absolute; top: -4px; bottom: -4px; width: 2px; background: #e8eaed; }
+    .quote-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .quote-form select, .quote-form input {
+      background: #1a1d24; color: #e8eaed; border: 1px solid #3c4043; border-radius: 6px; padding: 0.45rem 0.6rem;
+    }
+    .quote-form button { margin-top: 0; }
+    details summary { cursor: pointer; margin-top: 0.5rem; }
+    @media (max-width: 640px) {
+      body { padding: 0.75rem; }
+      .tabs { flex-wrap: wrap; }
+      table { display: block; overflow-x: auto; }
+    }
     .note {
       background: #111827;
       border-left: 3px solid #6384ff;
@@ -117,6 +141,7 @@
     <button class="tab active" data-tab="live" type="button">Live MM</button>
     <button class="tab" data-tab="opportunities" type="button">Opportunities</button>
     <button class="tab" data-tab="research" type="button">Research</button>
+    <button class="tab" data-tab="lp" type="button">On-chain LP</button>
   </div>
 
   <section id="panel-live" class="panel active">
@@ -176,9 +201,9 @@
     <h2>Latest opportunities</h2>
     <table>
       <thead>
-        <tr><th>Direction</th><th>Net edge (bps)</th><th>Net edge ($)</th><th>Size</th></tr>
+        <tr><th>Venue</th><th>Direction</th><th>Net edge (bps)</th><th>Net edge ($)</th><th>Size</th><th>Best size → edge</th></tr>
       </thead>
-      <tbody id="opportunities-body"><tr><td colspan="4">No opportunities yet</td></tr></tbody>
+      <tbody id="opportunities-body"><tr><td colspan="6">No opportunities yet</td></tr></tbody>
     </table>
   </section>
 
@@ -202,6 +227,86 @@
         <tr><th>Strategy</th><th>Spread</th><th>Fill mode</th><th>Total PnL</th><th>Sharpe</th><th>Fill rate</th></tr>
       </thead>
       <tbody id="sweep-body"><tr><td colspan="6">Not run yet</td></tr></tbody>
+    </table>
+  </section>
+
+  <section id="panel-lp" class="panel">
+    <h2>Uniswap V3 pool (read-only, block-pinned)</h2>
+    <div id="v3-note" class="note">Loading V3 pool...</div>
+    <div class="grid">
+      <div class="card"><div class="label">Pool price (USDC per WETH)</div><div class="value" id="v3-price">-</div></div>
+      <div class="card"><div class="label">Tick / fee tier</div><div class="value" id="v3-tick">-</div></div>
+      <div class="card"><div class="label">In-range liquidity</div><div class="value mono" id="v3-liquidity">-</div></div>
+      <div class="card"><div class="label">Block / data source</div><div class="value" id="v3-block">-</div></div>
+    </div>
+
+    <h2>Liquidity around the price</h2>
+    <div class="card chart-card">
+      <div class="chart-legend muted">
+        <span><span class="swatch" style="background:#3b82f6"></span>Active liquidity per bucket</span>
+        <span><span class="swatch" style="background:#d97706"></span>Paper LP range</span>
+        <span><span class="swatch swatch-line"></span>Pool price</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="liquidity-chart" height="200" role="img" aria-label="Active liquidity by price bucket"></canvas>
+        <div id="liquidity-tooltip" class="chart-tooltip"></div>
+      </div>
+      <div class="label chart-empty" id="liquidity-empty">No tick window loaded yet</div>
+      <details class="muted"><summary>Show data table</summary>
+        <table><thead><tr><th>Price from</th><th>Price to</th><th>Liquidity</th></tr></thead>
+          <tbody id="liquidity-table"></tbody></table>
+      </details>
+    </div>
+
+    <h2>Paper LP position</h2>
+    <div class="range-bar card">
+      <div class="label" id="lp-status">-</div>
+      <div class="range-track" id="range-track">
+        <div class="range-band" id="range-band"></div>
+        <div class="range-marker" id="range-marker" title="Pool price"></div>
+      </div>
+      <div class="chart-meta"><span id="range-lower">-</span><span id="range-upper">-</span></div>
+    </div>
+    <div class="grid">
+      <div class="card"><div class="label">Fees earned</div><div class="value" id="lp-fees">-</div></div>
+      <div class="card"><div class="label">Impermanent loss</div><div class="value" id="lp-il">-</div></div>
+      <div class="card"><div class="label">HODL revaluation</div><div class="value" id="lp-hodl">-</div></div>
+      <div class="card"><div class="label">Swap + gas costs</div><div class="value" id="lp-costs">-</div></div>
+      <div class="card"><div class="label">Net PnL / return</div><div class="value" id="lp-net">-</div></div>
+      <div class="card"><div class="label">Rebalances / time in range</div><div class="value" id="lp-rebalances">-</div></div>
+    </div>
+    <p class="muted" id="lp-accounting">-</p>
+
+    <h2>CEX market making vs on-chain LP (same window)</h2>
+    <table>
+      <thead><tr><th>Book</th><th>Revenue</th><th>Costs</th><th>Inventory / IL</th><th>Net PnL</th><th>Return</th></tr></thead>
+      <tbody id="books-body"><tr><td colspan="6">Waiting for both books</td></tr></tbody>
+    </table>
+    <div id="books-notes" class="muted"></div>
+
+    <h2>Exact swap quote</h2>
+    <div class="quote-form">
+      <select id="quote-side">
+        <option value="sell_base">Sell WETH for USDC</option>
+        <option value="buy_base">Buy WETH with USDC</option>
+      </select>
+      <input id="quote-amount" type="number" min="0" step="any" value="10" aria-label="Amount in" />
+      <button id="quote-btn" type="button">Quote</button>
+    </div>
+    <div id="quote-result" class="muted">Simulated with the exact V3 integer math (matches QuoterV2 when the window is current).</div>
+
+    <h2>Recent rebalances</h2>
+    <table>
+      <thead><tr><th>Time</th><th>Reason</th><th>New range (ticks)</th><th>Swap cost</th><th>Gas</th><th>Realized IL</th></tr></thead>
+      <tbody id="rebalances-body"><tr><td colspan="6">No rebalances yet</td></tr></tbody>
+    </table>
+
+    <h2>LP backtest (recorded mainnet observations)</h2>
+    <p class="muted">Replays <span class="mono">tests/fixtures/v3_pool_observations.csv</span> across range widths.</p>
+    <button id="run-lp-backtest-btn" type="button">Run LP sweep</button>
+    <table>
+      <thead><tr><th>Width</th><th>Threshold</th><th>Rebalances</th><th>In range</th><th>Fees</th><th>IL</th><th>Net</th></tr></thead>
+      <tbody id="lp-backtest-body"><tr><td colspan="7">Not run yet</td></tr></tbody>
     </table>
   </section>
 
@@ -247,6 +352,8 @@
         `spread: ${config.quote_spread_bps} bps`,
         `maker fee: ${config.maker_fee_bps} bps`,
         `DEX: ${config.dex_enabled ? "on" : "off"}`,
+        `V3 LP: ${config.lp_enabled ? `on (${config.lp_range_width_bps} bps)` : "off"}`,
+        `RPC: ${config.rpc_provider || "-"}`,
         `market data: ${status.market_data_mode || config.market_data_mode}`,
       ];
       if (status.market_data_fallback) chips.push("data: fixture replay");
@@ -282,21 +389,23 @@
       const note = document.getElementById("dex-note");
       if (!payload.dex_enabled) {
         note.textContent = `DEX disabled (${payload.disabled_reason || "DEX_ENABLED=false"}). MM book is ${payload.mm_symbol}; compare symbol would be ${payload.cex_compare_symbol}.`;
-        body.innerHTML = "<tr><td colspan='4'>DEX disabled — no opportunities</td></tr>";
+        body.innerHTML = "<tr><td colspan='6'>DEX disabled — no opportunities</td></tr>";
         return;
       }
       note.textContent = `${payload.quote_asset_basis_note || ""} MM=${payload.mm_symbol}, compare=${payload.cex_compare_symbol}.`;
       const items = payload.latest_tick?.length ? payload.latest_tick : payload.recent;
       if (!items || items.length === 0) {
-        body.innerHTML = "<tr><td colspan='4'>No opportunities yet</td></tr>";
+        body.innerHTML = "<tr><td colspan='6'>No opportunities yet</td></tr>";
         return;
       }
       body.innerHTML = items.map((item) => `
         <tr>
+          <td>${item.venue || "uniswap_v2"}${item.fee_tier_bps ? ` (${item.fee_tier_bps} bps)` : ""}</td>
           <td>${item.direction}</td>
           <td class="numeric">${fmt(item.net_edge_bps, 2)}</td>
           <td class="numeric">${fmt(item.net_edge, 4)}</td>
           <td class="numeric">${fmt(item.trial_trade_size, 4)}</td>
+          <td class="numeric">${item.optimal_trade_size ? `${fmt(item.optimal_trade_size, 3)} → ${fmt(item.optimal_net_edge, 2)}` : "-"}</td>
         </tr>
       `).join("");
     }
@@ -472,12 +581,296 @@
       }
     }
 
+    const usd = (value, digits = 2) =>
+      value === null || value === undefined ? "-" : `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+    const signedUsd = (value) =>
+      value === null || value === undefined ? "-" : `${Number(value) < 0 ? "−" : "+"}${usd(Math.abs(value))}`;
+    const compactInt = (raw) => {
+      if (!raw) return "-";
+      const n = Number(raw);
+      return n >= 1e15 ? `${(n / 1e18).toFixed(3)}e18` : n.toLocaleString();
+    };
+    let lpPoolCache = null;
+    let lpPositionCache = null;
+
+    function renderLiquidityChart(pool, position) {
+      const canvas = document.getElementById("liquidity-chart");
+      const empty = document.getElementById("liquidity-empty");
+      const buckets = pool?.window?.distribution || [];
+      if (!buckets.length) {
+        canvas.style.display = "none";
+        empty.style.display = "block";
+        return;
+      }
+      canvas.style.display = "block";
+      empty.style.display = "none";
+      const width = canvas.clientWidth || canvas.parentElement.clientWidth;
+      const height = 200;
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = width * ratio;
+      canvas.height = height * ratio;
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      const pad = { left: 8, right: 8, top: 12, bottom: 22 };
+      const plotW = width - pad.left - pad.right;
+      const plotH = height - pad.top - pad.bottom;
+      const values = buckets.map((b) => Number(b.liquidity));
+      const maxValue = Math.max(...values) || 1;
+      const lo = buckets[0].price_lower;
+      const hi = buckets[buckets.length - 1].price_upper;
+      const xFor = (price) => pad.left + ((price - lo) / (hi - lo)) * plotW;
+      const slot = plotW / buckets.length;
+      const barW = Math.max(slot - 2, 1); // 2px surface gap between bars
+
+      // LP range band behind the bars
+      if (position?.price_lower && position?.price_upper) {
+        const x1 = Math.max(xFor(position.price_lower), pad.left);
+        const x2 = Math.min(xFor(position.price_upper), pad.left + plotW);
+        if (x2 > x1) {
+          ctx.fillStyle = "rgba(217, 119, 6, 0.18)";
+          ctx.fillRect(x1, pad.top, x2 - x1, plotH);
+          ctx.strokeStyle = "#d97706";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x1, pad.top, x2 - x1, plotH);
+        }
+      }
+      // bars: thin, rounded data-end, anchored to the baseline
+      ctx.fillStyle = "#3b82f6";
+      buckets.forEach((bucket, i) => {
+        const h = (values[i] / maxValue) * plotH;
+        if (h <= 0) return;
+        const x = pad.left + i * slot + 1;
+        const y = pad.top + plotH - h;
+        const r = Math.min(4, barW / 2, h);
+        ctx.beginPath();
+        ctx.moveTo(x, pad.top + plotH);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.lineTo(x + barW - r, y);
+        ctx.quadraticCurveTo(x + barW, y, x + barW, y + r);
+        ctx.lineTo(x + barW, pad.top + plotH);
+        ctx.closePath();
+        ctx.fill();
+      });
+      // baseline + pool price line
+      ctx.strokeStyle = "#2a2f3a";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(pad.left, pad.top + plotH + 0.5);
+      ctx.lineTo(pad.left + plotW, pad.top + plotH + 0.5);
+      ctx.stroke();
+      const px = xFor(pool.price);
+      ctx.strokeStyle = "#e8eaed";
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(px, pad.top);
+      ctx.lineTo(px, pad.top + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#9aa0a6";
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(fmt(lo, 0), pad.left, height - 6);
+      ctx.textAlign = "right";
+      ctx.fillText(fmt(hi, 0), pad.left + plotW, height - 6);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#e8eaed";
+      ctx.fillText(`price ${fmt(pool.price, 2)}`, Math.min(Math.max(px, 60), width - 60), height - 6);
+
+      canvas.onmousemove = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const index = Math.floor((event.clientX - rect.left - pad.left) / slot);
+        const tooltip = document.getElementById("liquidity-tooltip");
+        if (index < 0 || index >= buckets.length) {
+          tooltip.style.display = "none";
+          return;
+        }
+        const b = buckets[index];
+        tooltip.style.display = "block";
+        tooltip.style.left = `${Math.min(event.clientX - rect.left + 12, width - 190)}px`;
+        tooltip.style.top = "8px";
+        tooltip.innerHTML = `<strong>${fmt(b.price_lower, 2)} – ${fmt(b.price_upper, 2)}</strong><br>` +
+          `liquidity ${compactInt(b.liquidity)}<br>ticks ${b.tick_lower}…${b.tick_upper}`;
+      };
+      canvas.onmouseleave = () => {
+        document.getElementById("liquidity-tooltip").style.display = "none";
+      };
+      document.getElementById("liquidity-table").innerHTML = buckets
+        .filter((b) => Number(b.liquidity) > 0)
+        .map((b) => `<tr><td class="numeric">${fmt(b.price_lower, 2)}</td><td class="numeric">${fmt(b.price_upper, 2)}</td><td class="numeric mono">${compactInt(b.liquidity)}</td></tr>`)
+        .join("");
+    }
+
+    function renderPool(pool) {
+      const note = document.getElementById("v3-note");
+      if (pool.disabled_reason) {
+        note.textContent = `V3 disabled (${pool.disabled_reason}).`;
+        return;
+      }
+      if (pool.price === undefined) {
+        note.textContent = pool.status_note || "Waiting for first V3 snapshot";
+        return;
+      }
+      const flags = [];
+      if (pool.is_stale) flags.push("STALE (last good snapshot reused)");
+      if (pool.is_incomplete) flags.push("incomplete read");
+      if (pool.data_source === "fixture") flags.push("FIXTURE REPLAY of recorded mainnet data");
+      note.textContent = `${pool.pool_address} · window block ${pool.window?.block_number ?? "-"}` +
+        `${pool.window?.is_current ? " (current → quotes exact)" : " (older → quotes approximate)"}` +
+        `${flags.length ? " · " + flags.join(" · ") : ""}${pool.status_note ? " · " + pool.status_note : ""}`;
+      document.getElementById("v3-price").textContent = fmt(pool.price, 2);
+      document.getElementById("v3-tick").textContent = `${pool.tick} · ${pool.fee_tier_bps} bps`;
+      document.getElementById("v3-liquidity").textContent = compactInt(pool.liquidity);
+      document.getElementById("v3-block").textContent = `${pool.block_number} · ${pool.data_source}`;
+    }
+
+    function renderLpPosition(lp) {
+      const status = document.getElementById("lp-status");
+      if (lp.disabled_reason) {
+        status.textContent = `LP book disabled (${lp.disabled_reason})`;
+        return;
+      }
+      const label = {
+        in_range: "IN RANGE — earning fees",
+        out_of_range: "OUT OF RANGE — not earning fees",
+        frozen: "FROZEN — kill switch active",
+        not_opened: "Not opened yet",
+      }[lp.status] || lp.status;
+      status.textContent = `${label}${lp.status_note ? " · " + lp.status_note : ""}`;
+      const track = document.getElementById("range-track");
+      const band = document.getElementById("range-band");
+      const marker = document.getElementById("range-marker");
+      if (lp.price_lower && lp.price_upper && lp.pool_price) {
+        const span = lp.price_upper - lp.price_lower;
+        const lo = lp.price_lower - span;
+        const hi = lp.price_upper + span;
+        const pct = (p) => `${Math.min(Math.max(((p - lo) / (hi - lo)) * 100, 0), 100)}%`;
+        band.style.left = pct(lp.price_lower);
+        band.style.width = `calc(${pct(lp.price_upper)} - ${pct(lp.price_lower)})`;
+        marker.style.left = pct(lp.pool_price);
+        track.style.display = "block";
+        document.getElementById("range-lower").textContent = `lower ${fmt(lp.price_lower, 2)}`;
+        document.getElementById("range-upper").textContent = `upper ${fmt(lp.price_upper, 2)}`;
+      }
+      document.getElementById("lp-fees").textContent = usd(lp.fees_quote, 4);
+      document.getElementById("lp-il").textContent = signedUsd(lp.il_quote);
+      document.getElementById("lp-hodl").textContent = signedUsd(lp.hodl_pnl_quote);
+      document.getElementById("lp-costs").textContent =
+        lp.swap_cost_quote === undefined ? "-" : `${usd(lp.swap_cost_quote)} + ${usd(lp.gas_cost_quote)}`;
+      document.getElementById("lp-net").textContent =
+        lp.net_pnl_quote === undefined ? "-" : `${signedUsd(lp.net_pnl_quote)} · ${fmt(lp.return_on_capital_pct, 3)}%`;
+      document.getElementById("lp-rebalances").textContent =
+        lp.rebalance_count === undefined ? "-" : `${lp.rebalance_count} · ${lp.time_in_range_pct === null ? "-" : fmt(lp.time_in_range_pct, 1) + "%"}`;
+      document.getElementById("lp-accounting").textContent = lp.fee_accounting
+        ? `Capital ${usd(lp.capital_quote, 0)} · fee accounting: ${lp.fee_accounting} · reconciliation error ${fmt(lp.reconciliation_error_quote, 6)} USDC`
+        : "";
+    }
+
+    function renderBooks(books) {
+      const body = document.getElementById("books-body");
+      if (!books?.cex) return;
+      const row = (side) => `
+        <tr>
+          <td>${side.label}</td>
+          <td class="numeric">${signedUsd(side.revenue_quote)}</td>
+          <td class="numeric">${usd(side.costs_quote)}</td>
+          <td class="numeric">${signedUsd(side.inventory_effect_quote)}</td>
+          <td class="numeric">${signedUsd(side.net_pnl_quote)}</td>
+          <td class="numeric">${fmt(side.return_pct, 4)}%</td>
+        </tr>`;
+      body.innerHTML = row(books.cex) + row(books.lp);
+      const winner = { cex: "CEX book ahead", lp: "LP book ahead", tie: "Tie" }[books.winner];
+      document.getElementById("books-notes").innerHTML =
+        `<strong>${winner}</strong> on return on capital. ` + (books.mismatch_notes || []).join(" ");
+    }
+
+    function renderRebalances(items) {
+      const body = document.getElementById("rebalances-body");
+      if (!items?.length) {
+        body.innerHTML = "<tr><td colspan='6'>No rebalances yet</td></tr>";
+        return;
+      }
+      body.innerHTML = items.map((item) => `
+        <tr>
+          <td>${fmtTime(item.timestamp)}</td>
+          <td>${item.reason}</td>
+          <td class="mono">${item.new_tick_lower} → ${item.new_tick_upper}</td>
+          <td class="numeric">${usd(item.swap_cost_quote, 4)}</td>
+          <td class="numeric">${usd(item.gas_cost_quote, 4)}</td>
+          <td class="numeric">${signedUsd(item.realized_il_quote)}</td>
+        </tr>`).join("");
+    }
+
+    async function refreshLp() {
+      try {
+        const [pool, lp, books, rebalances] = await Promise.all([
+          fetchJson("/v3/pool"),
+          fetchJson("/lp/position"),
+          fetchJson("/research/books"),
+          fetchJson("/lp/rebalances?limit=10"),
+        ]);
+        lpPoolCache = pool;
+        lpPositionCache = lp;
+        renderPool(pool);
+        renderLpPosition(lp);
+        renderLiquidityChart(pool, lp);
+        renderBooks(books);
+        renderRebalances(rebalances.items);
+      } catch (error) {
+        document.getElementById("v3-note").textContent = `V3/LP error: ${error.message}`;
+      }
+    }
+
+    document.getElementById("quote-btn").addEventListener("click", async () => {
+      const side = document.getElementById("quote-side").value;
+      const amount = document.getElementById("quote-amount").value;
+      const out = document.getElementById("quote-result");
+      out.textContent = "Quoting…";
+      try {
+        const q = await fetchJson(`/v3/quote?side=${side}&amount=${encodeURIComponent(amount)}`);
+        if (q.disabled_reason) {
+          out.textContent = `V3 disabled (${q.disabled_reason})`;
+          return;
+        }
+        const outUnit = side === "sell_base" ? "USDC" : "WETH";
+        const limit = q.limit_reason ? ` · LIMITED: ${q.limit_reason} (consumed ${fmt(q.amount_in_consumed, 6)})` : "";
+        out.textContent = `Out ${fmt(q.amount_out, 6)} ${outUnit} · exec price ${fmt(q.execution_price, 2)} · ` +
+          `impact ${fmt(q.price_impact_bps, 2)} bps · ticks crossed ${q.ticks_crossed} · ` +
+          `${q.exact ? "exact at block " + q.block_number : "window from block " + q.window_block_number}${limit}`;
+      } catch (error) {
+        out.textContent = `Quote failed: ${error.message}`;
+      }
+    });
+
+    document.getElementById("run-lp-backtest-btn").addEventListener("click", async () => {
+      const body = document.getElementById("lp-backtest-body");
+      body.innerHTML = "<tr><td colspan='7'>Running…</td></tr>";
+      try {
+        const payload = await fetchJson("/research/lp-backtest?widths_bps=20,50,200&thresholds_bps=10,40");
+        body.innerHTML = payload.rows.map((r) => `
+          <tr>
+            <td class="numeric">${r.range_width_bps}</td>
+            <td class="numeric">${r.rebalance_threshold_bps}</td>
+            <td class="numeric">${r.rebalance_count}</td>
+            <td class="numeric">${fmt(r.time_in_range_pct, 1)}%</td>
+            <td class="numeric">${usd(r.fees_quote, 4)}</td>
+            <td class="numeric">${signedUsd(r.il_quote)}</td>
+            <td class="numeric">${signedUsd(r.net_pnl_quote)}</td>
+          </tr>`).join("");
+      } catch (error) {
+        body.innerHTML = `<tr><td colspan='7'>Error: ${error.message}</td></tr>`;
+      }
+    });
+
     document.querySelectorAll(".tab").forEach((tab) => {
       tab.addEventListener("click", () => {
         document.querySelectorAll(".tab").forEach((node) => node.classList.remove("active"));
         document.querySelectorAll(".panel").forEach((node) => node.classList.remove("active"));
         tab.classList.add("active");
         document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
+        if (tab.dataset.tab === "lp") renderLiquidityChart(lpPoolCache, lpPositionCache);
       });
     });
 
@@ -557,8 +950,12 @@
         .catch(() => {});
     });
 
+    window.addEventListener("resize", () => renderLiquidityChart(lpPoolCache, lpPositionCache));
+
     refresh();
+    refreshLp();
     setInterval(refresh, 2000);
+    setInterval(refreshLp, 4000);
   </script>
 </body>
 </html>

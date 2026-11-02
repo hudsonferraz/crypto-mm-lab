@@ -48,6 +48,7 @@ select = ["E", "F", "I", "UP"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["."]
+markers = ["live: hits a real Ethereum RPC endpoint (opt-in via --live)"]
 
 [tool.coverage.run]
 source = ["app"]

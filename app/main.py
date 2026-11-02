@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.lp_routes import router as lp_router
 from app.api.routes import router
 from app.config.settings import get_settings
 from app.services.market_maker_loop import MarketMakerLoop
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(title="crypto-mm-lab", version="0.1.0", lifespan=lifespan)
     app.include_router(router)
+    app.include_router(lp_router)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/")

@@ -59,6 +59,33 @@ class Settings(BaseSettings):
     volatility_window: int = Field(default=20, ge=2)
     volatility_spread_multiplier: float = Field(default=1.0, ge=0)
 
+    # Uniswap V3 pool reader (read-only; free public RPC by default)
+    v3_enabled: bool = True
+    v3_pool_address: str = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"
+    v3_window_words: int = Field(default=2, ge=1, le=8)
+    v3_window_refresh_ticks: int = Field(default=15, ge=1)
+    v3_rpc_timeout_sec: float = Field(default=10.0, gt=0)
+    eth_archive_rpc_url: str | None = None
+
+    # Paper concentrated-liquidity LP book
+    lp_enabled: bool = True
+    lp_capital_quote: float = Field(default=10_000.0, gt=0)
+    lp_range_width_bps: float = Field(default=200.0, gt=0)
+    lp_rebalance_threshold_bps: float = Field(default=80.0, gt=0)
+    lp_rebalance_cooldown_sec: float = Field(default=300.0, ge=0)
+    lp_rebalance_gas_units: int = Field(default=450_000, gt=0)
+    lp_priority_fee_gwei: float = Field(default=0.05, ge=0)
+    lp_prefer_initialized_ticks: bool = True
+    lp_snap_tolerance_spacings: int = Field(default=3, ge=0)
+
+    @property
+    def v3_active(self) -> bool:
+        return self.dex_enabled and self.v3_enabled
+
+    @property
+    def lp_active(self) -> bool:
+        return self.v3_active and self.lp_enabled
+
 
 @lru_cache
 def get_settings() -> Settings:

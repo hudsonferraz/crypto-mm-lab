@@ -17,3 +17,15 @@ OPPORTUNITY_COUNT = Gauge("mm_opportunity_count", "Arbitrage opportunities on la
 KILL_SWITCH_ACTIVE = Gauge("mm_kill_switch_active", "Kill switch state (1=active)")
 STALE_TICKS = Counter("mm_stale_ticks_total", "Ticks skipped due to stale CEX market data")
 MID_PRICE = Gauge("mm_mid_price", "Last CEX mid price")
+
+V3_SNAPSHOT_FAILURES = Counter(
+    "mm_v3_snapshot_failures_total", "Failed or incomplete Uniswap V3 pool refreshes"
+)
+V3_SNAPSHOT_STALE = Gauge("mm_v3_snapshot_stale", "1 if the last V3 snapshot is stale")
+V3_BLOCK_NUMBER = Gauge("mm_v3_block_number", "Block number of the last V3 snapshot")
+V3_POOL_PRICE = Gauge("mm_v3_pool_price", "Uniswap V3 pool price (quote per base)")
+LP_IN_RANGE = Gauge("mm_lp_in_range", "1 if the paper LP position is in range")
+LP_FEES_QUOTE = Gauge("mm_lp_fees_quote", "Cumulative LP fees earned (quote)")
+LP_IL_QUOTE = Gauge("mm_lp_il_quote", "Cumulative impermanent loss (quote, negative = loss)")
+LP_NET_PNL_QUOTE = Gauge("mm_lp_net_pnl_quote", "LP book net PnL (quote)")
+LP_REBALANCES = Counter("mm_lp_rebalances_total", "LP range rebalances")

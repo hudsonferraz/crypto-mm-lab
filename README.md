@@ -5,12 +5,12 @@
 [![CI](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/hudsonferraz/crypto-mm-lab/branch/main/graph/badge.svg)](https://codecov.io/gh/hudsonferraz/crypto-mm-lab)
 
-**Paper market-making research lab** that pulls live CEX order books, simulates quote placement and fills, tracks PnL, compares CEX vs Uniswap V2 prices, and ships with backtest mode plus a Docker observability stack.
+**Paper market-making research lab** that pulls live CEX order books, simulates quote placement and fills, tracks PnL, runs a paper **Uniswap V3 concentrated-liquidity** book against the CEX book, compares CEX vs Uniswap V2/V3 prices, and ships with backtest mode plus a Docker observability stack.
 
 This is an **education and research project** — useful for exploring MM mechanics, execution models, and CEX/DEX comparison. It is **not** production trading infrastructure.
 
-**What it does:** end-to-end MM loop on public Binance data (no API keys).  
-**How it's built:** FastAPI, CCXT, web3.py, SQLAlchemy, Prometheus/Grafana.  
+**What it does:** end-to-end MM loop on public Binance data plus on-chain Uniswap V3 reads (no API keys, zero cost).  
+**How it's built:** FastAPI, CCXT, web3.py + Multicall3, an exact integer port of the Uniswap V3 math, SQLAlchemy, Prometheus/Grafana.  
 **Scope and safety:** paper-only, optional operator token for kill switch, conservative fill models — see [Simulation assumptions](#simulation-assumptions), [interview story](docs/interview-story.md), and [design decisions](docs/design-decisions.md).
 
 ![Demo](docs/images/demo.gif)
@@ -22,7 +22,10 @@ This is an **education and research project** — useful for exploring MM mechan
 - **Execution simulation** — cash-account fills (`full_cross_fill`, `partial_fill`, or toy `latency_prob_fill`), auditable quote/fill IDs and per-tick `tick_id` joins
 - **Risk and inventory controls** — position caps, cumulative cash reservation, kill switch (optional operator token), stale-tick safeguards
 - **Strategy research** — pure MM, inventory skew, volatility-adjusted spread + API/CLI comparison and sweeps
-- **CEX/DEX analytics** — Uniswap V2 pool reader, arbitrage scanner with labeled USDT/USDC basis notes
+- **Uniswap V3, exact to the wei** — block-pinned pool reads via Multicall3 and a pure-integer port of TickMath / SqrtPriceMath / SwapMath / TickBitmap; simulated swaps match Uniswap's on-chain QuoterV2 with zero difference (47/47 sizes, up to 543 initialized ticks crossed), enforced offline in CI
+- **Paper concentrated-liquidity LP book** — ranges around the CEX mid, rebalancing on range exit or drift with cooldown, fees from on-chain fee growth, and a reconciling PnL split: fees, impermanent loss, HODL revaluation, swap cost, gas
+- **CEX MM vs on-chain LP** — side-by-side comparison over the same window, on return on capital
+- **CEX/DEX analytics** — Uniswap V2 pool reader, V2 + V3 arbitrage scanner (exact V3 output, net-edge-maximizing size), labeled USDT/USDC basis notes
 - **Backtesting** — replay from SQLite/Postgres snapshots or CSV fixtures; Sharpe-like ratio, drawdown, fill rate
 - **Observability** — Prometheus `/metrics`, Grafana dashboard, structured logging, `last_error` on `/status`
 - **Loop resilience** — bounded exponential backoff on tick failures, last-error visibility, automatic shutdown after repeated failures
@@ -125,9 +128,27 @@ docker compose up --build
 | `GET /report` | Combined status JSON |
 | `GET /audit/ticks/{tick_id}` | Full tick audit bundle (order book, quotes, fills, position, PnL, opportunities) |
 | `GET /amm` | WETH/USDC pool price vs CEX ETH mid |
-| `GET /opportunities` | Latest arbitrage opportunities |
+| `GET /opportunities` | Latest arbitrage opportunities (V2 + V3, venue, fee tier, optimal size) |
+| `GET /v3/pool` | Uniswap V3 pool state, block, data source, liquidity distribution (`?window=false` to skip) |
+| `GET /v3/quote` | Exact V3 swap quote (`?side=sell_base\|buy_base&amount=10`) |
+| `GET /lp/position` | Paper LP position: range, status, fees, IL, costs, net PnL, reconciliation |
+| `GET /lp/history` | LP time series (`?limit=200`) |
+| `GET /lp/rebalances` | Recent LP opens/rebalances with costs (`?limit=20`) |
+| `GET /research/books` | CEX book vs LP book (live since start, or `?from=&to=` persisted window) |
+| `GET /research/lp-backtest` | LP sweep over recorded mainnet observations (`?widths_bps=20,50&thresholds_bps=10`) |
 | `POST /kill-switch` | Enable/disable kill switch (`{"active": true}`) |
 | `GET /dashboard` | Static monitoring UI |
+
+## Uniswap V3 concentrated liquidity
+
+The V3 layer is additive (V2 is unchanged) and costs nothing to run.
+
+- **Reads**: one `Multicall3.tryBlockAndAggregate` `eth_call` per loop on the keyless public RPC (`ETH_RPC_URL`). The tick window (bitmap words ± `V3_WINDOW_WORDS`) is reloaded every `V3_WINDOW_REFRESH_TICKS` loops, pinned to the same block.
+- **Exactness**: `python scripts/verify_v3_quotes.py` compares the simulator with QuoterV2 at one block (`--record` refreshes `tests/fixtures/v3_quote_vectors.json`, which CI replays offline). Example run, block 26,329,444: `compared 47, mismatches 0`.
+- **LP book**: separate capital (`LP_CAPITAL_QUOTE`). Opening swaps into the required token ratio through the exact simulator, then mints with protocol liquidity math (mint rounds up, burn rounds down). The kill switch freezes it.
+- **Backtest**: `python scripts/run_lp_backtest.py --fixture tests/fixtures/v3_pool_observations.csv --widths 20,50,200 --thresholds 10,40`, over real per-block mainnet observations recorded with `scripts/record_v3_fixture.py`.
+- **Optional history**: `scripts/backfill_v3.py` needs an archive-capable URL (a free tier works) in `ETH_ARCHIVE_RPC_URL`. The public node serves only about 128 blocks, and the script says so.
+- **Keyless hosted demo**: if live V3 reads never succeed and `FIXTURE_FALLBACK_ENABLED=true`, the loop replays recorded mainnet observations, labeled `data_source: fixture`.
 
 ## Architecture
 
@@ -161,8 +182,16 @@ This project is a **paper-trading lab**, not a production market-making system. 
 
 ### DEX comparison
 
-- **Uniswap V2 only** — constant-product pool math on a single WETH/USDC pair vs CEX ETH/USDT mid.
+- **Uniswap V2 and V3** — constant-product math for the V2 pair; exact V3 math (verified against QuoterV2) for the WETH/USDC 5 bps pool, both vs CEX ETH/USDT mid.
 - **Arbitrage is observational** — opportunities are scanned and logged; no on-chain execution. The dashboard labels MM vs compare symbols and the USDT/USDC basis risk.
+
+### Uniswap V3 LP book
+
+- **Small-position assumption** — the paper position neither dilutes pool fee growth nor moves the pool price.
+- **Fee accounting** — `exact` (protocol `feeGrowthInside` from on-chain bound ticks) when both range bounds are initialized ticks, otherwise `approximate` (global fee growth weighted by in-range status). Each interval is labeled. Backtests are approximate.
+- **Range centering** — on the CEX compare mid, falling back to the pool price when a CEX-centered range would not contain the pool price (USDT/USDC basis).
+- **Costs** — setup and rebalance swaps go through the exact simulator (fee + price impact). Gas = `LP_REBALANCE_GAS_UNITS` × (block basefee + `LP_PRIORITY_FEE_GWEI`), valued at the pool price.
+- **Reconciliation** — `value − capital = fees + IL + HODL − swap cost − gas` on every observation; the residual is exposed and tested to stay under 0.01% of capital.
 
 ### Backtest metrics
 
@@ -190,12 +219,18 @@ See `.env.example`. Key variables:
 | `OPERATOR_API_TOKEN` | Optional; protects kill switch when set |
 | `DEX_ENABLED` | Enable on-chain pool reader + arbitrage scanner |
 | `METRICS_ENABLED` | Export Prometheus metrics from the loop |
+| `V3_ENABLED`, `V3_POOL_ADDRESS` | Uniswap V3 reader (default WETH/USDC 5 bps pool) |
+| `V3_WINDOW_WORDS`, `V3_WINDOW_REFRESH_TICKS` | Tick-window size and refresh cadence |
+| `LP_ENABLED`, `LP_CAPITAL_QUOTE` | Paper LP book and its separate capital |
+| `LP_RANGE_WIDTH_BPS`, `LP_REBALANCE_THRESHOLD_BPS`, `LP_REBALANCE_COOLDOWN_SEC` | Range and rebalance rules |
+| `ETH_ARCHIVE_RPC_URL` | Optional archive URL for `scripts/backfill_v3.py` only (secret) |
 
 ## Development
 
 ```bash
 ruff check .
 pytest -v --cov=app --cov-report=term-missing
+pytest --live tests/test_v3_live.py   # optional: live QuoterV2 parity on the public RPC
 ```
 
 Coverage is measured on `app/` with **branch coverage** enabled. CI fails under **85%** (suite currently ~**89%** branch / ~**92%** line).
