@@ -264,10 +264,10 @@ The approximate mode misattributes fees only for intervals in which price crosse
 
 ---
 
-## Small-position assumption and range centering
+## Position-size assumptions and range centering
 
 **Decision**  
-The paper LP position is assumed small relative to pool liquidity: it neither dilutes fee growth nor moves price. Ranges are centered on the CEX compare mid, unless a CEX-centered range would not contain the current pool price (USDT/USDC basis or a dislocated CEX), in which case the pool price is the center. An out-of-range range earns nothing and would be rebalanced on the very next tick.
+The paper LP position is assumed not to move price, but its fee dilution is modeled: fees scale by `L_pool / (L_pool + L_position)`. On recorded mainnet data, a 20 bps range on $10k is about 5% of active liquidity, so ignoring dilution would overstate fees by about 5%. Ranges are centered on the CEX compare mid, unless a CEX-centered range would not contain the current pool price (USDT/USDC basis or a dislocated CEX), in which case the pool price is the center. An out-of-range range earns nothing and would be rebalanced on the very next tick.
 
 **PnL decomposition**  
 `value − capital = fees + IL + HODL revaluation − swap cost − gas`, checked on every observation with `value` computed independently from token balances. The residual is persisted (`reconciliation_error_quote`) and tested to stay below 0.01% of capital.

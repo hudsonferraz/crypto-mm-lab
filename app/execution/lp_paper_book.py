@@ -8,8 +8,9 @@ swap cost and gas, and every observation checks that
 
 where ``value`` is computed independently from token balances.
 
-Assumption (documented in the README): the paper position is small relative to
-pool liquidity, so it neither dilutes fee growth nor moves the pool price.
+Assumptions (documented in the README): the paper position does not move the pool
+price. Its fee dilution is modeled: had the liquidity existed, observed fee growth
+would have been shared, so accrued fees scale by L_pool / (L_pool + L_position).
 """
 
 from __future__ import annotations
@@ -64,6 +65,7 @@ class _Ledger:
     time_in_range: float = 0.0
     time_tracked: float = 0.0
     fee_accounting: FeeAccounting = "none"
+    pool_share: float = 0.0
     status_note: str | None = None
     last: V3PoolSnapshot | None = None
 
@@ -275,6 +277,22 @@ class LpPaperBook:
             ledger.fee_accounting = "approximate"
             fee0 = int(fees_owed(ledger.liquidity, delta_global0) * weight)
             fee1 = int(fees_owed(ledger.liquidity, delta_global1) * weight)
+
+        # Dilution: our liquidity would have shared the fees the pool's active
+        # liquidity earned, using the pool liquidity at the in-range endpoints.
+        in_range_liquidity = [
+            s.liquidity for s, inside in ((prev, was_in), (cur, now_in)) if inside
+        ]
+        pool_liquidity = (
+            sum(in_range_liquidity) // len(in_range_liquidity)
+            if in_range_liquidity
+            else (prev.liquidity + cur.liquidity) // 2
+        )
+        denominator = pool_liquidity + ledger.liquidity
+        if denominator > 0:
+            fee0 = fee0 * pool_liquidity // denominator
+            fee1 = fee1 * pool_liquidity // denominator
+        ledger.pool_share = ledger.liquidity / denominator if denominator else 0.0
 
         fee_base, fee_quote = self._to_base_quote(fee0, fee1)
         ledger.fees_base += fee_base
@@ -504,6 +522,7 @@ class LpPaperBook:
             time_in_range_sec=ledger.time_in_range,
             time_tracked_sec=ledger.time_tracked,
             rebalance_count=ledger.rebalance_count,
+            pool_share_pct=ledger.pool_share * 100,
             pool_price=price,
             block_number=current.block_number,
             status_note=ledger.status_note,

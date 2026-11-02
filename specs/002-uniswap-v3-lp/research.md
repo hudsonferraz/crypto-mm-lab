@@ -111,8 +111,11 @@ range bounds to the nearest initialized on-chain tick within
 `LP_SNAP_TOLERANCE_SPACINGS` tick spacings, so live accounting is exact in the
 common case (the 5 bps WETH/USDC pool has dense initialized ticks near price).
 
-**Small-position assumption**: the paper position neither dilutes fee growth nor
-moves price (spec Assumptions).
+**Position-size assumption**: the paper position does not move price. Its own fee
+dilution *is* modeled. **Deviation found on real data (2026-11-02)**: a 20 bps
+range with $10k capital is about 5% of the pool's active liquidity (200 bps: about 0.7%),
+so fees are scaled by `L_pool / (L_pool + L_position)` using the pool liquidity at
+the in-range endpoints.
 
 **Alternatives considered**: reading every `Swap` event via `eth_getLogs` and
 attributing fees per swap (more requests, block-range limits on free endpoints,

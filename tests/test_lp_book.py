@@ -53,6 +53,11 @@ def _snap(tick, i=0, *, fg0=0, fg1=0, bounds=None, outside=(0, 0, 0, 0), initial
     )
 
 
+def _diluted(fee: int, liquidity: int) -> int:
+    """Fee after sharing growth with the paper position's own liquidity."""
+    return fee * L_POOL // (L_POOL + liquidity)
+
+
 def _assert_reconciles(state) -> None:
     assert abs(state.reconciliation_error_quote) < CAPITAL * 1e-4
 
@@ -87,8 +92,10 @@ def test_exact_fee_accrual_uses_fee_growth_inside() -> None:
         kill_switch_active=False,
     )
     assert state.fee_accounting == "exact"
-    assert state.fees_owed_quote == fees_owed(liquidity, growth0)  # token0 = USDC = quote
-    assert state.fees_owed_base == fees_owed(liquidity, growth1)
+    assert state.fees_owed_quote == _diluted(
+        fees_owed(liquidity, growth0), liquidity
+    )  # token0 = USDC = quote
+    assert state.fees_owed_base == _diluted(fees_owed(liquidity, growth1), liquidity)
     assert state.fees_quote > 0
     _assert_reconciles(state)
 
@@ -120,7 +127,9 @@ def test_uninitialized_bounds_fall_back_to_approximate_in_range() -> None:
         kill_switch_active=False,
     )[0]
     assert state.fee_accounting == "approximate"
-    assert state.fees_owed_quote == fees_owed(book.last_state.liquidity, 10**30)
+    assert state.fees_owed_quote == _diluted(
+        fees_owed(book.last_state.liquidity, 10**30), book.last_state.liquidity
+    )
 
 
 def test_reinitialized_bound_tick_guard_uses_approximate() -> None:
@@ -155,7 +164,7 @@ def test_fee_growth_wraparound_is_handled_exactly() -> None:
         _snap(199_125, 2, fg0=Q128, bounds=bounds), center_price=None, kill_switch_active=False
     )[0]
     assert state.fee_accounting == "exact"
-    assert state.fees_owed_quote == fees_owed(liquidity, 2 * Q128)
+    assert state.fees_owed_quote == _diluted(fees_owed(liquidity, 2 * Q128), liquidity)
 
 
 def test_out_of_range_rebalance_records_costs_and_realized_il() -> None:
@@ -277,3 +286,22 @@ def test_reconciliation_holds_along_a_long_random_path() -> None:
     assert state.fees_quote > 0
     assert worst < CAPITAL * 1e-4
     assert 0 < state.time_in_range_sec <= state.time_tracked_sec
+
+
+def test_fee_dilution_grows_with_position_share() -> None:
+    small, big = _book(cooldown_sec=10**9), _book(cooldown_sec=10**9, capital=1_000_000)
+    states = []
+    for book in (small, big):
+        book.step(_snap(199_125), center_price=None, kill_switch_active=False)
+        bounds = book.bounds
+        book.step(_snap(199_125, 1, bounds=bounds), center_price=None, kill_switch_active=False)
+        state, _ = book.step(
+            _snap(199_125, 2, fg0=10**30, bounds=bounds),
+            center_price=None,
+            kill_switch_active=False,
+        )
+        states.append(state)
+    small_state, big_state = states
+    assert 0 < small_state.pool_share_pct < big_state.pool_share_pct
+    undiluted = fees_owed(big_state.liquidity, 10**30)
+    assert big_state.fees_owed_quote == _diluted(undiluted, big_state.liquidity) < undiluted

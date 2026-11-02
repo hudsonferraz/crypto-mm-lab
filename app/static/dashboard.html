@@ -767,7 +767,7 @@
       document.getElementById("lp-rebalances").textContent =
         lp.rebalance_count === undefined ? "-" : `${lp.rebalance_count} · ${lp.time_in_range_pct === null ? "-" : fmt(lp.time_in_range_pct, 1) + "%"}`;
       document.getElementById("lp-accounting").textContent = lp.fee_accounting
-        ? `Capital ${usd(lp.capital_quote, 0)} · fee accounting: ${lp.fee_accounting} · reconciliation error ${fmt(lp.reconciliation_error_quote, 6)} USDC`
+        ? `Capital ${usd(lp.capital_quote, 0)} · fee accounting: ${lp.fee_accounting} · share of active liquidity ${fmt(lp.pool_share_pct, 3)}% (fees diluted accordingly) · reconciliation error ${fmt(lp.reconciliation_error_quote, 6)} USDC`
         : "";
     }
 

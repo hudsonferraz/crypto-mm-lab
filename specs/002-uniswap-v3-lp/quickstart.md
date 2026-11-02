@@ -61,6 +61,18 @@ python scripts/run_lp_backtest.py --fixture tests/fixtures/v3_pool_observations.
 Expected: side-by-side rows with fees, IL, rebalances, net PnL; identical output on
 re-run.
 
+## Recorded evidence (2026-11-02)
+
+- **SC-001**: `verify_v3_quotes.py` at block 26,329,444: 47 compared, 0 mismatches (up to 543 initialized ticks crossed); `pytest --live` passed on a later block.
+- **SC-002**: `record_v3_fixture.py --minutes 62` on the public RPC, no key: **828/828 refreshes (100%)**, 311 consecutive blocks (26,329,448–26,329,757). Basefees filled from block headers (0.075–0.170 gwei).
+- **Sweep on that fixture** (capital $10k, cooldown 300 s):
+
+  | width | threshold | rebalances | fees | IL | net |
+  |---|---|---|---|---|---|
+  | 20 | 10 | 6 | 39.92 | −45.61 | −39.74 |
+  | 50 | 40 | 1 | 24.03 | −13.64 | −7.60 |
+  | 200 | 40 | 1 | 7.14 | −5.02 | −11.95 |
+
 ## 6. Keyless hosted demo
 
 Deploy with `render.yaml` unchanged (no RPC key). If outbound RPC is blocked,

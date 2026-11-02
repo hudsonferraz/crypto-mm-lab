@@ -90,7 +90,7 @@ the repo convention is test-first per module.
 **Independent Test**: deterministic LP backtest + sweep over bundled fixture, offline.
 
 - [X] T043 [US5] Implement scripts/record_v3_fixture.py (poll per block, write observation CSV, print refresh success rate)
-- [ ] T044 [US5] Record tests/fixtures/v3_pool_observations.csv from mainnet via the free public RPC (≥ 60 min) and note the success rate in specs/002-uniswap-v3-lp/quickstart.md (SC-002 evidence)
+- [X] T044 [US5] Record tests/fixtures/v3_pool_observations.csv from mainnet via the free public RPC (≥ 60 min) and note the success rate in specs/002-uniswap-v3-lp/quickstart.md (SC-002 evidence) — 62 min, 828/828 refreshes, 311 blocks
 - [X] T045 [US5] Implement `LpBacktestRunner` (from CSV fixture or `v3_pool_snapshots`; static window from vectors fixture for swaps; approximate accrual; sweep over widths × thresholds) in app/services/lp_backtest_runner.py
 - [X] T046 [US5] Tests (determinism, sweep rows, empty input, offline) in tests/test_lp_backtest.py
 - [X] T047 [US5] Implement scripts/run_lp_backtest.py (`--fixture`, `--from/--to`, `--widths`, `--thresholds`, `--json`) and `GET /research/lp-backtest` in app/api/lp_routes.py with API test
@@ -104,7 +104,7 @@ the repo convention is test-first per module.
 - [X] T052 [P] Update README.md (highlights, V3 section, endpoints, config, simulation assumptions), docs/architecture.md, docs/design-decisions.md (block pinning, exact math, fee accounting modes, small-position assumption, zero-cost RPC)
 - [X] T053 Verify no log line or endpoint exposes RPC URLs (grep + test in tests/test_redaction.py)
 - [X] T054 Run `ruff check .` and full `pytest --cov` (≥ 85 % branch); fix findings
-- [ ] T055 Run the app live against the public RPC and validate quickstart.md sections 2–5; capture dashboard screenshot to docs/images/dashboard-lp.png
+- [X] T055 Run the app live against the public RPC and validate quickstart.md sections 2–5; capture dashboard screenshot to docs/images/dashboard-lp.png
 
 ## Dependencies & Execution Order
 
@@ -126,8 +126,8 @@ headline LP book), then US3–US5, then polish. Each checkpoint keeps the full s
 
 ## Phase 9: Convergence
 
-- [ ] T056 Fill real `base_fee_wei` values into tests/fixtures/v3_pool_observations.csv from block headers (the recorder ran before the eth_call basefee fix) and make scripts/record_v3_fixture.py read basefee from headers per FR-019 / SC-002 (partial)
-- [ ] T057 Embed docs/images/dashboard-lp.png in README.md and validate quickstart §4 (kill switch freezes LP book) and §5 (LP sweep on the recorded fixture) against the live app per SC-004 / T055 (partial)
+- [X] T056 Fill real `base_fee_wei` values into tests/fixtures/v3_pool_observations.csv from block headers (the recorder ran before the eth_call basefee fix) and make scripts/record_v3_fixture.py read basefee from headers per FR-019 / SC-002 (partial)
+- [X] T057 Embed docs/images/dashboard-lp.png in README.md and validate quickstart §4 (kill switch freezes LP book) and §5 (LP sweep on the recorded fixture) against the live app per SC-004 / T055 (partial)
 - [X] T058 Run `pytest --live tests/test_v3_live.py` against the free public RPC and record the result per SC-001 (partial) — 2026-11-02: 2 passed (QuoterV2 parity on a fresh block, block-consistent adapter read)
 - [X] T059 Note in tasks.md that fee-growth tests live in tests/test_v3_math.py rather than tests/test_v3_fee_growth.py per T028 (partial)
 - [X] T060 Justify dashboard `#tab` deep links in plan.md (used for headless screenshots and shareable links) per Constitution V (unrequested)

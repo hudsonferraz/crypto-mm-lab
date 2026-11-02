@@ -150,6 +150,7 @@ class LpPositionState:
     time_in_range_sec: float
     time_tracked_sec: float
     rebalance_count: int
+    pool_share_pct: float
     pool_price: float | None
     block_number: int | None
     status_note: str | None

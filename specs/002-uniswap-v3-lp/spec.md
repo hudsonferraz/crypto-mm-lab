@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-02
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Uniswap V3 concentrated liquidity support for crypto-mm-lab. Read V3 pool state on Ethereum mainnet (slot0 sqrtPriceX96, liquidity, tick bitmap / initialized ticks) via RPC; implement exact V3 swap simulation crossing ticks (TickMath, SqrtPriceMath, fee tiers 1/5/30/100 bps); add a paper LP strategy that places concentrated liquidity ranges around the CEX mid and rebalances; track LP fees earned, impermanent loss vs HODL, and compare against CEX spread capture; extend arbitrage scanner to V3 pools; expose via API + dashboard + metrics; backtestable. Hard constraint: zero cost — every tool, API, and RPC used must be free (free tiers or public RPCs; keys optional with public-RPC fallback so the hosted demo still works without keys). Paper-only, no signing, no wallet keys."
 
@@ -229,7 +229,7 @@ rebalance count, and net PnL.
 ## Assumptions
 
 - Default pool is the Ethereum mainnet WETH/USDC 5 bps V3 pool; the 30 bps pool is a supported alternative. Other chains are out of scope for this feature.
-- The paper position is assumed small relative to pool liquidity, so it does not dilute fee growth or move price; this is stated in the simulation assumptions.
+- The paper position is assumed not to move the pool price. Its fee dilution is modeled (fees scale by pool liquidity / (pool liquidity + position liquidity)), because validation on real data showed a 20 bps range would be about 5% of active liquidity. Both points are stated in the simulation assumptions.
 - Fee accrual between observations uses the pool's fee-growth counters, so fees from swaps between loop ticks are captured without reading individual swap events.
 - Rebalance gas cost is estimated from configured gas units × (block-header basefee + configured priority fee), falling back to the configured gas price. The basefee is read from the block header because nodes execute read-only calls with the basefee forced to zero.
 - Default free endpoint is the same public RPC already used for V2; an optional keyed free-tier provider URL can replace it. Historical archive backfill is optional and only offered when the configured endpoint supports it.

@@ -191,7 +191,7 @@ This project is a **paper-trading lab**, not a production market-making system. 
 
 ### Uniswap V3 LP book
 
-- **Small-position assumption** — the paper position neither dilutes pool fee growth nor moves the pool price.
+- **Position size** — the paper position is assumed not to move the pool price. Its own fee dilution is modeled: fees scale by `L_pool / (L_pool + L_position)`. A 20 bps range on $10k is about 5% of active liquidity, so this matters; the dashboard shows the share.
 - **Fee accounting** — `exact` (protocol `feeGrowthInside` from on-chain bound ticks) when both range bounds are initialized ticks, otherwise `approximate` (global fee growth weighted by in-range status). Each interval is labeled. Backtests are approximate.
 - **Range centering** — on the CEX compare mid, falling back to the pool price when a CEX-centered range would not contain the pool price (USDT/USDC basis).
 - **Costs** — setup and rebalance swaps go through the exact simulator (fee + price impact). Gas = `LP_REBALANCE_GAS_UNITS` × (block basefee + `LP_PRIORITY_FEE_GWEI`), valued at the pool price.
