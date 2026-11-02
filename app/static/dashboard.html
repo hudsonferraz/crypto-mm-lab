@@ -105,8 +105,11 @@
     }
     .quote-form button { margin-top: 0; }
     details summary { cursor: pointer; margin-top: 0.5rem; }
+    .note, .muted, #lp-status { overflow-wrap: anywhere; }
     @media (max-width: 640px) {
       body { padding: 0.75rem; }
+      .grid { grid-template-columns: 1fr 1fr; }
+      .chips { font-size: 0.8rem; }
       .tabs { flex-wrap: wrap; }
       table { display: block; overflow-x: auto; }
     }
@@ -582,13 +585,13 @@
     }
 
     const usd = (value, digits = 2) =>
-      value === null || value === undefined ? "-" : `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+      value === null || value === undefined ? "-" : `$${Number(value).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
     const signedUsd = (value) =>
       value === null || value === undefined ? "-" : `${Number(value) < 0 ? "−" : "+"}${usd(Math.abs(value))}`;
     const compactInt = (raw) => {
       if (!raw) return "-";
       const n = Number(raw);
-      return n >= 1e15 ? `${(n / 1e18).toFixed(3)}e18` : n.toLocaleString();
+      return n >= 1e15 ? `${(n / 1e18).toFixed(3)}e18` : n.toLocaleString("en-US");
     };
     let lpPoolCache = null;
     let lpPositionCache = null;
@@ -871,8 +874,11 @@
         tab.classList.add("active");
         document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
         if (tab.dataset.tab === "lp") renderLiquidityChart(lpPoolCache, lpPositionCache);
+        history.replaceState(null, "", `#${tab.dataset.tab}`);
       });
     });
+    const initialTab = document.querySelector(`.tab[data-tab="${location.hash.slice(1)}"]`);
+    if (initialTab) initialTab.click();
 
     document.getElementById("kill-switch-btn").addEventListener("click", async () => {
       const btn = document.getElementById("kill-switch-btn");

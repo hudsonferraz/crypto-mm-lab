@@ -33,8 +33,14 @@ not block-pinned); requiring Alchemy (violates keyless default).
 **Decision**: Use Multicall3 `tryBlockAndAggregate(false, calls)` for the per-loop
 state read. It returns `(blockNumber, blockHash, results)` from one `eth_call`, so
 `slot0`, `liquidity`, `feeGrowthGlobal0X128`, `feeGrowthGlobal1X128`,
-`ticks(lower)`, `ticks(upper)`, `getBasefee()` and `getCurrentBlockTimestamp()`
-are atomically consistent at a known block. The tick-window refresh then issues
+`ticks(lower)`, `ticks(upper)` and `getCurrentBlockTimestamp()`
+are atomically consistent at a known block.
+
+**Deviation found in live validation (2026-11-02)**: `Multicall3.getBasefee()`
+returns 0 inside `eth_call` (geth forces basefee to zero for calls without a gas
+price). The basefee is instead read from the block header (`eth_getBlockByNumber`)
+at the window-refresh cadence; the backfill script and recorded fixture use the
+same source. The tick-window refresh then issues
 `tickBitmap(word)` and `ticks(tick)` batches pinned to that same block number
 (well within the ~128-block window the public node serves).
 
@@ -132,14 +138,16 @@ computed independently from token balances (principal via
 `getAmountsForLiquidity` + idle + uncollected fees − gas paid), so the check is a
 real integrity test, not a tautology.
 
-**Gas**: Multicall3 `getBasefee()` at the pinned block + `LP_PRIORITY_FEE_GWEI`;
+**Gas**: block-header `baseFeePerGas` (see R2 deviation) + `LP_PRIORITY_FEE_GWEI`;
 falls back to `GAS_PRICE_GWEI` when unavailable. Units default
 `LP_REBALANCE_GAS_UNITS=450000` (burn + collect + swap + mint).
 
 ## R7. Opening and rebalancing a position
 
 **Decision**: Capital starts in USDC. At open/rebalance:
-1. Compute range ticks from center (CEX compare mid if fresh, else pool price) and
+1. Compute range ticks from center (CEX compare mid if fresh, else pool price; if the
+   CEX-centered range would not contain the pool tick, re-center on the pool price —
+   deviation found in loop tests: otherwise basis keeps the range out of range) and
    `LP_RANGE_WIDTH_BPS`; floor lower / ceil upper to tick spacing; reject width
    below one spacing at startup.
 2. Compute the base fraction for unit liquidity at the current price; swap the

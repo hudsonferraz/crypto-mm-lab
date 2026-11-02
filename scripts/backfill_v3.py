@@ -20,7 +20,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.adapters.dex.abis import (  # noqa: E402
-    MULTICALL3_GET_BASEFEE,
     MULTICALL3_GET_BLOCK_TIMESTAMP,
     V3_FEE_GROWTH_GLOBAL0,
     V3_FEE_GROWTH_GLOBAL1,
@@ -43,17 +42,20 @@ def _call(target: str, spec) -> Call:
     return Call(target=target, signature=spec[0], output_types=spec[1])
 
 
-def read_block(multicall: Multicall, pool: str, block: int) -> dict[str, str]:
+def read_block(
+    multicall: Multicall, transport: Web3Transport, pool: str, block: int
+) -> dict[str, str]:
     calls = [
         _call(pool, V3_SLOT0),
         _call(pool, V3_LIQUIDITY),
         _call(pool, V3_FEE_GROWTH_GLOBAL0),
         _call(pool, V3_FEE_GROWTH_GLOBAL1),
-        _call(multicall.address, MULTICALL3_GET_BASEFEE),
         _call(multicall.address, MULTICALL3_GET_BLOCK_TIMESTAMP),
     ]
     try:
-        slot0, liquidity, fg0, fg1, base_fee, ts = multicall.try_aggregate(calls, block)
+        slot0, liquidity, fg0, fg1, ts = multicall.try_aggregate(calls, block)
+        # eth_call runs with basefee forced to 0, so read it from the block header
+        base_fee = transport.base_fee(block)
     except Exception as error:
         message = str(error).lower()
         if any(hint in message for hint in ARCHIVE_ERROR_HINTS):
@@ -69,7 +71,7 @@ def read_block(multicall: Multicall, pool: str, block: int) -> dict[str, str]:
         "liquidity": str(liquidity.value[0]),
         "fee_growth_global0_x128": str(fg0.value[0]),
         "fee_growth_global1_x128": str(fg1.value[0]),
-        "base_fee_wei": str(base_fee.value[0]) if base_fee.success else "",
+        "base_fee_wei": "" if base_fee is None else str(base_fee),
         "is_stale": "false",
     }
     assert tuple(row) == OBSERVATION_COLUMNS
@@ -99,13 +101,14 @@ def main(argv: list[str] | None = None) -> int:
         print("invalid block range", file=sys.stderr)
         return 2
 
-    multicall = Multicall(Web3Transport(url, timeout_sec=30))
+    transport = Web3Transport(url, timeout_sec=30)
+    multicall = Multicall(transport)
     pool = args.pool or settings.v3_pool_address
     print(f"backfilling {pool} via {redact_url(url)}")
     rows = []
     try:
         for block in range(args.from_block, args.to_block + 1, args.step):
-            rows.append(read_block(multicall, pool, block))
+            rows.append(read_block(multicall, transport, pool, block))
     except NotArchiveNode as error:
         print(f"error: {error}; use a free-tier archive provider URL", file=sys.stderr)
         return 3

@@ -19,7 +19,6 @@ from eth_utils import to_checksum_address
 
 from app.adapters.dex.abis import (
     ERC20_DECIMALS,
-    MULTICALL3_GET_BASEFEE,
     MULTICALL3_GET_BLOCK_TIMESTAMP,
     V3_FEE,
     V3_FEE_GROWTH_GLOBAL0,
@@ -91,6 +90,8 @@ class V3PoolAdapter:
         self._window_incomplete = False
         self._reads_since_refresh = 0
         self._last_good: V3PoolSnapshot | None = None
+        self._transport = transport
+        self._base_fee_wei: int | None = None
         self.failures_total = 0
 
     @property
@@ -162,7 +163,6 @@ class V3PoolAdapter:
             _call(pool, V3_LIQUIDITY),
             _call(pool, V3_FEE_GROWTH_GLOBAL0),
             _call(pool, V3_FEE_GROWTH_GLOBAL1),
-            _call(mc, MULTICALL3_GET_BASEFEE),
             _call(mc, MULTICALL3_GET_BLOCK_TIMESTAMP),
         ]
         if bounds is not None:
@@ -170,7 +170,7 @@ class V3PoolAdapter:
             calls.append(_call(pool, V3_TICKS, bounds[1]))
 
         block_number, results = self._multicall.try_block_and_aggregate(calls)
-        slot0, liquidity, fg0, fg1, base_fee, block_ts = results[:6]
+        slot0, liquidity, fg0, fg1, block_ts = results[:5]
         if not all(result.success for result in (slot0, liquidity, fg0, fg1)):
             raise RuntimeError("core V3 state sub-call failed")
 
@@ -179,11 +179,13 @@ class V3PoolAdapter:
         incomplete = False
         lower_info = upper_info = None
         if bounds is not None:
-            lower_info = tick_info_from_result(bounds[0], results[6])
-            upper_info = tick_info_from_result(bounds[1], results[7])
+            lower_info = tick_info_from_result(bounds[0], results[5])
+            upper_info = tick_info_from_result(bounds[1], results[6])
             incomplete = lower_info is None or upper_info is None
 
         window = self._maybe_refresh_window(block_number, tick, metadata.tick_spacing)
+        if self._base_fee_wei is None or self._reads_since_refresh == 0:
+            self._base_fee_wei = self._read_base_fee(block_number)
         incomplete = incomplete or self._window_incomplete
 
         timestamp = (
@@ -208,10 +210,25 @@ class V3PoolAdapter:
             ),
             lower_tick_info=lower_info,
             upper_tick_info=upper_info,
-            base_fee_wei=int(base_fee.value[0]) if base_fee.success else None,
+            base_fee_wei=self._base_fee_wei,
             window=window,
             is_incomplete=incomplete,
         )
+
+    def _read_base_fee(self, block: int) -> int | None:
+        """Block header basefee (refreshed with the window).
+
+        ``Multicall3.getBasefee()`` is useless here: nodes execute ``eth_call``
+        with the basefee forced to zero, so it always returns 0.
+        """
+        reader = getattr(self._transport, "base_fee", None)
+        if reader is None:
+            return None
+        try:
+            return reader(block)
+        except Exception as error:
+            logger.warning("v3_base_fee_read_failed", error=type(error).__name__)
+            return self._base_fee_wei
 
     def _window_needs_refresh(self, tick: int, spacing: int) -> bool:
         if self._window is None:

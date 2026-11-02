@@ -19,7 +19,7 @@ USDC**, resolved from `token0` like the V2 adapter (`base_is_token0`).
 | liquidity | int | in-range L |
 | fee_growth_global0_x128, fee_growth_global1_x128 | int | |
 | lower_tick_info, upper_tick_info | TickInfo \| None | LP bound ticks read in same block |
-| base_fee_wei | int \| None | Multicall3 getBasefee |
+| base_fee_wei | int \| None | block header baseFeePerGas (refreshed with the window) |
 | block_number | int | |
 | block_timestamp | datetime (UTC) | |
 | price | float | quote per base, decimals-adjusted |

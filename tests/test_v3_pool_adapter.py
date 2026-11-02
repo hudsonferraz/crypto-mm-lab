@@ -149,3 +149,19 @@ def test_call_helpers_parse_tuple_signatures() -> None:
 class _FailingTransport:
     def eth_call(self, to, data, block):
         raise ConnectionError("down")
+
+
+def test_base_fee_comes_from_block_header_and_survives_failures() -> None:
+    chain = _chain()
+    adapter = _adapter(chain, window_refresh_ticks=1)
+    assert adapter.read_snapshot().base_fee_wei == 12 * 10**9
+    chain.fail_base_fee = True
+    chain.block = 101
+    assert adapter.read_snapshot().base_fee_wei == 12 * 10**9  # cached value kept
+
+
+def test_transport_without_header_access_reports_no_base_fee() -> None:
+    chain = _chain()
+    adapter = _adapter(chain)
+    adapter._transport = object()
+    assert adapter.read_snapshot().base_fee_wei is None

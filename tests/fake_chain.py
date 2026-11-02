@@ -28,6 +28,7 @@ class FakeChain:
         self.fail_selectors: set[bytes] = set()
         self.fail_everything = False
         self.fail_words: set[int] = set()
+        self.fail_base_fee = False
         handlers: dict[bytes, Callable[[bytes], bytes]] = {}
 
         def reg(spec, fn):
@@ -49,7 +50,6 @@ class FakeChain:
         reg(abis.V3_TOKEN1, lambda _: encode(["address"], [WETH]))
         reg(abis.V3_TICKS, self._ticks)
         reg(abis.V3_TICK_BITMAP, self._bitmap)
-        reg(abis.MULTICALL3_GET_BASEFEE, lambda _: encode(["uint256"], [12 * 10**9]))
         reg(abis.MULTICALL3_GET_BLOCK_TIMESTAMP, lambda _: encode(["uint256"], [1_767_225_600]))
         self._handlers = handlers
 
@@ -95,6 +95,11 @@ class FakeChain:
             except Exception:
                 results.append((False, b""))
         return results
+
+    def base_fee(self, block) -> int:
+        if self.fail_base_fee:
+            raise ConnectionError("header read failed")
+        return 12 * 10**9
 
     def eth_call(self, to: str, data: bytes, block) -> bytes:
         self.calls.append((data[:4].hex(), block))

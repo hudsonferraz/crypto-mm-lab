@@ -41,7 +41,6 @@ V3_TICK_SPACING = ("tickSpacing()", ("int24",))
 V3_TOKEN0 = ("token0()", ("address",))
 V3_TOKEN1 = ("token1()", ("address",))
 ERC20_DECIMALS = ("decimals()", ("uint8",))
-MULTICALL3_GET_BASEFEE = ("getBasefee()", ("uint256",))
 MULTICALL3_GET_BLOCK_TIMESTAMP = ("getCurrentBlockTimestamp()", ("uint256",))
 QUOTER_V2_ADDRESS = "0x61fFE014bA17989E743c5F6cB21bF9697530B21e"
 QUOTER_V2_EXACT_INPUT_SINGLE = (

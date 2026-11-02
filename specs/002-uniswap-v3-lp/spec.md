@@ -70,7 +70,7 @@ costs ± inventory revaluation = current value).
 
 **Acceptance Scenarios**:
 
-1. **Given** the LP strategy is enabled with capital C and width W, **When** the loop starts, **Then** a paper position opens with range bounds aligned to the pool's tick spacing, centered on the CEX mid, sized to capital C, and its token amounts are consistent with the pool's current price.
+1. **Given** the LP strategy is enabled with capital C and width W, **When** the loop starts, **Then** a paper position opens with range bounds aligned to the pool's tick spacing, centered on the CEX mid (or on the pool price when a CEX-centered range would not contain the current pool price, e.g. under USDT/USDC basis), sized to capital C, and its token amounts are consistent with the pool's current price.
 2. **Given** an open position, **When** the pool price is inside the range between two observations, **Then** fees accrue to the position using the pool's own on-chain fee accounting for that range, scaled to the position's liquidity.
 3. **Given** an open position, **When** the pool price is outside the range, **Then** no fees accrue and the dashboard marks the position "out of range".
 4. **Given** price exits the range (or drifts beyond the rebalance threshold), **When** the rebalance rule triggers, **Then** the position closes, the cost of re-centering (pool fee, price impact, and estimated gas) is recorded, and a new range opens; rebalances respect a cooldown so the strategy cannot churn every tick.
@@ -151,6 +151,7 @@ rebalance count, and net PnL.
 - **Price exactly on a range boundary or on an initialized tick**: behavior matches protocol rules (lower bound inclusive, upper bound exclusive for in-range checks).
 - **Swap reaches protocol min/max price limits**: quote stops at the limit and reports partial fill of the input.
 - **Fee-growth counter wrap-around**: fee accounting handles the protocol's modular arithmetic correctly.
+- **CEX mid far from pool price** (basis or dislocation): the range is centered on the pool price so it never opens out of range and churns.
 - **Range width narrower than one tick spacing**: configuration is rejected with a clear message as soon as pool metadata (tick spacing) loads, before any position opens.
 - **Capital too small to mint any liquidity**: the strategy reports "position size below minimum" and does not open.
 - **Kill switch during a rebalance decision**: no rebalance executes; state remains consistent.
@@ -230,7 +231,7 @@ rebalance count, and net PnL.
 - Default pool is the Ethereum mainnet WETH/USDC 5 bps V3 pool; the 30 bps pool is a supported alternative. Other chains are out of scope for this feature.
 - The paper position is assumed small relative to pool liquidity, so it does not dilute fee growth or move price; this is stated in the simulation assumptions.
 - Fee accrual between observations uses the pool's fee-growth counters, so fees from swaps between loop ticks are captured without reading individual swap events.
-- Rebalance gas cost is estimated from configured gas units × observed (or configured) gas price, consistent with the existing gas model.
+- Rebalance gas cost is estimated from configured gas units × (block-header basefee + configured priority fee), falling back to the configured gas price. The basefee is read from the block header because nodes execute read-only calls with the basefee forced to zero.
 - Default free endpoint is the same public RPC already used for V2; an optional keyed free-tier provider URL can replace it. Historical archive backfill is optional and only offered when the configured endpoint supports it.
 - The exact-quote verification (FR-007) uses the protocol's deployed read-only quoter via a read call; it is run in a manual/verification script and an opt-in test, not in default CI (CI stays offline).
 - The LP book and CEX book trade different pairs by default (WETH/USDC vs BTC/USDT); comparison is reported as return on capital with explicit mismatch labels. Users may set the CEX symbol to ETH/USDT for a closer comparison.

@@ -182,4 +182,5 @@ Tests: `conftest.py` already forces `DEX_ENABLED=false`; it additionally sets
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |---|---|---|
 | Idempotent "add missing nullable columns" in `create_tables` | Existing SQLite DBs must keep working when `opportunities` gains 4 columns | Alembic adds a dependency and workflow for 4 columns; a separate table splits one concept |
+| Dashboard `#tab` deep links (added during T055) | Headless-browser screenshots and shareable links need to open a specific tab; 4 lines of JS, no new state | Clicking via a browser automation dependency (Playwright) adds a dev dependency for one screenshot |
 | New `lp_routes.py` module | `routes.py` is already 450 lines; 6 new endpoints form one cohesive area | Appending would make one 700+ line file |

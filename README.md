@@ -40,6 +40,10 @@ This is an **education and research project** — useful for exploring MM mechan
 |--------------|-----------------|
 | ![Architecture](docs/images/architecture.png) | ![Backtest](docs/images/backtest.png) |
 
+| On-chain LP (Uniswap V3, live mainnet data) |
+|---------------------------------------------|
+| ![On-chain LP tab](docs/images/dashboard-lp.png) |
+
 | Docker stack (live) | Grafana metrics |
 |---------------------|-----------------|
 | ![Docker dashboard](docs/images/dashboard-docker.png) | ![Grafana](docs/images/grafana.png) |

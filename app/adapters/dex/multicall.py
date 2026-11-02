@@ -148,5 +148,9 @@ class Web3Transport:
     def block_number(self) -> int:
         return int(self._web3.eth.block_number)
 
+    def base_fee(self, block: BlockId) -> int | None:
+        value = self._web3.eth.get_block(block).get("baseFeePerGas")
+        return None if value is None else int(value)
+
 
 TransportFactory = Callable[[], EthCallTransport]
