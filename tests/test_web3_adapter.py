@@ -19,7 +19,7 @@ def web3_adapter(monkeypatch) -> tuple[Web3PoolAdapter, MagicMock]:
 
     adapter = Web3PoolAdapter(
         rpc_url="http://127.0.0.1:0",
-        pool_address="0xB4e16d0168e52d35CaC2c6185b44281Ec1C50942",
+        pool_address="0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc",
     )
     return adapter, mock_contract
 

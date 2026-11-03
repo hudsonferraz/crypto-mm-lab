@@ -45,7 +45,7 @@ class Settings(BaseSettings):
 
     dex_enabled: bool = True
     eth_rpc_url: str = "https://ethereum.publicnode.com"
-    dex_pool_address: str = "0xB4e16d0168e52d35CaC2c6185b44281Ec1C50942"
+    dex_pool_address: str = "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc"
     cex_compare_symbol: str = "ETH/USDT"
     amm_fee_bps: float = Field(default=30.0, ge=0)
     arbitrage_trial_trade_size: float = Field(default=0.1, gt=0)
