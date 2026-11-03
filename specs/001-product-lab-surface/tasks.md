@@ -16,3 +16,7 @@
 - **122 tests** passed on Python 3.11.
 - Hosted demo URL still human-provisioned (`docs/deploy-demo.md`); portfolio demo link left commented.
 - Websocket mode falls back to REST when `watch_order_book` unavailable.
+
+## Fix (2026-11-03): latency_prob_fill never filled in the loop
+
+- [X] T011 In app/execution/paper_broker.py, keep a crossed quote resting (do not replace it on its side) in `latency_prob_fill` mode until it fills or the cross ends; add tests in tests/test_latency_prob_fill.py; update the README and spec 005 notes

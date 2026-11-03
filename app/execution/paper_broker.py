@@ -2,7 +2,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 
 from app.analytics.inventory import InventoryTracker
-from app.execution.fill_model import FillMode, OpenQuote, detect_fills
+from app.execution.fill_model import FILL_MODE_LATENCY_PROB, FillMode, OpenQuote, detect_fills
 from app.execution.quote_ids import assign_quote_id
 from app.models.domain import Fill, OrderBookSnapshot, Quote
 
@@ -126,9 +126,18 @@ class PaperBroker:
         return accepted_fills
 
     def submit_quotes(self, quotes: list[Quote]) -> list[Quote]:
-        self._open_quotes = []
+        # In latency_prob_fill mode, a quote the market has crossed stays resting on its
+        # side until it fills or the cross ends; replacing it would reset its crossing
+        # streak every tick, and the mode could never fill (specs/001 US5, scenario 4).
+        kept: list[OpenQuote] = []
+        if self._fill_mode == FILL_MODE_LATENCY_PROB:
+            kept = [q for q in self._open_quotes if q.crossed_streak > 0]
+        kept_sides = {q.quote.side for q in kept}
+        self._open_quotes = list(kept)
         submitted: list[Quote] = []
         for quote in quotes:
+            if quote.side in kept_sides:
+                continue
             quoted = assign_quote_id(quote)
             self._open_quotes.append(OpenQuote(quote_id=quoted.quote_id, quote=quoted))
             submitted.append(quoted)

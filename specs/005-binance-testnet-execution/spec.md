@@ -53,7 +53,7 @@ should.
 ### Found during implementation
 
 - **The real engine fills more than the paper models.** In a 30-minute recorded session, 35 of 52 accepted orders filled on the testnet (67%). `full_cross_fill` and `partial_fill` filled 26 (50%), all of them also filled for real: 0 paper only, 9 real only. Someone traded into the lab's price while the book, seen every 2 to 3 seconds, never crossed it.
-- **`latency_prob_fill` with a latency of 2 or more cannot fill here, and never fills in the main paper loop either.** In the shadows, a real fill ends the order's window before a second crossed snapshot. The main `PaperBroker` replaces every quote each tick, which resets the crossing streak: 0 fills over 20 ticks that were all crossed. This is a pre-existing bug in the 001 fill model, so it is reported and left as a follow-up, outside this feature's scope.
+- **`latency_prob_fill` with a latency of 2 or more cannot fill here, and never fills in the main paper loop either.** In the shadows, a real fill ends the order's window before a second crossed snapshot. The main `PaperBroker` replaces every quote each tick, which resets the crossing streak: 0 fills over 20 ticks that were all crossed. This was a pre-existing bug in the 001 fill model. It was fixed separately on 2026-11-03 (spec 001, US5 scenario 4): crossed quotes now keep resting in that mode. The shadows' 0 here is unchanged, because it comes from the real fill ending the window.
 - **Reset detection cannot use balances.** The same testnet account may trade other symbols, so resets are detected from vanished orders or vanished trade history (research R7).
 
 ## Design Decisions and Why

@@ -92,6 +92,7 @@ A researcher can select a fill mode that models delayed / probabilistic fills (t
 **Acceptance Scenarios**:
 
 1. **Given** fill mode `latency_prob_fill` (name may vary), **When** a quote would fill under `full_cross_fill`, **Then** fills may be delayed and/or skipped per configurable latency and probability parameters.
+4. **Given** fill mode `latency_prob_fill` and a resting quote the market has crossed, **When** the strategy re-quotes on the next tick, **Then** the crossed quote stays resting on its side (it is not replaced) until it fills, the cross ends, or the kill switch or a stale tick cancels it. Only then can the latency elapse and the fill happen. *Added 2026-11-03: before this, every quote was replaced each tick, which reset the crossing count, so the mode never filled with `FILL_LATENCY_TICKS` of 2 or more (found by spec 005).*
 2. **Given** the new mode, **When** documented, **Then** README/design-decisions state it is a toy model, not exchange matching-engine fidelity.
 3. **Given** strategy comparison / Research tab, **When** comparing modes or strategies, **Then** the new mode is selectable or included in an explicit scenario (see US7).
 
@@ -150,6 +151,7 @@ Users can run market data via **websocket** (when enabled) or fall back to polli
 - Kill confirm cancel: no request sent.
 - Operator token misconfigured empty string: treat as unset or reject boot — pick one and document.
 - Latency fill with probability 0: never fills; probability 1 + latency 0: behaves like aggressive fill when crossed.
+- Latency fill with probability 1 and latency N: a quote crossed on N consecutive ticks fills on the N-th tick, even though the strategy re-quotes every tick.
 - Hosted demo without Postgres: SQLite path remains valid.
 - Portfolio deploy before demo URL exists: no broken “Live Demo” badge.
 

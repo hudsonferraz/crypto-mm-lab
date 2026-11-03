@@ -118,5 +118,5 @@ The MVP is US1 plus US2 (real orders and the comparison). US3 hardens the order 
   - handling of lost order requests;
   - the shadow order window after a fill;
   - the latency tick index.
-- **Out-of-scope finding**: the 001 `latency_prob_fill` never fills in the main paper loop (spec, "Found during implementation"). It is left for a follow-up feature.
+- **Out-of-scope finding**: the 001 `latency_prob_fill` never fills in the main paper loop (spec, "Found during implementation"). It was fixed afterwards in a separate change (spec 001, T011).
 - **Dashboard**: dark mode only, like every other tab (the dashboard has no light theme). Screenshot: docs/images/dashboard-testnet.png.

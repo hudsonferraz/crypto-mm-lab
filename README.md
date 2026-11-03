@@ -336,7 +336,7 @@ python scripts/record_testnet_session.py --minutes 30 --spread-bps 2 --threshold
 
 What the recording shows:
 - **The paper models are pessimistic on the testnet.** They never filled an order the real engine left alone. But they missed 9 real fills, because someone traded into our price while the book, seen at our 2-to-3-second snapshot rate, never crossed it.
-- **`latency_prob_fill` cannot fill a resting quote that the real market takes first.** The main paper broker replaces its quotes every tick, which resets the crossing streak the same way. With `FILL_LATENCY_TICKS` of 2 or more, that model never fills in the paper loop either: 0 fills over 20 ticks that were all crossed. The testnet comparison found this existing bug; the fix is left as a follow-up.
+- **`latency_prob_fill` cannot fill a resting quote that the real market takes first.** This comparison also exposed a bug in the main paper broker: it replaced every quote each tick, which reset the crossing streak, so with `FILL_LATENCY_TICKS` of 2 or more the model never filled (0 fills over 20 ticks that were all crossed). Fixed: in this mode, a crossed quote now stays resting until it fills or the cross ends (9 fills over the same 20 ticks).
 
 ### Why it's built this way
 
@@ -364,7 +364,8 @@ This project is a **paper-trading lab**, not a production market-making system. 
   - `full_cross_fill` (default) — if the external best bid/ask crosses your resting quote, the full quote size fills at your price.
   - `partial_fill` — same trigger, but fill size is capped by opposing top-of-book depth.
   - Neither mode models queue position, order-flow priority, or latency.
-- **Quote lifecycle** — resting quotes are replaced each tick; partial remainders persist only until the next submission. Each quote receives a UUID at submission; fills carry the same ID for audit joins. Every persisted tick receives a shared `tick_id` so operators can reconstruct the full state via `GET /audit/ticks/{tick_id}`.
+  - `latency_prob_fill` (toy) — a quote fills only after the book has crossed it for `FILL_LATENCY_TICKS` ticks in a row, and then with probability `FILL_PROBABILITY`. A crossed quote stays resting (it is not replaced) until it fills or the cross ends.
+- **Quote lifecycle** — resting quotes are replaced each tick (except crossed quotes in `latency_prob_fill`); partial remainders persist only until the next submission. Each quote receives a UUID at submission; fills carry the same ID for audit joins. Every persisted tick receives a shared `tick_id` so operators can reconstruct the full state via `GET /audit/ticks/{tick_id}`.
 
 ### Market data
 

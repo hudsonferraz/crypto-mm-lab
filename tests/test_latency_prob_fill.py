@@ -62,3 +62,63 @@ def test_latency_prob_can_skip_fill_when_probability_zero() -> None:
         tick_index=9,
     )
     assert fills == []
+
+
+def _broker(mode: str = FILL_MODE_LATENCY_PROB, latency: int = 2, probability: float = 1.0):
+    from app.execution.paper_broker import PaperBroker
+
+    return PaperBroker(
+        "BTC/USDT",
+        10_000,
+        0,
+        fill_mode=mode,
+        fill_latency_ticks=latency,
+        fill_probability=probability,
+    )
+
+
+def _bid(price: float = 100.0) -> Quote:
+    return Quote("BTC/USDT", QuoteSide.BID, price, 0.01, datetime.now(UTC))
+
+
+def test_crossed_quote_survives_requotes_and_fills_after_latency() -> None:
+    """Regression (found by spec 005): re-quoting every tick used to reset the streak."""
+    broker = _broker(latency=3)
+    broker.submit_quotes([_bid(100.0)])
+    fills = []
+    for tick in range(3):
+        fills += broker.apply_fills(_snapshot(99.0, 100.0))  # crosses our 100 bid every tick
+        # The strategy re-quotes lower each tick, as it would after the market moved.
+        submitted = broker.submit_quotes([_bid(99.5 - tick)])
+        if not fills:
+            assert submitted == []  # the crossed bid keeps resting on its side
+            assert broker.open_quotes[0].quote.price == 100.0
+    assert len(fills) == 1 and fills[0].price == 100.0
+    assert broker.open_quote_count == 1 and broker.open_quotes[0].quote.price == 97.5
+
+
+def test_quote_is_replaced_once_the_cross_ends() -> None:
+    broker = _broker(latency=3)
+    broker.submit_quotes([_bid(100.0)])
+    assert broker.apply_fills(_snapshot(99.0, 100.0)) == []  # crossed once
+    broker.submit_quotes([_bid(99.0)])
+    assert broker.open_quotes[0].quote.price == 100.0
+    assert broker.apply_fills(_snapshot(100.5, 101.0)) == []  # cross ended: streak back to 0
+    broker.submit_quotes([_bid(99.0)])
+    assert [q.quote.price for q in broker.open_quotes] == [99.0]
+
+
+def test_other_modes_still_replace_every_tick() -> None:
+    broker = _broker(mode="full_cross_fill")
+    broker.submit_quotes([_bid(100.0)])
+    broker.apply_fills(_snapshot(101.0, 102.0))
+    broker.submit_quotes([_bid(99.0)])
+    assert [q.quote.price for q in broker.open_quotes] == [99.0]
+
+
+def test_kill_switch_still_cancels_a_crossed_quote() -> None:
+    broker = _broker(latency=5)
+    broker.submit_quotes([_bid(100.0)])
+    broker.apply_fills(_snapshot(99.0, 100.0))
+    broker.cancel_all_quotes()
+    assert broker.open_quote_count == 0
