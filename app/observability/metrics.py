@@ -29,3 +29,24 @@ LP_FEES_QUOTE = Gauge("mm_lp_fees_quote", "Cumulative LP fees earned (quote)")
 LP_IL_QUOTE = Gauge("mm_lp_il_quote", "Cumulative impermanent loss (quote, negative = loss)")
 LP_NET_PNL_QUOTE = Gauge("mm_lp_net_pnl_quote", "LP book net PnL (quote)")
 LP_REBALANCES = Counter("mm_lp_rebalances_total", "LP range rebalances")
+
+# Flash-arbitrage simulation (specs/003-flash-arb): read-only, never broadcast
+ARB_SIMULATIONS = Counter(
+    "mm_arb_simulations_total", "Flash-arb simulations by outcome", ["outcome"]
+)
+ARB_SIMULATIONS_SKIPPED = Counter(
+    "mm_arb_simulations_skipped_total", "Ticks without a simulation, by reason", ["reason"]
+)
+ARB_SIM_NET_PROFIT = Gauge(
+    "mm_arb_sim_net_profit_usd", "Latest simulated net profit after gas (USDC)"
+)
+ARB_SIM_ESTIMATE_ERROR_BPS = Gauge(
+    "mm_arb_sim_estimate_error_bps",
+    "Latest simulated-minus-estimated gross profit (bps of notional)",
+)
+ARB_SIM_LATENCY = Histogram(
+    "mm_arb_sim_latency_seconds",
+    "Scan + simulation latency",
+    buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0),
+)
+ARB_GAP_BPS = Gauge("mm_arb_v2_v3_gap_bps", "V2 minus V3 price gap (bps of the V3 price)")

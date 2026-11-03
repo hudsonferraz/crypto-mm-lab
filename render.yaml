@@ -43,3 +43,6 @@ services:
         value: "true"
       - key: LP_ENABLED
         value: "true"
+      # Flash-arb simulation: read-only eth_call with state overrides, never broadcast
+      - key: ARB_SIM_ENABLED
+        value: "true"

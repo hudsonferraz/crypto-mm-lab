@@ -14,6 +14,7 @@ from app.api.operator_auth import require_operator_token
 from app.config.redaction import rpc_provider_label
 from app.config.settings import Settings, get_settings
 from app.market_data.orderbook import best_ask, best_bid, mid_price, spread_bps
+from app.services.flash_arb_service import backend_label
 from app.services.market_maker_loop import MarketMakerLoop
 
 router = APIRouter()
@@ -134,6 +135,11 @@ async def config() -> dict:
         "lp_range_width_bps": settings.lp_range_width_bps,
         "lp_rebalance_threshold_bps": settings.lp_rebalance_threshold_bps,
         "rpc_provider": rpc_provider_label(settings.eth_rpc_url),
+        "arb_sim_enabled": settings.arb_sim_active,
+        "arb_sim_backend": backend_label(settings.arb_sim_url) if settings.arb_sim_active else None,
+        "arb_reference_size_quote": settings.arb_reference_size_quote,
+        "arb_gas_units": settings.arb_gas_units,
+        "arb_sim_every_ticks": settings.arb_sim_every_ticks,
         "assumptions_url": "/docs/simulation-assumptions",
         "design_decisions_path": "docs/design-decisions.md",
     }

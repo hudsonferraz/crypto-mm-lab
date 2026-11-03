@@ -145,6 +145,32 @@ class Web3Transport:
             )
         )
 
+    def eth_call_raw(
+        self, tx: dict[str, Any], block: BlockId, overrides: dict[str, Any] | None = None
+    ) -> tuple[bool, bytes]:
+        """``eth_call`` with optional state overrides; returns (succeeded, data).
+
+        A revert is a normal result here (the executor's simulate() always reverts), so
+        revert data is returned instead of raised. Transport and node errors still raise.
+        """
+        block_param = hex(block) if isinstance(block, int) else block
+        params: list[Any] = [tx, block_param]
+        if overrides:
+            params.append(overrides)
+        response = self._web3.provider.make_request("eth_call", params)
+        if "error" not in response:
+            return True, bytes.fromhex(str(response.get("result", "0x")).removeprefix("0x"))
+        error = response["error"] or {}
+        data = error.get("data")
+        if isinstance(data, dict):  # some nodes nest the revert payload
+            data = data.get("data")
+        if isinstance(data, str) and data.startswith("0x"):
+            return False, bytes.fromhex(data[2:])
+        message = str(error.get("message", "eth_call failed"))
+        if "revert" in message.lower():
+            return False, b""
+        raise RuntimeError(f"eth_call rejected: {message}")
+
     def block_number(self) -> int:
         return int(self._web3.eth.block_number)
 

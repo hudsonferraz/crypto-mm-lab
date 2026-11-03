@@ -158,6 +158,7 @@ def tick_audit_to_dict(bundle) -> dict:
         "v3_pool_snapshots": bundle.v3_pool_snapshots,
         "lp_positions": bundle.lp_positions,
         "lp_rebalances": bundle.lp_rebalances,
+        "arb_simulations": bundle.arb_simulations,
     }
 
 

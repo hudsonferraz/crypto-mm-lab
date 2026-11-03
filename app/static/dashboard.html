@@ -105,7 +105,13 @@
     }
     .quote-form button { margin-top: 0; }
     details summary { cursor: pointer; margin-top: 0.5rem; }
-    .note, .muted, #lp-status { overflow-wrap: anywhere; }
+    .note, .muted, #lp-status, #arb-outcome-note { overflow-wrap: anywhere; }
+    #gap-chart { display: block; width: 100%; height: 200px; }
+    .badge { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; border: 1px solid #3c4043; }
+    .badge-profitable { background: #0f2e1f; border-color: #15803d; color: #86efac; }
+    .badge-unprofitable { background: #1a1d24; border-color: #3c4043; color: #cbd5e1; }
+    .badge-reverted { background: #3f1d1d; border-color: #7f1d1d; color: #fecaca; }
+    .explain p { margin: 0.4rem 0; }
     @media (max-width: 640px) {
       body { padding: 0.75rem; }
       .grid { grid-template-columns: 1fr 1fr; }
@@ -145,6 +151,7 @@
     <button class="tab" data-tab="opportunities" type="button">Opportunities</button>
     <button class="tab" data-tab="research" type="button">Research</button>
     <button class="tab" data-tab="lp" type="button">On-chain LP</button>
+    <button class="tab" data-tab="arb" type="button">Flash arb</button>
   </div>
 
   <section id="panel-live" class="panel active">
@@ -310,6 +317,62 @@
     <table>
       <thead><tr><th>Width</th><th>Threshold</th><th>Rebalances</th><th>In range</th><th>Fees</th><th>IL</th><th>Net</th></tr></thead>
       <tbody id="lp-backtest-body"><tr><td colspan="7">Not run yet</td></tr></tbody>
+    </table>
+  </section>
+
+  <section id="panel-arb" class="panel">
+    <h2>Flash arbitrage: V2 vs V3, simulated against live mainnet state</h2>
+    <div id="arb-note" class="note">Loading simulator status...</div>
+    <div class="grid">
+      <div class="card"><div class="label">Price gap (V2 vs V3) / both pools' fees</div><div class="value" id="arb-gap">-</div></div>
+      <div class="card"><div class="label">Trade (direction · size)</div><div class="value" id="arb-trade">-</div></div>
+      <div class="card"><div class="label">Scanner estimate (gross / net of gas)</div><div class="value" id="arb-estimate">-</div></div>
+      <div class="card"><div class="label">Simulated on-chain (gross / net of gas)</div><div class="value" id="arb-simulated">-</div></div>
+      <div class="card"><div class="label">Gas used · cost</div><div class="value" id="arb-gas">-</div></div>
+      <div class="card"><div class="label">Estimate error</div><div class="value" id="arb-error">-</div></div>
+    </div>
+    <div class="card" style="margin-top:1rem">
+      <div class="label">Outcome · <span id="arb-meta">-</span></div>
+      <div style="margin-top:0.4rem"><span id="arb-outcome" class="badge badge-unprofitable">-</span> <span class="badge">Simulated, never sent</span></div>
+      <p id="arb-outcome-note" style="margin:0.6rem 0 0">-</p>
+    </div>
+
+    <h2>Why most results say "unprofitable"</h2>
+    <div class="note explain">
+      <p><strong>The gap is usually smaller than the fees.</strong> A trade pays the V3 fee (5 bps) and the V2 fee (30 bps), so WETH has to be more than 35 bps cheaper on one pool before any size makes money, and gas comes on top. These two pools are among the most watched on Ethereum, and bots close bigger gaps inside the same block, usually before we can see them. An honest "unprofitable, by this much" is the expected answer. The contract tests force a gap to prove the profitable path works.</p>
+      <p><strong>Simulated, never sent.</strong> Sending a real transaction needs a funded wallet and a private key, which costs money and puts a key on a server. Instead, the lab runs the contract against the current mainnet state with a read-only call that gives the same answer the chain would at that block, with no key and no cost.</p>
+      <p><strong>How the hosted demo does it.</strong> The free host can't run a mainnet copy, so each simulation temporarily places the contract's code at an address for one read-only call on the free public endpoint. If the endpoint can't do that, this page says "unavailable" instead of showing invented numbers.</p>
+    </div>
+
+    <h2>Gap vs fees, recent simulations</h2>
+    <div class="card chart-card">
+      <div class="chart-legend muted">
+        <span><span class="swatch" style="background:#3b82f6"></span>Price gap between the pools (bps)</span>
+        <span><span class="swatch swatch-line"></span>Both pools' fees: a gap must exceed this to pay</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="gap-chart" height="200" role="img" aria-label="Price gap between Uniswap V2 and V3 per simulation, against the combined fee threshold"></canvas>
+        <div id="gap-tooltip" class="chart-tooltip"></div>
+      </div>
+      <div class="label chart-empty" id="gap-empty">No simulations yet</div>
+      <details class="muted"><summary>Show data table</summary>
+        <table><thead><tr><th>Time</th><th>Block</th><th>Gap</th><th>Outcome</th></tr></thead>
+          <tbody id="gap-table"></tbody></table>
+      </details>
+    </div>
+
+    <h2>How often is the scanner right?</h2>
+    <div class="grid">
+      <div class="card"><div class="label">Simulations / outcomes</div><div class="value" id="acc-total">-</div></div>
+      <div class="card"><div class="label">Estimate and simulation agree</div><div class="value" id="acc-agree">-</div></div>
+      <div class="card"><div class="label">Absolute error, median / p95</div><div class="value" id="acc-error">-</div></div>
+      <div class="card"><div class="label">Exact estimates matching to the unit</div><div class="value" id="acc-exact">-</div></div>
+    </div>
+
+    <h2>Recent simulations</h2>
+    <table>
+      <thead><tr><th>Time</th><th>Block</th><th>Direction</th><th>Size</th><th>Gap</th><th>Estimate net</th><th>Simulated net</th><th>Gas</th><th>Outcome</th></tr></thead>
+      <tbody id="arb-history"><tr><td colspan="9">No simulations yet</td></tr></tbody>
     </table>
   </section>
 
@@ -806,6 +869,192 @@
         </tr>`).join("");
     }
 
+    const DIRECTION_LABEL = { v3_to_v2: "buy on V3, sell on V2", v2_to_v3: "buy on V2, sell on V3" };
+    const FEES_BPS = 35;
+    let arbHistoryCache = [];
+
+    const outcomeBadge = (outcome, id = "") => {
+      const kind = outcome?.startsWith("reverted") ? "reverted" : outcome;
+      return `<span ${id ? `id="${id}" ` : ""}class="badge badge-${kind}">${outcome}</span>`;
+    };
+
+    function renderArbStatus(payload) {
+      const status = payload.status;
+      const backend = {
+        "public-rpc": "free public RPC (state overrides)",
+        "local-fork": "local anvil fork",
+        "custom-rpc": "custom RPC",
+      }[status.backend] || "-";
+      const state = {
+        ok: "Simulator OK",
+        waiting: "Waiting",
+        unavailable: "Simulator UNAVAILABLE",
+        disabled: "Simulator off",
+      }[status.state] || status.state;
+      document.getElementById("arb-note").textContent = `${state} · backend: ${backend}` +
+        `${status.reason ? " · " + status.reason : ""}` +
+        `${status.skipped_total ? ` · ${status.skipped_total} tick(s) skipped` : ""}` +
+        " · every result is a read-only simulation; nothing is ever signed or sent.";
+    }
+
+    function renderArbLatest(latest) {
+      if (!latest) return;
+      const sim = latest.simulation;
+      document.getElementById("arb-gap").textContent = `${fmt(Math.abs(latest.gap_bps), 1)} bps / ${FEES_BPS} bps`;
+      document.getElementById("arb-trade").textContent =
+        `${DIRECTION_LABEL[latest.direction]} · ${usd(latest.notional_quote, 0)}` +
+        (latest.size_reason === "reference" ? " (reference size)" : " (best size)");
+      document.getElementById("arb-estimate").textContent =
+        `${signedUsd(latest.estimate.gross_quote)} / ${signedUsd(latest.estimate.net_quote)}`;
+      document.getElementById("arb-simulated").textContent =
+        sim.net_quote === null ? "-" : `${signedUsd(sim.gross_quote)} / ${signedUsd(sim.net_quote)}`;
+      document.getElementById("arb-gas").textContent = sim.gas_used === null ? "-" :
+        `${Number(sim.gas_used).toLocaleString("en-US")} · ${usd(sim.gas_cost_quote, 4)}`;
+      document.getElementById("arb-error").textContent = latest.estimate_error_quote === null ? "-" :
+        `${signedUsd(latest.estimate_error_quote)} · ${fmt(latest.estimate_error_bps, 3)} bps` +
+        (latest.estimate.exact ? " (exact estimate)" :
+          latest.estimate_error_quote === 0 ? " (tick window from an older block, still matched)" :
+          " (approximate: tick window from an older block)");
+      document.getElementById("arb-outcome").outerHTML = outcomeBadge(latest.outcome, "arb-outcome");
+      document.getElementById("arb-outcome-note").textContent = latest.outcome_note;
+      document.getElementById("arb-meta").textContent =
+        `block ${latest.block_number} · ${fmtTime(latest.timestamp)} · ${fmt(latest.latency_ms, 0)} ms`;
+    }
+
+    function renderAccuracy(acc) {
+      const counts = Object.entries(acc.outcome_counts || {}).map(([k, v]) => `${v} ${k}`).join(", ");
+      document.getElementById("acc-total").textContent = acc.total ? `${acc.total} · ${counts}` : "-";
+      document.getElementById("acc-agree").textContent =
+        acc.agreement_rate === null ? "-" : `${fmt(acc.agreement_rate * 100, 1)}%`;
+      document.getElementById("acc-error").textContent = acc.median_abs_error_bps === null ? "-" :
+        `${fmt(acc.median_abs_error_bps, 3)} / ${fmt(acc.p95_abs_error_bps, 3)} bps`;
+      document.getElementById("acc-exact").textContent =
+        acc.exact_match_rate === null ? "-" : `${fmt(acc.exact_match_rate * 100, 1)}%`;
+    }
+
+    function renderArbHistory(items) {
+      if (!items.length) return;
+      document.getElementById("arb-history").innerHTML = items.slice(0, 20).map((item) => `
+        <tr>
+          <td>${fmtTime(item.timestamp)}</td>
+          <td class="numeric">${item.block_number}</td>
+          <td>${DIRECTION_LABEL[item.direction]}</td>
+          <td class="numeric">${usd(item.notional_quote, 0)}</td>
+          <td class="numeric">${fmt(Math.abs(item.gap_bps), 1)} bps</td>
+          <td class="numeric">${signedUsd(item.estimate.net_quote)}</td>
+          <td class="numeric">${signedUsd(item.simulation.net_quote)}</td>
+          <td class="numeric">${item.simulation.gas_used === null ? "-" : Number(item.simulation.gas_used).toLocaleString("en-US")}</td>
+          <td>${outcomeBadge(item.outcome)}</td>
+        </tr>`).join("");
+      document.getElementById("gap-table").innerHTML = items.map((item) =>
+        `<tr><td>${fmtTime(item.timestamp)}</td><td class="numeric">${item.block_number}</td>` +
+        `<td class="numeric">${fmt(Math.abs(item.gap_bps), 1)} bps</td><td>${item.outcome}</td></tr>`).join("");
+    }
+
+    function renderGapChart(items) {
+      const canvas = document.getElementById("gap-chart");
+      const empty = document.getElementById("gap-empty");
+      const points = [...items].reverse(); // oldest first
+      if (!points.length) {
+        canvas.style.display = "none";
+        empty.style.display = "block";
+        return;
+      }
+      if (!canvas.parentElement.offsetParent) return; // tab hidden: draw when shown
+      canvas.style.display = "block";
+      empty.style.display = "none";
+      const width = canvas.clientWidth || canvas.parentElement.clientWidth;
+      const height = 200;
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = width * ratio;
+      canvas.height = height * ratio;
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      const pad = { left: 40, right: 12, top: 14, bottom: 22 };
+      const plotW = width - pad.left - pad.right;
+      const plotH = height - pad.top - pad.bottom;
+      const gaps = points.map((p) => Math.abs(p.gap_bps));
+      const top = Math.max(FEES_BPS * 1.3, Math.max(...gaps) * 1.1);
+      const xFor = (i) => pad.left + (points.length === 1 ? plotW / 2 : (i / (points.length - 1)) * plotW);
+      const yFor = (v) => pad.top + plotH - (v / top) * plotH;
+      // recessive grid and y labels (bps)
+      ctx.strokeStyle = "#2a2f3a";
+      ctx.lineWidth = 1;
+      ctx.fillStyle = "#9aa0a6";
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.textAlign = "right";
+      [0, top / 2, top].forEach((v) => {
+        const y = Math.round(yFor(v)) + 0.5;
+        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + plotW, y); ctx.stroke();
+        ctx.fillText(fmt(v, 0), pad.left - 6, y + 4);
+      });
+      // fee threshold
+      const feeY = yFor(FEES_BPS);
+      ctx.strokeStyle = "#e8eaed";
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(pad.left, feeY); ctx.lineTo(pad.left + plotW, feeY); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#e8eaed";
+      ctx.textAlign = "left";
+      ctx.fillText(`fees ${FEES_BPS} bps`, pad.left + 6, feeY - 6);
+      // gap series: 2px line, 8px markers with a 2px surface ring
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      gaps.forEach((g, i) => (i ? ctx.lineTo(xFor(i), yFor(g)) : ctx.moveTo(xFor(i), yFor(g))));
+      ctx.stroke();
+      gaps.forEach((g, i) => {
+        ctx.beginPath();
+        ctx.arc(xFor(i), yFor(g), 4, 0, Math.PI * 2);
+        ctx.fillStyle = "#3b82f6";
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#1a1d24";
+        ctx.stroke();
+      });
+      ctx.fillStyle = "#9aa0a6";
+      ctx.textAlign = "left";
+      ctx.fillText(fmtTime(points[0].timestamp), pad.left, height - 6);
+      ctx.textAlign = "right";
+      ctx.fillText(fmtTime(points[points.length - 1].timestamp), pad.left + plotW, height - 6);
+
+      canvas.onmousemove = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        let index = 0;
+        points.forEach((_, i) => { if (Math.abs(xFor(i) - x) < Math.abs(xFor(index) - x)) index = i; });
+        const p = points[index];
+        const tooltip = document.getElementById("gap-tooltip");
+        tooltip.style.display = "block";
+        tooltip.style.left = `${Math.min(x + 12, width - 200)}px`;
+        tooltip.style.top = "8px";
+        tooltip.innerHTML = `<strong>block ${p.block_number}</strong> · ${fmtTime(p.timestamp)}<br>` +
+          `gap ${fmt(Math.abs(p.gap_bps), 1)} bps (fees ${FEES_BPS})<br>` +
+          `simulated net ${signedUsd(p.simulation.net_quote)}<br>${p.outcome}`;
+      };
+      canvas.onmouseleave = () => { document.getElementById("gap-tooltip").style.display = "none"; };
+    }
+
+    async function refreshArb() {
+      try {
+        const [latest, history, accuracy] = await Promise.all([
+          fetchJson("/arb/simulation"),
+          fetchJson("/arb/simulations?limit=120"),
+          fetchJson("/arb/accuracy"),
+        ]);
+        renderArbStatus(latest);
+        renderArbLatest(latest.latest);
+        arbHistoryCache = history.items;
+        renderArbHistory(history.items);
+        renderGapChart(history.items);
+        renderAccuracy(accuracy);
+      } catch (error) {
+        document.getElementById("arb-note").textContent = `Flash-arb error: ${error.message}`;
+      }
+    }
+
     async function refreshLp() {
       try {
         const [pool, lp, books, rebalances] = await Promise.all([
@@ -874,6 +1123,7 @@
         tab.classList.add("active");
         document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
         if (tab.dataset.tab === "lp") renderLiquidityChart(lpPoolCache, lpPositionCache);
+        if (tab.dataset.tab === "arb") renderGapChart(arbHistoryCache);
         history.replaceState(null, "", `#${tab.dataset.tab}`);
       });
     });
@@ -962,6 +1212,8 @@
     refreshLp();
     setInterval(refresh, 2000);
     setInterval(refreshLp, 4000);
+    refreshArb();
+    setInterval(refreshArb, 4000);
   </script>
 </body>
 </html>

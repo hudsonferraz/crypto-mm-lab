@@ -78,6 +78,16 @@ class Settings(BaseSettings):
     lp_prefer_initialized_ticks: bool = True
     lp_snap_tolerance_spacings: int = Field(default=3, ge=0)
 
+    # Flash-arbitrage simulation (read-only eth_call with state overrides; never broadcast)
+    arb_sim_enabled: bool = True
+    arb_sim_rpc_url: str | None = None
+    arb_sim_every_ticks: int = Field(default=1, ge=1)
+    arb_reference_size_quote: float = Field(default=1_000.0, gt=0)
+    arb_gas_units: int = Field(default=160_000, gt=0)
+    arb_priority_fee_gwei: float = Field(default=0.05, ge=0)
+    arb_sim_subsidy_quote: float = Field(default=1_000_000.0, gt=0)
+    arb_sim_timeout_sec: float = Field(default=10.0, gt=0)
+
     @property
     def v3_active(self) -> bool:
         return self.dex_enabled and self.v3_enabled
@@ -85,6 +95,14 @@ class Settings(BaseSettings):
     @property
     def lp_active(self) -> bool:
         return self.v3_active and self.lp_enabled
+
+    @property
+    def arb_sim_active(self) -> bool:
+        return self.v3_active and self.arb_sim_enabled
+
+    @property
+    def arb_sim_url(self) -> str:
+        return self.arb_sim_rpc_url or self.eth_rpc_url
 
 
 @lru_cache

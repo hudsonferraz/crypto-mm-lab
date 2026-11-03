@@ -31,6 +31,7 @@ def test_repository_creates_all_tables(tmp_path) -> None:
         "v3_pool_snapshots",
         "lp_position_states",
         "lp_rebalances",
+        "arb_simulations",
     }
     repo.close()
 

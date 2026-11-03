@@ -9,6 +9,7 @@ def offline_test_defaults(monkeypatch):
     monkeypatch.setenv("DEX_ENABLED", "false")
     monkeypatch.setenv("V3_ENABLED", "false")
     monkeypatch.setenv("LP_ENABLED", "false")
+    monkeypatch.setenv("ARB_SIM_ENABLED", "false")
     monkeypatch.setenv("LOOP_ENABLED", "false")
     monkeypatch.setenv("ETH_RPC_URL", "http://127.0.0.1:0")
     get_settings.cache_clear()

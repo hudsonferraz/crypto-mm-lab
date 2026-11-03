@@ -14,6 +14,7 @@ from sqlalchemy import (
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
+from app.analytics.arb_report import simulation_from_dict, simulation_to_dict
 from app.analytics.lp_report import (
     lp_state_from_dict,
     lp_state_to_dict,
@@ -39,6 +40,7 @@ from app.models.domain import (
     Quote,
     QuoteSide,
 )
+from app.models.flash_arb import SimulationResult
 from app.models.tick_audit import TickAuditBundle
 from app.models.v3 import LpPositionState, RebalanceEvent, V3PoolSnapshot
 from app.storage.database import create_db_engine
@@ -187,6 +189,22 @@ class LpRebalanceRow(Base):
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class ArbSimulationRow(Base):
+    """One flash-arb simulation per tick: queryable headline columns plus the full JSON."""
+
+    __tablename__ = "arb_simulations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tick_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    block_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    direction: Mapped[str] = mapped_column(String(16), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(64), nullable=False)
+    sim_net_quote: Mapped[float | None] = mapped_column(Float, nullable=True)
+    estimate_error_bps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
 def add_missing_nullable_columns(engine: Engine) -> list[str]:
     """Idempotently add nullable columns that exist in the models but not in the DB.
 
@@ -302,6 +320,21 @@ def _v3_row_to_dict(row: V3PoolSnapshotRow) -> dict:
         "is_incomplete": row.is_incomplete,
         "data_source": row.data_source,
     }
+
+
+def _arb_simulation_row(result: SimulationResult, tick_id: str) -> ArbSimulationRow:
+    payload = simulation_to_dict(result)
+    payload["tick_id"] = tick_id
+    return ArbSimulationRow(
+        tick_id=tick_id,
+        block_number=result.block_number,
+        direction=result.direction,
+        outcome=result.outcome,
+        sim_net_quote=result.sim_net_quote,
+        estimate_error_bps=result.estimate_error_bps,
+        payload=json.dumps(payload),
+        timestamp=result.timestamp,
+    )
 
 
 def _best_price(levels: tuple[OrderBookLevel, ...]) -> float:
@@ -450,6 +483,7 @@ class Repository:
         v3_snapshot: V3PoolSnapshot | None = None,
         lp_state: LpPositionState | None = None,
         lp_rebalances: list[RebalanceEvent] | None = None,
+        arb_simulation: SimulationResult | None = None,
     ) -> None:
         """Persist all tick artifacts in a single database transaction."""
         with self._session() as session:
@@ -542,6 +576,8 @@ class Repository:
                         timestamp=event.timestamp,
                     )
                 )
+            if arb_simulation is not None:
+                session.add(_arb_simulation_row(arb_simulation, tick_id))
             session.commit()
 
     def save_opportunities(
@@ -639,6 +675,9 @@ class Repository:
             rebalance_rows = (
                 session.query(LpRebalanceRow).filter(LpRebalanceRow.tick_id == tick_id).all()
             )
+            arb_rows = (
+                session.query(ArbSimulationRow).filter(ArbSimulationRow.tick_id == tick_id).all()
+            )
 
         if not any(
             [
@@ -650,6 +689,7 @@ class Repository:
                 opportunity_rows,
                 v3_rows,
                 lp_rows,
+                arb_rows,
             ]
         ):
             return None
@@ -727,6 +767,7 @@ class Repository:
             v3_pool_snapshots=[_v3_row_to_dict(row) for row in v3_rows],
             lp_positions=[json.loads(row.payload) for row in lp_rows],
             lp_rebalances=[json.loads(row.payload) for row in rebalance_rows],
+            arb_simulations=[json.loads(row.payload) for row in arb_rows],
         )
 
     def load_orderbook_snapshots(
@@ -771,6 +812,17 @@ class Repository:
                 )
             )
         return snapshots
+
+    def get_arb_simulations(self, limit: int = 100) -> list[SimulationResult]:
+        """Latest simulations, newest first."""
+        with self._session() as session:
+            rows = (
+                session.query(ArbSimulationRow)
+                .order_by(ArbSimulationRow.id.desc())
+                .limit(limit)
+                .all()
+            )
+        return [simulation_from_dict(json.loads(row.payload)) for row in rows]
 
     def get_latest_lp_state(self) -> LpPositionState | None:
         with self._session() as session:

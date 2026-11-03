@@ -98,6 +98,39 @@
       ],
       "title": "V3 data health & rebalances",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "id": 9,
+      "targets": [
+        {"expr": "abs(mm_arb_v2_v3_gap_bps)", "legendFormat": "V2-V3 gap (bps)", "refId": "A"},
+        {"expr": "vector(35)", "legendFormat": "Both pools' fees (bps)", "refId": "B"}
+      ],
+      "title": "Flash arb: price gap vs fees",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+      "id": 10,
+      "targets": [
+        {"expr": "mm_arb_sim_net_profit_usd", "legendFormat": "Simulated net profit after gas", "refId": "A"}
+      ],
+      "title": "Flash arb: simulated net profit (never sent)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 40},
+      "id": 11,
+      "targets": [
+        {"expr": "sum by (outcome) (increase(mm_arb_simulations_total[15m]))", "legendFormat": "{{outcome}}", "refId": "A"},
+        {"expr": "sum by (reason) (increase(mm_arb_simulations_skipped_total[15m]))", "legendFormat": "skipped: {{reason}}", "refId": "B"}
+      ],
+      "title": "Flash arb: simulations per 15 min by outcome",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",

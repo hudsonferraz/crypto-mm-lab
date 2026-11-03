@@ -25,11 +25,13 @@ from app.models.domain import (
     Position,
     Quote,
 )
+from app.models.flash_arb import SimulationResult, SimulatorStatus
 from app.models.v3 import LpPositionState, RebalanceEvent, V3PoolSnapshot
 from app.observability import metrics as prom
 from app.risk.kill_switch import KillSwitch
 from app.risk.limits import filter_quotes_by_position_limit
 from app.services.arbitrage_scanner import scan_arbitrage_opportunities, scan_v3_opportunities
+from app.services.flash_arb_service import FlashArbService, build_flash_arb_service, disabled_status
 from app.storage.repository import Repository
 from app.strategies.concentrated_lp import ConcentratedLpStrategy
 from app.strategies.factory import build_strategy
@@ -67,7 +69,13 @@ def build_lp_book(settings: Settings) -> LpPaperBook:
 
 
 class MarketMakerLoop:
-    def __init__(self, settings: Settings, *, v3_source=None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        v3_source=None,
+        flash_arb_service: FlashArbService | None = None,
+    ) -> None:
         self._settings = settings
         self._data_source = build_market_data_source(
             settings.exchange,
@@ -128,6 +136,11 @@ class MarketMakerLoop:
         self._last_v3_snapshot: V3PoolSnapshot | None = None
         self._last_lp_state: LpPositionState | None = None
         self._started_at: datetime | None = None
+
+        self._flash_arb: FlashArbService | None = None
+        if settings.arb_sim_active:
+            self._flash_arb = flash_arb_service or build_flash_arb_service(settings)
+        self._last_arb_simulation: SimulationResult | None = None
 
     @property
     def last_error(self) -> str | None:
@@ -208,6 +221,14 @@ class MarketMakerLoop:
     @property
     def v3_status_note(self) -> str | None:
         return self._v3_status_note
+
+    @property
+    def flash_arb_status(self) -> SimulatorStatus:
+        return self._flash_arb.status if self._flash_arb is not None else disabled_status()
+
+    @property
+    def last_arb_simulation(self) -> SimulationResult | None:
+        return self._last_arb_simulation
 
     @property
     def started_at(self) -> datetime | None:
@@ -320,7 +341,13 @@ class MarketMakerLoop:
         if v3_opportunities:
             tick_opportunities = [*tick_opportunities, *v3_opportunities]
             self._last_opportunities = tick_opportunities
-        v3_persist = dict(v3_snapshot=v3_snapshot, lp_state=lp_state, lp_rebalances=lp_events)
+        arb_simulation = await self._flash_arb_step(v3_snapshot)
+        v3_persist = dict(
+            v3_snapshot=v3_snapshot,
+            lp_state=lp_state,
+            lp_rebalances=lp_events,
+            arb_simulation=arb_simulation,
+        )
 
         if self._started_at is None:
             self._started_at = now
@@ -348,7 +375,7 @@ class MarketMakerLoop:
                 self._broker.restore_checkpoint(broker_checkpoint)
                 self._restore_lp(lp_checkpoint)
                 raise
-            self._commit_v3_state(tick_id, v3_snapshot, lp_state)
+            self._commit_v3_state(tick_id, v3_snapshot, lp_state, arb_simulation)
             self._commit_tick_state(
                 tick_id=tick_id,
                 snapshot=snapshot,
@@ -397,7 +424,7 @@ class MarketMakerLoop:
             self._restore_lp(lp_checkpoint)
             raise
 
-        self._commit_v3_state(tick_id, v3_snapshot, lp_state)
+        self._commit_v3_state(tick_id, v3_snapshot, lp_state, arb_simulation)
         self._commit_tick_state(
             tick_id=tick_id,
             snapshot=snapshot,
@@ -433,7 +460,10 @@ class MarketMakerLoop:
         tick_id: str,
         v3_snapshot: V3PoolSnapshot | None,
         lp_state: LpPositionState | None,
+        arb_simulation: SimulationResult | None = None,
     ) -> None:
+        if arb_simulation is not None:
+            self._last_arb_simulation = replace(arb_simulation, tick_id=tick_id)
         if v3_snapshot is not None:
             self._last_v3_snapshot = replace(v3_snapshot, tick_id=tick_id)
         if lp_state is not None:
@@ -512,6 +542,28 @@ class MarketMakerLoop:
         if self._settings.metrics_enabled:
             self._record_v3_metrics(v3_snapshot, lp_state, lp_events)
         return v3_snapshot, lp_state, lp_events, opportunities, lp_checkpoint
+
+    async def _flash_arb_step(self, v3_snapshot: V3PoolSnapshot | None) -> SimulationResult | None:
+        """Scan V2 vs V3 and simulate the executor (read-only). Never fails the tick."""
+        if self._flash_arb is None or v3_snapshot is None:
+            return None
+        skipped_before = self._flash_arb.skipped
+        started = time.perf_counter()
+        result = await asyncio.to_thread(self._flash_arb.run, v3_snapshot)
+        if self._settings.metrics_enabled:
+            for reason, count in self._flash_arb.skipped.items():
+                delta = count - skipped_before.get(reason, 0)
+                if delta:
+                    prom.ARB_SIMULATIONS_SKIPPED.labels(reason=reason).inc(delta)
+            if result is not None:
+                prom.ARB_SIM_LATENCY.observe(time.perf_counter() - started)
+                prom.ARB_SIMULATIONS.labels(outcome=result.outcome).inc()
+                prom.ARB_GAP_BPS.set(result.gap_bps)
+                if result.sim_net_quote is not None:
+                    prom.ARB_SIM_NET_PROFIT.set(result.sim_net_quote)
+                if result.estimate_error_bps is not None:
+                    prom.ARB_SIM_ESTIMATE_ERROR_BPS.set(result.estimate_error_bps)
+        return result
 
     def _record_v3_metrics(
         self,

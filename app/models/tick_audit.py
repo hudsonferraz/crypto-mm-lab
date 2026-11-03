@@ -13,3 +13,4 @@ class TickAuditBundle:
     v3_pool_snapshots: list[dict] = field(default_factory=list)
     lp_positions: list[dict] = field(default_factory=list)
     lp_rebalances: list[dict] = field(default_factory=list)
+    arb_simulations: list[dict] = field(default_factory=list)

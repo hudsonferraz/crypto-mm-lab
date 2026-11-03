@@ -47,3 +47,8 @@ QUOTER_V2_EXACT_INPUT_SINGLE = (
     "quoteExactInputSingle((address,address,uint256,uint24,uint160))",
     ("uint256", "uint160", "uint32", "uint256"),
 )
+
+USDC_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+V2_GET_RESERVES = ("getReserves()", ("uint112", "uint112", "uint32"))
+V2_TOKEN0 = ("token0()", ("address",))
+ERC20_BALANCE_OF = ("balanceOf(address)", ("uint256",))
