@@ -7,9 +7,11 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.arb_routes import router as arb_router
 from app.api.lp_routes import router as lp_router
+from app.api.mempool_routes import router as mempool_router
 from app.api.routes import router
 from app.config.settings import get_settings
 from app.services.market_maker_loop import MarketMakerLoop
+from app.services.mempool.watcher import MempoolWatcher
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -20,9 +22,16 @@ async def lifespan(app: FastAPI):
     loop = MarketMakerLoop(settings)
     loop.initialize()
     app.state.market_maker_loop = loop
+    # The mempool watcher runs beside the loop, never inside it (specs/004, D6).
+    watcher = MempoolWatcher(settings, loop.repository) if settings.mempool_active else None
+    app.state.mempool_watcher = watcher
     if settings.loop_enabled:
         await loop.start()
+    if watcher is not None:
+        await watcher.start()
     yield
+    if watcher is not None:
+        await watcher.stop()
     await loop.stop()
 
 
@@ -31,6 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(router)
     app.include_router(lp_router)
     app.include_router(arb_router)
+    app.include_router(mempool_router)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/")

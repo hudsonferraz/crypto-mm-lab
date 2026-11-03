@@ -95,3 +95,30 @@ def test_detector_catches_the_usual_shapes() -> None:
     # Hashes and addresses are not keys.
     assert not find_key_material(f"block_hash = 0x{key}")
     assert not find_key_material("owner = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+
+
+_SIGNING_APIS = re.compile(
+    r"eth_sendRawTransaction|eth_sendTransaction|send_raw_transaction|sign_transaction"
+    r"|eth_account|Account\.from_key|eth_sign\b"
+)
+_READ_ONLY_MODULES = (
+    "app/services/mempool",
+    "app/adapters/dex/json_rpc.py",
+    "app/adapters/dex/pending_sources.py",
+    "app/adapters/dex/pool_events.py",
+    "app/api/mempool_routes.py",
+    "scripts/record_mempool_fixture.py",
+)
+
+
+def test_mempool_watcher_never_signs_or_sends() -> None:
+    """Spec 004 FR-020 / D7: the watcher only reads; no signing or sending API appears."""
+    offenders = []
+    for name in _READ_ONLY_MODULES:
+        path = ROOT / name
+        files = sorted(path.rglob("*.py")) if path.is_dir() else [path]
+        for file in files:
+            if _SIGNING_APIS.search(file.read_text(encoding="utf-8")):
+                offenders.append(str(file.relative_to(ROOT)))
+    assert offenders == []
+    assert _SIGNING_APIS.search("w3.eth.send_raw_transaction(tx)")

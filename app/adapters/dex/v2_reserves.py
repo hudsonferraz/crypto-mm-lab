@@ -33,6 +33,11 @@ class V2ReservesReader:
     def pair_address(self) -> str:
         return self._pair
 
+    @property
+    def usdc_is_token0(self) -> bool | None:
+        """Pair orientation, known after the first read."""
+        return self._usdc_is_token0
+
     def read(self, block: int) -> V2Reserves:
         if self._usdc_is_token0 is None:
             (token0,) = self._multicall.call(

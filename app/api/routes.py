@@ -16,6 +16,7 @@ from app.config.settings import Settings, get_settings
 from app.market_data.orderbook import best_ask, best_bid, mid_price, spread_bps
 from app.services.flash_arb_service import backend_label
 from app.services.market_maker_loop import MarketMakerLoop
+from app.services.mempool.watcher import endpoint_label
 
 router = APIRouter()
 
@@ -140,6 +141,15 @@ async def config() -> dict:
         "arb_reference_size_quote": settings.arb_reference_size_quote,
         "arb_gas_units": settings.arb_gas_units,
         "arb_sim_every_ticks": settings.arb_sim_every_ticks,
+        "mempool_enabled": settings.mempool_active,
+        "mempool_mode": settings.mempool_mode if settings.mempool_active else None,
+        "mempool_backend": (
+            endpoint_label(settings.mempool_ws_url or settings.mempool_http_url)
+            if settings.mempool_active
+            else None
+        ),
+        "mempool_resolve_blocks": settings.mempool_resolve_blocks,
+        "mempool_call_budget_per_block": settings.mempool_call_budget_per_block,
         "assumptions_url": "/docs/simulation-assumptions",
         "design_decisions_path": "docs/design-decisions.md",
     }

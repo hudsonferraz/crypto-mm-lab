@@ -88,6 +88,21 @@ class Settings(BaseSettings):
     arb_sim_subsidy_quote: float = Field(default=1_000_000.0, gt=0)
     arb_sim_timeout_sec: float = Field(default=10.0, gt=0)
 
+    # Mempool watcher (read-only; specs/004-mempool-watcher). Never signs or sends.
+    mempool_enabled: bool = True
+    mempool_mode: Literal["auto", "live", "replay"] = "auto"
+    mempool_ws_url: str | None = "wss://ethereum-rpc.publicnode.com"
+    mempool_rpc_url: str | None = None
+    mempool_resolve_blocks: int = Field(default=5, ge=1, le=50)
+    mempool_live_grace_sec: float = Field(default=300.0, gt=0)
+    mempool_queue_size: int = Field(default=500, ge=1)
+    mempool_call_budget_per_block: int = Field(default=25, ge=1)
+    mempool_seen_hashes: int = Field(default=60_000, ge=100)
+    mempool_reanchor_blocks: int = Field(default=100, ge=1)
+    mempool_v3_window_words: int = Field(default=4, ge=1, le=8)
+    mempool_retention_days: float = Field(default=7.0, gt=0)
+    mempool_rpc_timeout_sec: float = Field(default=10.0, gt=0)
+
     @property
     def v3_active(self) -> bool:
         return self.dex_enabled and self.v3_enabled
@@ -103,6 +118,14 @@ class Settings(BaseSettings):
     @property
     def arb_sim_url(self) -> str:
         return self.arb_sim_rpc_url or self.eth_rpc_url
+
+    @property
+    def mempool_active(self) -> bool:
+        return self.v3_active and self.mempool_enabled
+
+    @property
+    def mempool_http_url(self) -> str:
+        return self.mempool_rpc_url or self.eth_rpc_url
 
 
 @lru_cache

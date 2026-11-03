@@ -50,3 +50,52 @@ ARB_SIM_LATENCY = Histogram(
     buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0),
 )
 ARB_GAP_BPS = Gauge("mm_arb_v2_v3_gap_bps", "V2 minus V3 price gap (bps of the V3 price)")
+
+# Mempool watcher (specs/004-mempool-watcher): read-only, never signs or sends
+MEMPOOL_TXS_SEEN = Counter("mm_mempool_txs_seen_total", "Pending transactions received", ["source"])
+MEMPOOL_SWAPS = Counter("mm_mempool_swaps_total", "Watched swaps on our pools", ["mode", "route"])
+MEMPOOL_NOT_DECODED = Counter(
+    "mm_mempool_not_decoded_total", "Pending transactions touching our pools, not decoded"
+)
+MEMPOOL_DROPPED = Counter("mm_mempool_dropped_total", "Pending swaps dropped by a cap", ["reason"])
+MEMPOOL_OUTCOMES = Counter(
+    "mm_mempool_outcomes_total", "Resolved watched swaps", ["mode", "status"]
+)
+_BPS_BUCKETS = (0.0, 0.001, 0.01, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0)
+MEMPOOL_MATH_ERROR_BPS = Histogram(
+    "mm_mempool_math_error_bps",
+    "Prediction from the true pre-state vs chain",
+    ["mode"],
+    buckets=_BPS_BUCKETS,
+)
+MEMPOOL_ORDERING_EFFECT_BPS = Histogram(
+    "mm_mempool_ordering_effect_bps",
+    "Price moved by trades landing first",
+    ["mode"],
+    buckets=_BPS_BUCKETS,
+)
+MEMPOOL_INCLUSION_BLOCKS = Histogram(
+    "mm_mempool_inclusion_blocks",
+    "Blocks from first seen to inclusion",
+    buckets=(0, 1, 2, 3, 5, 10, 25),
+)
+MEMPOOL_INCLUSION_SECONDS = Histogram(
+    "mm_mempool_inclusion_seconds",
+    "Seconds from first seen to the inclusion block",
+    buckets=(1, 3, 6, 12, 24, 60, 120, 300),
+)
+MEMPOOL_VISIBLE_SHARE = Gauge(
+    "mm_mempool_visible_share", "Share of pool swaps seen pending (last 100 blocks)"
+)
+MEMPOOL_OPPORTUNITIES = Counter(
+    "mm_mempool_opportunities_total", "Predicted opportunities", ["mode", "result"]
+)
+MEMPOOL_LIVE = Gauge("mm_mempool_live", "1 when watching live, 0 in block replay")
+MEMPOOL_STATE_CHECKS = Counter(
+    "mm_mempool_state_checks_total", "Rolled pool state vs fresh read", ["result"]
+)
+MEMPOOL_BLOCK_SECONDS = Histogram(
+    "mm_mempool_block_seconds",
+    "Time to process one block",
+    buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 12.0),
+)

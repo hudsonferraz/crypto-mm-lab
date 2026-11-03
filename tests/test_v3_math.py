@@ -140,8 +140,10 @@ def test_compute_swap_step_partial_and_full() -> None:
     assert full.fee_amount == mul_div_rounding_up(full.amount_in, 500, 1_000_000 - 500)
     up = compute_swap_step(price, get_sqrt_ratio_at_tick(10), liquidity, 10**12, 3000)
     assert up.sqrt_price_next_x96 > price
-    with pytest.raises(NotImplementedError):
-        compute_swap_step(price, target, liquidity, -1, 500)
+    # Exact output (negative amount): never pays out more than asked.
+    exact_out = compute_swap_step(price, target, liquidity, -(10**9), 500)
+    assert exact_out.amount_out == 10**9
+    assert target < exact_out.sqrt_price_next_x96 < price
 
 
 def test_liquidity_amounts_round_trip_in_and_out_of_range() -> None:

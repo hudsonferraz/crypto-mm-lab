@@ -5,7 +5,7 @@
 [![CI](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/hudsonferraz/crypto-mm-lab/branch/main/graph/badge.svg)](https://codecov.io/gh/hudsonferraz/crypto-mm-lab)
 
-**Paper market-making research lab** that pulls live CEX order books, simulates quote placement and fills, tracks PnL, runs a paper **Uniswap V3 concentrated-liquidity** book against the CEX book, compares CEX vs Uniswap V2/V3 prices, ships a tested **Solidity flash-arbitrage contract** that it simulates against live mainnet state every tick, and comes with backtest mode plus a Docker observability stack.
+**Paper market-making research lab** that pulls live CEX order books, simulates quote placement and fills, tracks PnL, runs a paper **Uniswap V3 concentrated-liquidity** book against the CEX book, compares CEX vs Uniswap V2/V3 prices, ships a tested **Solidity flash-arbitrage contract** that it simulates against live mainnet state every tick, watches the **public mempool** for swaps on its two pools and checks every prediction against the next blocks, and comes with backtest mode plus a Docker observability stack.
 
 This is an **education and research project** — useful for exploring MM mechanics, execution models, and CEX/DEX comparison. It is **not** production trading infrastructure.
 
@@ -27,6 +27,7 @@ This is an **education and research project** — useful for exploring MM mechan
 - **CEX MM vs on-chain LP** — side-by-side comparison over the same window, on return on capital
 - **Solidity flash-arbitrage executor** — an owner-only contract that captures a V2/V3 price gap in one transaction through a Uniswap V3 flash swap. Tested against the real Uniswap V2 and V3 core contracts: unit, fuzz (1,000 runs per property) and invariant tests, 100% branch coverage, a gas gate, and an opt-in mainnet-fork suite whose profit matches QuoterV2 exactly
 - **Scanner checked against the contract** — every tick, the best V2-vs-V3 trade is simulated against live mainnet state with a read-only `eth_call` (no deploy, no key, no cost). The scanner's estimate matches the simulation to the unit, and the dashboard explains every result
+- **Mempool watcher** — follows pending mainnet transactions on a free keyless websocket, decodes swaps on the two pools (direct calls, V2 router, V3 swap routers, Universal Router), predicts their price impact with the same exact math, and verifies each prediction against its block. Pool state is rolled forward from the pools' own events and matched a fresh chain read after 60 blocks with zero drift; every real swap replayed from those blocks is reproduced with zero math error
 - **CEX/DEX analytics** — Uniswap V2 pool reader, V2 + V3 arbitrage scanner (exact V3 output, net-edge-maximizing size), labeled USDT/USDC basis notes
 - **Backtesting** — replay from SQLite/Postgres snapshots or CSV fixtures; Sharpe-like ratio, drawdown, fill rate
 - **Observability** — Prometheus `/metrics`, Grafana dashboard, structured logging, `last_error` on `/status`
@@ -49,6 +50,10 @@ This is an **education and research project** — useful for exploring MM mechan
 | Flash arb (contract simulated against live mainnet state) |
 |------------------------------------------------------------|
 | ![Flash arb tab](docs/images/dashboard-arb.png) |
+
+| Mempool watcher (live pending swaps, checked against each block) |
+|------------------------------------------------------------------|
+| ![Mempool tab](docs/images/dashboard-mempool.png) |
 
 | Docker stack (live) | Grafana metrics |
 |---------------------|-----------------|
@@ -149,6 +154,11 @@ docker compose up --build
 | `GET /arb/simulation` | Simulator status and the latest flash-arb simulation, with its plain-language explanation |
 | `GET /arb/simulations` | Recent simulations (`?limit=100`) |
 | `GET /arb/accuracy` | How often the scanner's estimate agrees with the simulation, and its error |
+| `GET /mempool/status` | Watcher mode (live / replay), state, backend label, counters, mode changes, and the D1–D7 explanations |
+| `GET /mempool/swaps` | Watched swaps with prediction, verification and a plain-language note (`?limit=50&mode=live&status=included`) |
+| `GET /mempool/swaps/{tx_hash}` | One watched swap |
+| `GET /mempool/blocks` | Per-block swaps on our pools and how many were seen pending (`?limit=50&mode=live`) |
+| `GET /mempool/summary` | Accuracy, inclusion latency, visibility, decode coverage and capture rate, live and replay kept separate (`?window_minutes=60`) |
 | `POST /kill-switch` | Enable/disable kill switch (`{"active": true}`) |
 | `GET /dashboard` | Static monitoring UI |
 
@@ -220,6 +230,59 @@ The scanner's estimate and the contract's result agree to the unit when the V3 t
 - **Narrow scope.** One pair and two pools keep the contract readable in minutes and thoroughly testable. Multi-hop routes, more pairs, lending-protocol flash loans and MEV bundles are possible follow-ups.
 
 Found while building this: the default V2 pool address had no contract deployed at it, so V2 reads had been failing and falling back to stale data. It now points at the real pair, `0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc`, and a live test checks that every configured pool is real.
+
+## Mempool watcher
+
+Features 002 and 003 look at the two pools *after* each block. The watcher looks one step earlier, at transactions waiting in the public **mempool**. It decodes the ones that will trade on the V2 pair or the V3 5 bps pool, predicts each one's price impact with the same exact math, and then checks every prediction against what really happened on-chain.
+
+For each pending swap the dashboard's **Mempool** tab shows:
+
+- the pool, direction and size;
+- the price it is predicted to leave behind;
+- the effect on the V2-vs-V3 gap;
+- whether it would open or close an arbitrage, judged by the 003 scanner after gas.
+
+When the swap lands, the tab adds its block, position and wait time. It splits any miss into **math error** (expected 0) and **ordering effect**. If an opportunity was predicted, it also shows whether that opportunity appeared and whether another trader likely back-ran it in the same block.
+
+How it works:
+
+1. **Pending data.** The free publicnode websocket streams full pending transactions with no key. An HTTP filter with batched lookups is the fallback. If the endpoint shares no pending data, the watcher switches to block replay (below).
+2. **Decoding.** It decodes direct pool calls and the standard Uniswap routers: V2 Router02, SwapRouter, SwapRouter02 (including `multicall`) and the Universal Router (including `WRAP_ETH` and contract-balance amounts). For a multi-hop leg that is not the first hop, one read-only quote of the upstream hops gives the amount that reaches our pool. Other contracts that touch the pools are counted as "seen, not decoded".
+3. **Pool state per block.** The watcher reads one full anchor state, then rolls it forward block by block from the pools' own events:
+   - V2 `Sync` sets the reserves;
+   - V3 `Swap` sets the price, liquidity and tick;
+   - V3 `Mint` and `Burn` update the tick window.
+
+   That costs two calls per block. It also gives the exact state just before every swap's position in its block, which the error split needs. Reorgs rewind to a checkpoint, and every re-anchor compares the rolled state with a fresh read.
+4. **Prediction and verification.** Each leg is simulated against the latest block. That covers V3 exact-input and exact-output, with price limits; the exact-output port matches QuoterV2 to the wei. V2 legs use `getAmountOut` / `getAmountIn`, or the pair's own invariant when the caller sets both amounts. At inclusion, the same leg is re-run from the true pre-state:
+   - **math error**: that re-run vs the chain;
+   - **ordering effect**: the published prediction vs that re-run.
+
+Evidence (recorded mainnet session, replayed offline in CI):
+
+| | |
+|---|---|
+| Session | 60 blocks (11.6 min), 8,324 pending transactions received |
+| Rolled state vs fresh chain read at block 60 | identical (0 mismatches) |
+| Real swaps on the two pools in those blocks | 46 transactions, 49 legs (40 V3, 9 V2): **49/49 exact**, math error 0 |
+| Seen pending before inclusion | 5 of 46 (11%) |
+| Router transactions decoded on our pools | 0 of 106 to Uniswap routers: 53 of the Universal Router calls were Uniswap V4 swaps, the rest other pools |
+
+```bash
+python -m pytest tests -q -k "mempool or router_decoder or exact_output or pool_events"
+python -m pytest tests/test_mempool_live.py --live -q   # live endpoint, opt-in
+python scripts/record_mempool_fixture.py --blocks 60    # re-record the evidence fixture
+```
+
+### Why it's built this way
+
+- **Most swaps are never seen here, and that's measured, not hidden.** Since 2023 most wallets and bots send DEX trades through private relays (Flashbots Protect, MEV Blocker, builder RPCs) straight to block builders. In the recording, 89% of the swaps on these pools never appeared in the public mempool. The "seen before inclusion" rate is shown per block.
+- **Live by default, block replay when live is impossible.** Paid mempool feeds are ruled out by the zero-cost rule. If the endpoint stops sharing pending transactions, or `MEMPOOL_MODE=replay` is set, every swap in each new block is treated as if it had been seen pending. The watcher predicts it from the state before the block and verifies it the same way. Replay results are labeled and never mixed with live ones.
+- **Predict against the latest block, then explain the miss.** Nobody can know a pending swap's final position. A single error number would hide whether the math was wrong or the queue moved, so the miss is split into math error and ordering effect.
+- **Decode the common routes, count the rest.** Decoding every aggregator's private format is open-ended. The coverage share keeps it honest. Uniswap V4 is out of scope for now, and the recording shows it is where most public Universal Router flow goes today.
+- **Back-runs are a stated rule.** A predicted opportunity counts as "likely back-run" when a later transaction in the same block trades the arbitrage across both pools and the gap ends the block below the fees. Intent cannot be proven from chain data, so the rule is spelled out and checkable on Etherscan.
+- **Beside the loop, never inside it.** The watcher has its own tasks, its own HTTP client, a bounded queue and a fixed budget of optional calls per block (receipts, nonce checks, upstream quotes). A burst of mempool traffic cannot delay quoting or exhaust the free endpoint.
+- **Read-only.** Nothing is signed, sent or acted on, and no key exists. A test fails if a signing or sending API appears in the watcher's code.
 
 ## Architecture
 

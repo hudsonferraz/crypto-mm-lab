@@ -119,6 +119,7 @@ class SwapQuote:
     limit_reason: LimitReason | None
     block_number: int
     exact: bool
+    liquidity_after: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

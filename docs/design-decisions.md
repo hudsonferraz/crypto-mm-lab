@@ -203,6 +203,69 @@ Gas models, MEV, or multi-hop routing require a richer cost stack.
 
 ---
 
+## Mempool watcher: pool state rolled forward from events
+
+**Context**
+To verify a pending swap's prediction you need the exact pool state just before that swap's position in its block. A block-by-block state read cannot give that, and re-reading the full V3 tick window every block costs tens of calls on a rate-limited free endpoint.
+
+**Decision**
+The watcher reads one block-pinned anchor (V3 slot0, liquidity and a 9-word tick window; V2 reserves), then applies each block's pool events in log order:
+- V2 `Sync` sets the reserves;
+- V3 `Swap` copies the emitted sqrtPrice, liquidity and tick;
+- V3 `Mint` / `Burn` change `liquidityNet` and `liquidityGross` at the bound ticks, flip bitmap bits, and change in-range liquidity (the rules of `Pool.modifyPosition`).
+
+Every applied event keeps the state before and after it. Logs are fetched by block hash, never by number, so a load-balanced backend that lacks the block fails loudly instead of returning an empty list. Sixteen checkpoints allow reorg rewinds. Re-anchoring (window edge, every 100 blocks, or after an inconsistency) compares the rolled state with the fresh read and counts mismatches.
+
+**Trade-off**
+More code than re-reading state, and any missed rule would show as drift. Drift is therefore measured on every re-anchor and in a recorded 60-block session replayed in CI, where it is zero.
+
+**Revisit when**
+Uniswap V4 pools are added (singleton contract and hooks change the event model).
+
+---
+
+## Mempool watcher: live by default, labeled replay as the fallback
+
+**Context**
+Zero cost rules out paid mempool feeds. Free endpoints differ: publicnode streams full pending transactions over a keyless websocket; others refuse pending data on free plans.
+
+**Decision**
+The source chain is websocket full-object subscription, then HTTP pending filter with batched lookups, then block replay. Explicit refusals switch immediately. No pending data for `MEMPOOL_LIVE_GRACE_SEC` switches to replay while live retries continue. Every switch is stored with its reason. Live and replay records are never combined in a statistic.
+
+In replay, events do not say whether a trade was exact-input or exact-output, so both are simulated from the true pre-state and the one that reproduces the event wins. Two cases needed adding after real data showed them:
+- **V3 swaps stopped by a price limit** (bots): tried with the event's own post price as the limit.
+- **V2 swaps where the caller set both amounts**: checked with the pair's K invariant.
+
+**Trade-off**
+Replay proves decoding-free prediction and verification end to end, but it cannot measure inclusion latency or public visibility. Those fields are "n/a in replay".
+
+**Revisit when**
+A free endpoint offers a richer feed, or the public websocket changes.
+
+---
+
+## Mempool watcher: split the error, state the back-run rule
+
+**Context**
+A pending swap's position in its block is unknown in advance, so a single prediction error would mix wrong math with trades that landed first. "Was this back-run?" has no certain answer in chain data.
+
+**Decision**
+Each included leg is re-simulated from the true pre-state:
+- **math error** compares that re-simulation with the event (exact pool math gives 0);
+- **ordering effect** compares the published prediction with it.
+
+A predicted opportunity counts as **likely back-run** when two things hold:
+- a later transaction in the same block has swaps on both pools in the arbitrage direction;
+- the 003 scanner's net after gas on the block's end state is not positive.
+
+**Trade-off**
+The back-run rule can miss captures through other venues or label coincidences. It is named "likely" and documented so anyone can check it on a block explorer.
+
+**Revisit when**
+Builder or relay data becomes available for free.
+
+---
+
 ## Flash arbitrage: a real contract, only ever simulated
 
 **Context**

@@ -46,3 +46,8 @@ services:
       # Flash-arb simulation: read-only eth_call with state overrides, never broadcast
       - key: ARB_SIM_ENABLED
         value: "true"
+      # Mempool watcher: keyless publicnode websocket, block replay fallback; never sends
+      - key: MEMPOOL_ENABLED
+        value: "true"
+      - key: MEMPOOL_MODE
+        value: auto

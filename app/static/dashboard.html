@@ -112,6 +112,12 @@
     .badge-unprofitable { background: #1a1d24; border-color: #3c4043; color: #cbd5e1; }
     .badge-reverted { background: #3f1d1d; border-color: #7f1d1d; color: #fecaca; }
     .explain p { margin: 0.4rem 0; }
+    #visibility-chart { display: block; width: 100%; height: 200px; }
+    .badge-live { background: #0f2340; border-color: #3987e5; color: #bfdbfe; }
+    .badge-replay { background: #2e1a0f; border-color: #d95926; color: #fed7aa; }
+    .badge-ok { background: #0f2e1f; border-color: #15803d; color: #86efac; }
+    .badge-warn { background: #3b2f14; border-color: #b45309; color: #fde68a; }
+    .sub { display: block; color: #9aa0a6; font-size: 0.8rem; font-weight: 400; margin-top: 0.2rem; }
     @media (max-width: 640px) {
       body { padding: 0.75rem; }
       .grid { grid-template-columns: 1fr 1fr; }
@@ -152,6 +158,7 @@
     <button class="tab" data-tab="research" type="button">Research</button>
     <button class="tab" data-tab="lp" type="button">On-chain LP</button>
     <button class="tab" data-tab="arb" type="button">Flash arb</button>
+    <button class="tab" data-tab="mempool" type="button">Mempool</button>
   </div>
 
   <section id="panel-live" class="panel active">
@@ -373,6 +380,65 @@
     <table>
       <thead><tr><th>Time</th><th>Block</th><th>Direction</th><th>Size</th><th>Gap</th><th>Estimate net</th><th>Simulated net</th><th>Gas</th><th>Outcome</th></tr></thead>
       <tbody id="arb-history"><tr><td colspan="9">No simulations yet</td></tr></tbody>
+    </table>
+  </section>
+
+  <section id="panel-mempool" class="panel">
+    <h2>Mempool watcher: pending swaps on the V2 and V3 WETH/USDC pools, checked against each block</h2>
+    <div class="note">
+      <span id="mp-mode" class="badge">-</span>
+      <span id="mp-state" class="badge">-</span>
+      <span class="badge">Read-only, never sent</span>
+      <span id="mp-status" style="margin-left:0.4rem">Loading watcher status...</span>
+    </div>
+    <p class="muted" id="mp-mode-note"></p>
+
+    <div class="grid">
+      <div class="card"><div class="label">Seen before inclusion</div><div class="value" id="mp-visible">-</div></div>
+      <div class="card"><div class="label">Math error, median / p95 (exact)</div><div class="value" id="mp-math">-</div></div>
+      <div class="card"><div class="label">Ordering effect, median / p95</div><div class="value" id="mp-ordering">-</div></div>
+      <div class="card"><div class="label">Inclusion: rate · latency</div><div class="value" id="mp-inclusion">-</div></div>
+      <div class="card"><div class="label">Decoded / seen touching our pools</div><div class="value" id="mp-coverage">-</div></div>
+      <div class="card"><div class="label">Opportunities: flagged · appeared · back-run</div><div class="value" id="mp-opps">-</div></div>
+    </div>
+    <p class="muted" id="mp-window"></p>
+
+    <h2>Swaps on our pools per block: seen pending vs never public</h2>
+    <div class="card chart-card">
+      <div class="chart-legend muted">
+        <span><span class="swatch" style="background:#3987e5"></span>Seen pending before its block</span>
+        <span><span class="swatch" style="background:#d95926"></span>Never seen: private relay or another unseen route</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="visibility-chart" height="200" role="img" aria-label="Per block, swap transactions on the two pools split into seen pending and never seen"></canvas>
+        <div id="visibility-tooltip" class="chart-tooltip"></div>
+      </div>
+      <div class="label chart-empty" id="visibility-empty">No blocks processed yet</div>
+      <details class="muted"><summary>Show data table</summary>
+        <table><thead><tr><th>Block</th><th>Mode</th><th>Pool swaps</th><th>Seen pending</th><th>Gap at block end</th><th>Scanner net at block end</th></tr></thead>
+          <tbody id="visibility-table"></tbody></table>
+      </details>
+    </div>
+
+    <h2>Pending now</h2>
+    <table>
+      <thead><tr><th>Seen</th><th>Transaction</th><th>Route</th><th>Legs</th><th>Gap before / after</th><th>Opportunity</th><th>Note</th></tr></thead>
+      <tbody id="mp-pending"><tr><td colspan="7">Nothing pending on our pools right now</td></tr></tbody>
+    </table>
+
+    <h2>Recently verified</h2>
+    <table>
+      <thead><tr><th>Seen</th><th>Transaction</th><th>Mode</th><th>Status</th><th>Block · position</th><th>Waited</th><th>Math error</th><th>Ordering effect</th><th>Note</th></tr></thead>
+      <tbody id="mp-verified"><tr><td colspan="9">No verified swaps yet</td></tr></tbody>
+    </table>
+
+    <h2>Why the numbers look like this</h2>
+    <div class="note explain" id="mp-explanations">Loading...</div>
+
+    <h2>Mode changes</h2>
+    <table>
+      <thead><tr><th>Time</th><th>From</th><th>To</th><th>Source</th><th>Reason</th></tr></thead>
+      <tbody id="mp-switches"><tr><td colspan="5">None yet</td></tr></tbody>
     </table>
   </section>
 
@@ -1037,6 +1103,238 @@
       canvas.onmouseleave = () => { document.getElementById("gap-tooltip").style.display = "none"; };
     }
 
+
+    // --- Mempool watcher (specs/004-mempool-watcher) ------------------------------
+    let mpBlocksCache = [];
+    const pct = (value, digits = 1) =>
+      value === null || value === undefined ? "-" : `${(value * 100).toFixed(digits)}%`;
+    const bps = (value, digits = 2) =>
+      value === null || value === undefined ? "-" : `${Number(value).toFixed(digits)} bps`;
+    const esc = (text) => String(text ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    const shortHash = (hash) => (hash ? `${hash.slice(0, 10)}…${hash.slice(-4)}` : "-");
+    const txLink = (hash) => `<a class="mono" href="https://etherscan.io/tx/${esc(hash)}" target="_blank" rel="noreferrer">${shortHash(hash)}</a>`;
+
+    function legText(leg) {
+      const units = leg.direction === "sell_weth" ? ["WETH", 1e18] : ["USDC", 1e6];
+      const amount = leg.amount_specified_raw ? Number(leg.amount_specified_raw) / units[1] : null;
+      const kind = leg.kind === "exact_out" ? "for exactly" : leg.kind === "exact_amounts" ? "set" : "";
+      const side = leg.direction === "sell_weth" ? "sell WETH" : "buy WETH";
+      const shown = amount === null ? "?" : amount.toLocaleString(undefined, { maximumFractionDigits: 4 });
+      const flags = leg.flags && leg.flags.length ? ` <span class="muted">[${leg.flags.join(", ")}]</span>` : "";
+      return `${leg.pool.toUpperCase()} ${side} ${kind} ${shown} ${leg.kind === "exact_out" ? (leg.direction === "sell_weth" ? "USDC" : "WETH") : units[0]}${flags}`;
+    }
+
+    function renderMempoolStatus(payload) {
+      const status = payload.status;
+      const modeBadge = document.getElementById("mp-mode");
+      const stateBadge = document.getElementById("mp-state");
+      if (!status.enabled) {
+        modeBadge.textContent = "disabled";
+        modeBadge.className = "badge";
+        stateBadge.textContent = status.state;
+        stateBadge.className = "badge";
+        document.getElementById("mp-status").textContent = `Watcher off (${status.reason}).`;
+        return;
+      }
+      const live = status.mode === "live";
+      modeBadge.textContent = live ? "live" : "replay (not live)";
+      modeBadge.className = `badge ${live ? "badge-live" : "badge-replay"}`;
+      stateBadge.textContent = status.state;
+      stateBadge.className = `badge ${status.state === "ok" ? "badge-ok" : "badge-warn"}`;
+      const c = status.counters || {};
+      const source = status.source ? ` · ${status.source}` : "";
+      const reason = status.reason ? ` · ${status.reason}` : "";
+      document.getElementById("mp-status").textContent =
+        `${status.backend || "-"}${source} · block ${status.last_block ?? "-"} · ` +
+        `${(c.seen || 0).toLocaleString()} pending seen · ${c.decoded || 0} decoded · ` +
+        `${c.not_decoded || 0} not decoded · ${c.pending_watched || 0} waiting · ` +
+        `${c.state_mismatches || 0} state mismatches${reason}`;
+      document.getElementById("mp-mode-note").textContent = live
+        ? payload.explanations.D2.split(". ")[0] + "."
+        : payload.explanations.D2;
+      const order = ["D1", "D2", "D3", "D4", "D5", "D6", "D7"];
+      const titles = {
+        D1: "We only see a minority of the swaps.",
+        D2: "Live by default, block replay when live is impossible.",
+        D3: "Predict against the latest block, then explain the miss.",
+        D4: "Decode the common routes, count the rest.",
+        D5: "Back-runs are a stated rule, not a guess.",
+        D6: "Beside the trading loop, never inside it.",
+        D7: "Read-only and a fixed scope.",
+      };
+      document.getElementById("mp-explanations").innerHTML = order
+        .map((key) => `<p><strong>${titles[key]}</strong> ${esc(payload.explanations[key])}</p>`)
+        .join("");
+      const switches = payload.mode_changes || [];
+      document.getElementById("mp-switches").innerHTML = switches.length
+        ? switches.map((s) => `<tr><td>${fmtTime(s.at)}</td><td>${s.from_mode || "-"}</td><td>${s.to_mode}</td><td>${s.source}</td><td>${esc(s.reason)}</td></tr>`).join("")
+        : "<tr><td colspan='5'>None yet</td></tr>";
+    }
+
+    function renderMempoolSummary(payload) {
+      const summary = payload.live || payload.replay;
+      const ex = payload.explanations;
+      const set = (id, value, note) => {
+        document.getElementById(id).innerHTML = `${value}${note ? `<span class="sub">${esc(note)}</span>` : ""}`;
+      };
+      if (!summary) {
+        ["mp-visible", "mp-math", "mp-ordering", "mp-inclusion", "mp-coverage", "mp-opps"].forEach((id) => set(id, "-"));
+        document.getElementById("mp-window").textContent = `No records in the last ${payload.window_minutes} minutes yet.`;
+        return;
+      }
+      const label = summary.mode === "live" ? "live" : "replay (not live)";
+      set("mp-visible", summary.mode === "live" ? pct(summary.visible_share) : "n/a in replay", ex.visible_share);
+      set("mp-math", `${bps(summary.math_error_bps_p50, 4)} / ${bps(summary.math_error_bps_p95, 4)}`, `${pct(summary.exact_rate)} exact. ${ex.math_error_bps}`);
+      set("mp-ordering", `${bps(summary.ordering_effect_bps_p50)} / ${bps(summary.ordering_effect_bps_p95)}`, ex.ordering_effect_bps);
+      const latency = summary.mode === "live"
+        ? `${fmt(summary.latency_blocks_p50, 0)} blk · ${fmt(summary.latency_seconds_p50, 1)} s`
+        : "same block";
+      set("mp-inclusion", `${pct(summary.inclusion_rate)} · ${latency}`, ex.inclusion_rate);
+      set("mp-coverage", summary.mode === "live" ? pct(summary.decode_coverage) : "n/a in replay", ex.decode_coverage);
+      set("mp-opps", `${summary.opportunities_flagged} · ${summary.opportunities_appeared} · ${summary.backruns}`, ex.capture_rate);
+      const other = payload.live && payload.replay ? " Replay records exist too and are reported separately." : "";
+      document.getElementById("mp-window").textContent =
+        `Window: last ${payload.window_minutes} min, ${summary.watched} ${label} swaps over ${summary.blocks} blocks.${other}`;
+    }
+
+    function renderMempoolSwaps(pending, verified) {
+      document.getElementById("mp-pending").innerHTML = pending.length
+        ? pending.map((s) => `<tr>
+            <td>${fmtTime(s.first_seen_at)}</td><td>${txLink(s.tx_hash)}</td><td>${s.route}</td>
+            <td>${s.legs.map(legText).join("<br>")}</td>
+            <td class="numeric">${bps(s.gap_before_bps)} → ${bps(s.gap_after_bps)}</td>
+            <td>${s.opportunity ? `${s.opportunity} (${s.opportunity_direction})` : "-"}</td>
+            <td class="muted">${esc(s.note)}</td></tr>`).join("")
+        : "<tr><td colspan='7'>Nothing pending on our pools right now (see D1)</td></tr>";
+      const done = verified.filter((s) => s.status !== "pending");
+      document.getElementById("mp-verified").innerHTML = done.length
+        ? done.map((s) => {
+            const o = s.outcome || {};
+            const legs = o.legs || [];
+            const math = legs.length ? Math.max(...legs.map((l) => l.math_error_bps)) : null;
+            const order = legs.length ? Math.max(...legs.map((l) => l.ordering_effect_bps)) : null;
+            const waited = s.mode === "live" && o.blocks_waited !== null && o.blocks_waited !== undefined
+              ? `${o.blocks_waited} blk${o.seconds_waited !== null ? ` · ${fmt(o.seconds_waited, 1)} s` : ""}` : "-";
+            return `<tr>
+              <td>${fmtTime(s.first_seen_at)}</td><td>${txLink(s.tx_hash)}</td>
+              <td><span class="badge ${s.mode === "live" ? "badge-live" : "badge-replay"}">${s.mode}</span></td>
+              <td>${s.status}</td><td class="numeric">${o.block_number ?? "-"} · ${o.tx_index ?? "-"}</td>
+              <td class="numeric">${waited}</td>
+              <td class="numeric">${math === null ? "-" : math === 0 ? "0 (exact)" : bps(math, 4)}</td>
+              <td class="numeric">${order === null ? "-" : bps(order)}</td>
+              <td class="muted">${esc(s.note)}</td></tr>`;
+          }).join("")
+        : "<tr><td colspan='9'>No verified swaps yet</td></tr>";
+    }
+
+    function renderVisibilityChart(items) {
+      const canvas = document.getElementById("visibility-chart");
+      const empty = document.getElementById("visibility-empty");
+      const points = [...items].reverse();
+      document.getElementById("visibility-table").innerHTML = items.slice(0, 50).map((b) => `<tr>
+        <td class="numeric">${b.block_number}</td><td>${b.mode}</td><td class="numeric">${b.pool_swap_txs}</td>
+        <td class="numeric">${b.mode === "live" ? b.seen_pending : "-"}</td>
+        <td class="numeric">${bps(b.gap_end_bps)}</td><td class="numeric">${b.scan_net_end_quote === null ? "-" : `$${fmt(b.scan_net_end_quote, 2)}`}</td></tr>`).join("");
+      if (!points.length) {
+        canvas.style.display = "none";
+        empty.style.display = "block";
+        return;
+      }
+      if (!canvas.parentElement.offsetParent) return;
+      canvas.style.display = "block";
+      empty.style.display = "none";
+      const width = canvas.clientWidth || canvas.parentElement.clientWidth;
+      const height = 200;
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = width * ratio;
+      canvas.height = height * ratio;
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      const pad = { left: 32, right: 12, top: 12, bottom: 22 };
+      const plotW = width - pad.left - pad.right;
+      const plotH = height - pad.top - pad.bottom;
+      const top = Math.max(2, ...points.map((p) => p.pool_swap_txs));
+      const slot = plotW / points.length;
+      const barW = Math.max(2, Math.min(18, slot - 2));
+      const yFor = (v) => pad.top + plotH - (v / top) * plotH;
+      ctx.strokeStyle = "#2a2f3a";
+      ctx.lineWidth = 1;
+      ctx.fillStyle = "#9aa0a6";
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.textAlign = "right";
+      [0, Math.round(top / 2), top].forEach((v) => {
+        const y = Math.round(yFor(v)) + 0.5;
+        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + plotW, y); ctx.stroke();
+        ctx.fillText(String(v), pad.left - 6, y + 4);
+      });
+      const roundTop = (x, y, w, h) => {
+        if (h <= 0) return;
+        const r = Math.min(4, w / 2, h);
+        ctx.beginPath();
+        ctx.moveTo(x, y + h); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h);
+        ctx.closePath(); ctx.fill();
+      };
+      points.forEach((p, i) => {
+        const x = pad.left + i * slot + (slot - barW) / 2;
+        const seen = p.mode === "live" ? p.seen_pending : 0;
+        const unseen = p.pool_swap_txs - seen;
+        const base = yFor(0);
+        const seenTop = yFor(seen);
+        if (seen > 0) {
+          ctx.fillStyle = "#3987e5";
+          if (unseen > 0) ctx.fillRect(x, seenTop, barW, base - seenTop);
+          else roundTop(x, seenTop, barW, base - seenTop);
+        }
+        if (unseen > 0) {
+          const totalTop = yFor(p.pool_swap_txs);
+          const gap = seen > 0 ? 2 : 0;
+          ctx.fillStyle = "#d95926";
+          roundTop(x, totalTop, barW, seenTop - totalTop - gap);
+        }
+      });
+      ctx.fillStyle = "#9aa0a6";
+      ctx.textAlign = "left";
+      ctx.fillText(`#${points[0].block_number}`, pad.left, height - 6);
+      ctx.textAlign = "right";
+      ctx.fillText(`#${points[points.length - 1].block_number}`, pad.left + plotW, height - 6);
+      canvas.onmousemove = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const index = Math.min(points.length - 1, Math.max(0, Math.floor((event.clientX - rect.left - pad.left) / slot)));
+        const p = points[index];
+        const tooltip = document.getElementById("visibility-tooltip");
+        const seen = p.mode === "live" ? p.seen_pending : "n/a (replay)";
+        tooltip.innerHTML = `<div class="mono">block ${p.block_number}</div>` +
+          `<div>Pool swaps: ${p.pool_swap_txs}</div><div>Seen pending: ${seen}</div>` +
+          `<div>Gap at end: ${bps(p.gap_end_bps)}</div>`;
+        tooltip.style.display = "block";
+        const left = Math.min(rect.width - 180, Math.max(0, event.clientX - rect.left + 12));
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = "8px";
+      };
+      canvas.onmouseleave = () => { document.getElementById("visibility-tooltip").style.display = "none"; };
+    }
+
+    async function refreshMempool() {
+      try {
+        const [status, summary, pending, verified, blocks] = await Promise.all([
+          fetchJson("/mempool/status"),
+          fetchJson("/mempool/summary?window_minutes=60"),
+          fetchJson("/mempool/swaps?status=pending&limit=20"),
+          fetchJson("/mempool/swaps?limit=40"),
+          fetchJson("/mempool/blocks?limit=60"),
+        ]);
+        renderMempoolStatus(status);
+        renderMempoolSummary(summary);
+        renderMempoolSwaps(pending.items, verified.items);
+        mpBlocksCache = blocks.items;
+        renderVisibilityChart(blocks.items);
+      } catch (error) {
+        document.getElementById("mp-status").textContent = `Mempool error: ${error.message}`;
+      }
+    }
+
     async function refreshArb() {
       try {
         const [latest, history, accuracy] = await Promise.all([
@@ -1124,6 +1422,7 @@
         document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
         if (tab.dataset.tab === "lp") renderLiquidityChart(lpPoolCache, lpPositionCache);
         if (tab.dataset.tab === "arb") renderGapChart(arbHistoryCache);
+        if (tab.dataset.tab === "mempool") renderVisibilityChart(mpBlocksCache);
         history.replaceState(null, "", `#${tab.dataset.tab}`);
       });
     });
@@ -1214,6 +1513,8 @@
     setInterval(refreshLp, 4000);
     refreshArb();
     setInterval(refreshArb, 4000);
+    refreshMempool();
+    setInterval(refreshMempool, 4000);
   </script>
 </body>
 </html>

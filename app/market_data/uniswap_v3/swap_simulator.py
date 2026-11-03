@@ -49,7 +49,35 @@ def simulate_exact_input(
     """Simulate an exact-input swap. Never raises for a short window: reports a limit."""
     if amount_in <= 0:
         raise ValueError("amount_in must be positive")
+    return _simulate(state, window, zero_for_one, amount_in, sqrt_price_limit_x96)
 
+
+def simulate_exact_output(
+    state: PoolState,
+    window: TickWindow,
+    *,
+    zero_for_one: bool,
+    amount_out: int,
+    sqrt_price_limit_x96: int | None = None,
+) -> SwapQuote:
+    """Simulate an exact-output swap (the pool's negative ``amountSpecified``).
+
+    ``amount_in`` / ``amount_in_consumed`` are the input paid including the fee;
+    ``amount_out`` is what the pool delivers, below the request only when a limit
+    (window or price) stopped the swap, which ``limit_reason`` reports.
+    """
+    if amount_out <= 0:
+        raise ValueError("amount_out must be positive")
+    return _simulate(state, window, zero_for_one, -amount_out, sqrt_price_limit_x96)
+
+
+def _simulate(
+    state: PoolState,
+    window: TickWindow,
+    zero_for_one: bool,
+    amount_specified: int,
+    sqrt_price_limit_x96: int | None,
+) -> SwapQuote:
     if sqrt_price_limit_x96 is None:
         sqrt_price_limit_x96 = MIN_SQRT_RATIO + 1 if zero_for_one else MAX_SQRT_RATIO - 1
     if zero_for_one and not (MIN_SQRT_RATIO < sqrt_price_limit_x96 < state.sqrt_price_x96):
@@ -57,7 +85,9 @@ def simulate_exact_input(
     if not zero_for_one and not (state.sqrt_price_x96 < sqrt_price_limit_x96 < MAX_SQRT_RATIO):
         raise ValueError("invalid sqrt price limit for one_for_zero swap")
 
-    remaining = amount_in
+    exact_in = amount_specified > 0
+    remaining = amount_specified
+    amount_in_total = 0
     amount_out = 0
     fee_paid = 0
     sqrt_price = state.sqrt_price_x96
@@ -85,7 +115,11 @@ def simulate_exact_input(
 
         step = compute_swap_step(sqrt_price, target, liquidity, remaining, state.fee_pips)
         sqrt_price = step.sqrt_price_next_x96
-        remaining -= step.amount_in + step.fee_amount
+        if exact_in:
+            remaining -= step.amount_in + step.fee_amount
+        else:
+            remaining += step.amount_out
+        amount_in_total += step.amount_in + step.fee_amount
         amount_out += step.amount_out
         fee_paid += step.fee_amount
 
@@ -110,10 +144,12 @@ def simulate_exact_input(
     if limit_reason is None and remaining != 0:
         limit_reason = "price_limit"
 
+    requested_in = amount_specified if exact_in else amount_in_total
+    consumed = amount_specified - remaining if exact_in else amount_in_total
     return SwapQuote(
         zero_for_one=zero_for_one,
-        amount_in=amount_in,
-        amount_in_consumed=amount_in - remaining,
+        amount_in=requested_in,
+        amount_in_consumed=consumed,
         amount_out=amount_out,
         fee_paid=fee_paid,
         sqrt_price_before_x96=state.sqrt_price_x96,
@@ -123,4 +159,5 @@ def simulate_exact_input(
         limit_reason=limit_reason,
         block_number=state.block_number,
         exact=window.block_number == state.block_number,
+        liquidity_after=liquidity,
     )

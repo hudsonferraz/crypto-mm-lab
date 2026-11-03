@@ -21,6 +21,13 @@ from app.analytics.lp_report import (
     rebalance_from_dict,
     rebalance_to_dict,
 )
+from app.analytics.mempool_report import (
+    block_from_dict,
+    block_to_dict,
+    mode_change_to_dict,
+    watched_from_dict,
+    watched_to_dict,
+)
 from app.analytics.performance_report import (
     fill_to_dict,
     opportunity_to_dict,
@@ -41,6 +48,7 @@ from app.models.domain import (
     QuoteSide,
 )
 from app.models.flash_arb import SimulationResult
+from app.models.mempool import BlockVisibility, ModeChange, WatchedSwap
 from app.models.tick_audit import TickAuditBundle
 from app.models.v3 import LpPositionState, RebalanceEvent, V3PoolSnapshot
 from app.storage.database import create_db_engine
@@ -203,6 +211,52 @@ class ArbSimulationRow(Base):
     estimate_error_bps: Mapped[float | None] = mapped_column(Float, nullable=True)
     payload: Mapped[str] = mapped_column(Text, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class MempoolSwapRow(Base):
+    """One watched (or replayed) swap; updated in place as its status changes."""
+
+    __tablename__ = "mempool_swaps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tx_hash: Mapped[str] = mapped_column(String(66), nullable=False, unique=True, index=True)
+    mode: Mapped[str] = mapped_column(String(8), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    route: Mapped[str] = mapped_column(String(24), nullable=False)
+    opportunity: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    included_block: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    math_error_bps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class MempoolBlockRow(Base):
+    """Per-block visibility and verification counts, per mode."""
+
+    __tablename__ = "mempool_blocks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    block_number: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    block_hash: Mapped[str] = mapped_column(String(66), nullable=False)
+    mode: Mapped[str] = mapped_column(String(8), nullable=False)
+    pool_swap_txs: Mapped[int] = mapped_column(Integer, nullable=False)
+    seen_pending: Mapped[int] = mapped_column(Integer, nullable=False)
+    backruns: Mapped[int] = mapped_column(Integer, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class MempoolModeChangeRow(Base):
+    __tablename__ = "mempool_mode_changes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    from_mode: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    to_mode: Mapped[str] = mapped_column(String(8), nullable=False)
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
 
 
 def add_missing_nullable_columns(engine: Engine) -> list[str]:
@@ -924,6 +978,165 @@ class Repository:
             last_block = row.block_number
             observations.append(_v3_row_to_dict(row))
         return observations
+
+    # --- mempool watcher (specs/004-mempool-watcher) -----------------------------
+
+    def upsert_mempool_swaps(self, swaps: list[WatchedSwap]) -> None:
+        if not swaps:
+            return
+        with self._session() as session:
+            for swap in swaps:
+                row = (
+                    session.query(MempoolSwapRow)
+                    .filter(MempoolSwapRow.tx_hash == swap.tx_hash)
+                    .one_or_none()
+                )
+                if row is None:
+                    row = MempoolSwapRow(tx_hash=swap.tx_hash)
+                    session.add(row)
+                outcome = swap.outcome
+                row.mode = swap.mode
+                row.status = swap.status
+                row.route = swap.route
+                row.opportunity = swap.opportunity
+                row.first_seen_at = swap.first_seen_at
+                row.included_block = outcome.block_number if outcome is not None else None
+                row.math_error_bps = (
+                    max((leg.math_error_bps for leg in outcome.legs), default=None)
+                    if outcome is not None
+                    else None
+                )
+                row.payload = json.dumps(watched_to_dict(swap))
+            session.commit()
+
+    def save_mempool_block(self, block: BlockVisibility) -> None:
+        with self._session() as session:
+            row = (
+                session.query(MempoolBlockRow)
+                .filter(
+                    MempoolBlockRow.block_hash == block.block_hash,
+                    MempoolBlockRow.mode == block.mode,
+                )
+                .one_or_none()
+            )
+            if row is None:
+                row = MempoolBlockRow(block_hash=block.block_hash, mode=block.mode)
+                session.add(row)
+            row.block_number = block.block_number
+            row.pool_swap_txs = block.pool_swap_txs
+            row.seen_pending = block.seen_pending
+            row.backruns = block.backruns
+            row.timestamp = block.timestamp
+            row.payload = json.dumps(block_to_dict(block))
+            session.commit()
+
+    def save_mempool_mode_change(self, change: ModeChange) -> None:
+        with self._session() as session:
+            session.add(
+                MempoolModeChangeRow(
+                    at=change.at,
+                    from_mode=change.from_mode,
+                    to_mode=change.to_mode,
+                    source=change.source,
+                    reason=change.reason,
+                )
+            )
+            session.commit()
+
+    def get_mempool_swaps(
+        self, limit: int = 50, *, mode: str | None = None, status: str | None = None
+    ) -> list[WatchedSwap]:
+        with self._session() as session:
+            query = session.query(MempoolSwapRow)
+            if mode is not None:
+                query = query.filter(MempoolSwapRow.mode == mode)
+            if status is not None:
+                query = query.filter(MempoolSwapRow.status == status)
+            rows = (
+                query.order_by(MempoolSwapRow.first_seen_at.desc(), MempoolSwapRow.id.desc())
+                .limit(limit)
+                .all()
+            )
+        return [watched_from_dict(json.loads(row.payload)) for row in rows]
+
+    def get_mempool_swap(self, tx_hash: str) -> WatchedSwap | None:
+        with self._session() as session:
+            row = (
+                session.query(MempoolSwapRow)
+                .filter(MempoolSwapRow.tx_hash == tx_hash.lower())
+                .one_or_none()
+            )
+        return watched_from_dict(json.loads(row.payload)) if row is not None else None
+
+    def get_mempool_swaps_since(self, since: datetime) -> list[WatchedSwap]:
+        with self._session() as session:
+            rows = (
+                session.query(MempoolSwapRow)
+                .filter(MempoolSwapRow.first_seen_at >= since)
+                .order_by(MempoolSwapRow.first_seen_at)
+                .all()
+            )
+        return [watched_from_dict(json.loads(row.payload)) for row in rows]
+
+    def get_mempool_blocks(
+        self, limit: int = 50, *, mode: str | None = None
+    ) -> list[BlockVisibility]:
+        with self._session() as session:
+            query = session.query(MempoolBlockRow)
+            if mode is not None:
+                query = query.filter(MempoolBlockRow.mode == mode)
+            rows = (
+                query.order_by(MempoolBlockRow.block_number.desc(), MempoolBlockRow.id.desc())
+                .limit(limit)
+                .all()
+            )
+        return [block_from_dict(json.loads(row.payload)) for row in rows]
+
+    def get_mempool_blocks_since(self, since: datetime) -> list[BlockVisibility]:
+        with self._session() as session:
+            rows = (
+                session.query(MempoolBlockRow)
+                .filter(MempoolBlockRow.timestamp >= since)
+                .order_by(MempoolBlockRow.block_number)
+                .all()
+            )
+        return [block_from_dict(json.loads(row.payload)) for row in rows]
+
+    def get_mempool_mode_changes(self, limit: int = 20) -> list[dict]:
+        with self._session() as session:
+            rows = (
+                session.query(MempoolModeChangeRow)
+                .order_by(MempoolModeChangeRow.id.desc())
+                .limit(limit)
+                .all()
+            )
+        return [
+            mode_change_to_dict(
+                ModeChange(row.at, row.from_mode, row.to_mode, row.source, row.reason)
+            )
+            for row in rows
+        ]
+
+    def purge_mempool(self, before: datetime) -> int:
+        """Retention sweep (FR-025): delete records older than ``before``."""
+        with self._session() as session:
+            removed = (
+                session.query(MempoolSwapRow)
+                .filter(MempoolSwapRow.first_seen_at < before)
+                .delete(synchronize_session=False)
+            )
+            removed += (
+                session.query(MempoolBlockRow)
+                .filter(MempoolBlockRow.timestamp < before)
+                .delete(synchronize_session=False)
+            )
+            removed += (
+                session.query(MempoolModeChangeRow)
+                .filter(MempoolModeChangeRow.at < before)
+                .delete(synchronize_session=False)
+            )
+            session.commit()
+        return removed
 
     def _session(self) -> Session:
         return self._session_factory()

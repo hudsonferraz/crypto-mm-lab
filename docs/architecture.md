@@ -2,7 +2,7 @@
 
 ## Overview
 
-crypto-mm-lab is a paper-trading market-making lab that connects to public CEX order books, simulates quote placement and fills, tracks PnL, compares CEX prices against Uniswap V2 and V3 pools, runs a paper Uniswap V3 concentrated-liquidity book alongside the CEX book, and simulates its own Solidity flash-arbitrage contract (`contracts/`) against live mainnet state every tick.
+crypto-mm-lab is a paper-trading market-making lab that connects to public CEX order books, simulates quote placement and fills, tracks PnL, compares CEX prices against Uniswap V2 and V3 pools, runs a paper Uniswap V3 concentrated-liquidity book alongside the CEX book, simulates its own Solidity flash-arbitrage contract (`contracts/`) against live mainnet state every tick, and runs a read-only mempool watcher beside the loop that predicts pending swaps on the two pools and verifies them block by block.
 
 ```mermaid
 flowchart TB
@@ -43,6 +43,16 @@ flowchart TB
     Art[committed ABI + bytecode]
   end
 
+  subgraph mempool [Mempool watcher: own tasks, beside the loop]
+    PSrc[pending_sources<br/>websocket / HTTP filter]
+    RPC[json_rpc<br/>batches + call budget]
+    Dec[router_decoder]
+    PSt[pool_state<br/>event-sourced, checkpoints]
+    Pred[predictor]
+    Ver[verifier + replay]
+    MW[watcher]
+  end
+
   subgraph observability [Observability]
     Prom[Prometheus metrics]
     Graf[Grafana dashboards]
@@ -76,6 +86,16 @@ flowchart TB
   CLI --> Analytics
   Repo --> API
   Prom --> Graf
+  PSrc --> MW
+  RPC --> PSt
+  MW --> Dec --> Pred
+  PSt --> Pred
+  PSt --> Ver
+  V3M --> Pred
+  DXS --> Pred
+  Pred --> Ver --> MW
+  MW --> Repo
+  MW --> Prom
 ```
 
 ## Data flow (live loop)
@@ -88,6 +108,16 @@ flowchart TB
 6. **Flash arb** (when `ARB_SIM_ENABLED`) — V2 reserves are read at the V3 snapshot's block; the exact V2-vs-V3 scanner picks the best trade (or a reference size); the executor's `simulate()` runs against mainnet state at that block in one `eth_call` with state overrides. Nothing is sent. A failure is a labeled skip, never a failed tick.
 7. **Persist** — snapshots, fills, positions, PnL, opportunities, V3 snapshot, LP state, rebalances and the flash-arb simulation to SQLite/Postgres in one transaction under the tick's `tick_id`.
 8. **Metrics** — expose Prometheus gauges/counters on `/metrics`.
+
+## Mempool watcher (beside the loop)
+
+Started by the app lifespan next to the loop (`MEMPOOL_ENABLED`). It has its own asyncio tasks and its own HTTP client, and it never runs inside a tick.
+
+1. **Intake.** It takes the websocket full-transaction subscription; the HTTP pending filter with batched lookups is the fallback. A dictionary lookup on `to` (or the pool address inside the calldata) rejects ~99% of transactions. Candidates are decoded into legs on our two pools.
+2. **Predict.** A bounded queue feeds the predictor. Amounts for multi-hop legs come from one read-only quote of the upstream hops. Each leg is simulated against the latest tracked block, and the 003 scanner runs before and after to flag opportunities.
+3. **Blocks.** For each new block the watcher reads the header (transaction order, base fee, parent hash) and the pools' logs by block hash. It rolls state forward, rewinds to a checkpoint on a reorg, and re-anchors on the window edge or every N blocks. Then it resolves watched swaps: included (with error split and back-run check), reverted, replaced (by nonce) or not included. Receipts and nonce checks come out of a per-block call budget.
+4. **Replay.** When no pending data is available (or `MEMPOOL_MODE=replay`), every swap in each block is replayed from the block's start state instead.
+5. **Persist and metrics.** It writes `mempool_swaps` (upserted as status changes), `mempool_blocks` and `mempool_mode_changes`, and updates the `mm_mempool_*` metrics. A retention sweep runs hourly.
 
 ## Backtest flow
 
@@ -109,6 +139,9 @@ flowchart TB
 | `lp_position_states` | Paper LP book state per tick (headline columns + full JSON) |
 | `lp_rebalances` | LP open/rebalance events with swap, gas and realized-IL costs |
 | `arb_simulations` | Flash-arb simulation per tick: estimate, simulated legs, gas, outcome and its explanation (headline columns + full JSON) |
+| `mempool_swaps` | One row per watched or replayed swap, upserted as its status changes: prediction, verification, error split (headline columns + full JSON) |
+| `mempool_blocks` | Per block and mode: swaps on our pools, how many were seen pending, back-runs, gap at block end |
+| `mempool_mode_changes` | Live/replay switches with time, source and reason |
 
 SQLite is the default for local dev. Docker Compose uses PostgreSQL via `DATABASE_URL` — the repository abstraction makes the swap config-only.
 

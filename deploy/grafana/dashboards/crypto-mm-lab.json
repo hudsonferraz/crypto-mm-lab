@@ -131,6 +131,42 @@
       ],
       "title": "Flash arb: simulations per 15 min by outcome",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 48},
+      "id": 12,
+      "targets": [
+        {"expr": "mm_mempool_visible_share", "legendFormat": "Swaps seen pending before inclusion (last 100 blocks)", "refId": "A"},
+        {"expr": "mm_mempool_live", "legendFormat": "1 = live, 0 = block replay", "refId": "B"}
+      ],
+      "title": "Mempool: share of pool swaps seen pending",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 48},
+      "id": 13,
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le, mode) (rate(mm_mempool_math_error_bps_bucket[15m])))", "legendFormat": "math error p95 ({{mode}})", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le, mode) (rate(mm_mempool_ordering_effect_bps_bucket[15m])))", "legendFormat": "ordering effect p95 ({{mode}})", "refId": "B"}
+      ],
+      "title": "Mempool: prediction error split (bps)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 56},
+      "id": 14,
+      "targets": [
+        {"expr": "sum by (mode, status) (increase(mm_mempool_outcomes_total[15m]))", "legendFormat": "{{mode}} {{status}}", "refId": "A"},
+        {"expr": "sum by (reason) (increase(mm_mempool_dropped_total[15m]))", "legendFormat": "dropped: {{reason}}", "refId": "B"},
+        {"expr": "increase(mm_mempool_not_decoded_total[15m])", "legendFormat": "seen, not decoded", "refId": "C"},
+        {"expr": "sum by (result) (increase(mm_mempool_state_checks_total[15m]))", "legendFormat": "state check: {{result}}", "refId": "D"}
+      ],
+      "title": "Mempool: outcomes, drops and state checks per 15 min",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",

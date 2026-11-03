@@ -32,6 +32,9 @@ def test_repository_creates_all_tables(tmp_path) -> None:
         "lp_position_states",
         "lp_rebalances",
         "arb_simulations",
+        "mempool_swaps",
+        "mempool_blocks",
+        "mempool_mode_changes",
     }
     repo.close()
 
