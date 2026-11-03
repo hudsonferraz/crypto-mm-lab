@@ -35,6 +35,11 @@ def test_repository_creates_all_tables(tmp_path) -> None:
         "mempool_swaps",
         "mempool_blocks",
         "mempool_mode_changes",
+        "testnet_sessions",
+        "testnet_orders",
+        "testnet_fills",
+        "testnet_shadow_fills",
+        "testnet_ticks",
     }
     repo.close()
 

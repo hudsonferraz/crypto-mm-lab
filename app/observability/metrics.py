@@ -99,3 +99,19 @@ MEMPOOL_BLOCK_SECONDS = Histogram(
     "Time to process one block",
     buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 12.0),
 )
+
+# Binance spot testnet trader (specs/005-binance-testnet-execution). Never carries a key.
+TESTNET_STATE = Gauge("mm_testnet_trader_up", "1 while the testnet trader runs (or is paused)")
+TESTNET_EVENTS = Counter("mm_testnet_events_total", "Testnet trader order events", ["event"])
+TESTNET_ORDERS = Counter("mm_testnet_orders_placed_total", "Post-only testnet orders", ["side"])
+TESTNET_SHADOW_FILLS = Counter(
+    "mm_testnet_shadow_fills_total", "Paper shadow fills on testnet snapshots", ["fill_model"]
+)
+TESTNET_OPEN_ORDERS = Gauge("mm_testnet_open_orders", "Open lab orders on the testnet")
+TESTNET_WEIGHT_RATIO = Gauge("mm_testnet_weight_used_ratio", "Share of the 1-minute weight used")
+TESTNET_FILL_RATE = Gauge(
+    "mm_testnet_fill_rate", "Fill rate of the current session", ["source", "fill_model"]
+)
+TESTNET_PNL_GAP = Gauge(
+    "mm_testnet_pnl_gap_quote", "Paper minus real PnL on the same orders", ["fill_model"]
+)

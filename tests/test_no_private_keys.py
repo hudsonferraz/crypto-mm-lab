@@ -122,3 +122,36 @@ def test_mempool_watcher_never_signs_or_sends() -> None:
                 offenders.append(str(file.relative_to(ROOT)))
     assert offenders == []
     assert _SIGNING_APIS.search("w3.eth.send_raw_transaction(tx)")
+
+
+_TESTNET_MODULES = (
+    "app/adapters/cex/binance_testnet.py",
+    "app/services/testnet",
+    "app/api/testnet_routes.py",
+    "scripts/record_testnet_session.py",
+)
+_URL_HOST = re.compile(r"(?:https?|wss?)://([A-Za-z0-9.-]+)")
+
+
+def test_testnet_trader_only_knows_the_testnet_host() -> None:
+    """Spec 005 FR-001 / FR-002 / SC-007: no code path names any exchange host but the testnet."""
+    hosts: dict[str, set[str]] = {}
+    for name in _TESTNET_MODULES:
+        path = ROOT / name
+        files = sorted(path.rglob("*.py")) if path.is_dir() else [path]
+        for file in files:
+            text = file.read_text(encoding="utf-8")
+            found = set(_URL_HOST.findall(text))
+            if "api.binance.com" in text or "binance.us" in text:
+                found.add("mainnet")
+            if found - {"testnet.binance.vision"}:
+                hosts[str(file.relative_to(ROOT))] = found
+    assert hosts == {}
+
+
+def test_no_mainnet_exchange_key_setting_exists() -> None:
+    """Only testnet keys can be configured; a mainnet key variable is never read (D1)."""
+    from app.config.settings import Settings
+
+    key_fields = {n for n in Settings.model_fields if "key" in n or "secret" in n}
+    assert key_fields == {"binance_testnet_api_key", "binance_testnet_api_secret"}

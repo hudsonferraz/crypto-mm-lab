@@ -136,7 +136,7 @@
   </style>
 </head>
 <body>
-  <div class="banner">PAPER SIMULATION — no live orders, no wallet keys</div>
+  <div class="banner">PAPER SIMULATION — no real-money orders, no wallet keys (testnet orders use fake money)</div>
   <div id="fallback-banner" class="banner" style="display:none;background:#1e3a5f;border-color:#3b82f6;color:#bfdbfe;">
     Live CEX unavailable from this host — replaying bundled paper order books so the demo keeps moving.
   </div>
@@ -159,6 +159,7 @@
     <button class="tab" data-tab="lp" type="button">On-chain LP</button>
     <button class="tab" data-tab="arb" type="button">Flash arb</button>
     <button class="tab" data-tab="mempool" type="button">Mempool</button>
+    <button class="tab" data-tab="testnet" type="button">Testnet</button>
   </div>
 
   <section id="panel-live" class="panel active">
@@ -448,6 +449,57 @@
       <thead><tr><th>Time</th><th>From</th><th>To</th><th>Source</th><th>Reason</th></tr></thead>
       <tbody id="mp-switches"><tr><td colspan="5">None yet</td></tr></tbody>
     </table>
+  </section>
+
+  <section id="panel-testnet" class="panel">
+    <h2>Binance spot testnet: real post-only orders vs the paper fill models</h2>
+    <div class="note">
+      <span id="tn-source" class="badge">-</span>
+      <span id="tn-state" class="badge">-</span>
+      <span class="badge">Testnet only · fake money</span>
+      <span id="tn-status" style="margin-left:0.4rem">Loading trader status...</span>
+    </div>
+    <p class="muted" id="tn-source-note"></p>
+
+    <div class="grid">
+      <div class="card"><div class="label">Orders accepted · real fills</div><div class="value" id="tn-orders">-</div></div>
+      <div class="card"><div class="label">Rejected by the exchange</div><div class="value" id="tn-rejects">-</div></div>
+      <div class="card"><div class="label">Reconciliation with the exchange</div><div class="value" id="tn-reconcile">-</div></div>
+      <div class="card"><div class="label">Testnet book (virtual slice): PnL</div><div class="value" id="tn-pnl">-</div></div>
+    </div>
+
+    <h2>Paper fill models vs the real matching engine, same orders and snapshots</h2>
+    <table>
+      <thead><tr>
+        <th>Fill model</th><th class="numeric">Fill rate: real / paper</th>
+        <th class="numeric">Matched</th><th class="numeric">Paper only</th><th class="numeric">Real only</th><th class="numeric">Neither</th>
+        <th class="numeric">Time to fill: real / paper</th><th class="numeric">Size diff · price diff</th>
+        <th class="numeric">PnL: real / paper / gap</th>
+      </tr></thead>
+      <tbody id="tn-compare"><tr><td colspan="9">Loading...</td></tr></tbody>
+    </table>
+    <div class="note explain" id="tn-field-explanations"></div>
+
+    <h2>Open orders</h2>
+    <table>
+      <thead><tr><th>Placed</th><th>Order</th><th>Side</th><th class="numeric">Price</th><th class="numeric">Size</th><th>State</th><th class="numeric">Filled</th></tr></thead>
+      <tbody id="tn-open"><tr><td colspan="7">No open orders</td></tr></tbody>
+    </table>
+
+    <h2>Recent orders and what each fill model said</h2>
+    <table>
+      <thead><tr><th>Placed</th><th>Order</th><th>Side</th><th class="numeric">Price</th><th>Final state</th><th class="numeric">Real filled</th><th class="numeric">Paper: full · partial · latency</th><th>Life cycle</th></tr></thead>
+      <tbody id="tn-recent"><tr><td colspan="8">No orders yet</td></tr></tbody>
+    </table>
+
+    <h2>Real fills</h2>
+    <table>
+      <thead><tr><th>Time</th><th>Order</th><th>Side</th><th class="numeric">Price</th><th class="numeric">Size</th><th class="numeric">Fee</th></tr></thead>
+      <tbody id="tn-fills"><tr><td colspan="6">No fills yet</td></tr></tbody>
+    </table>
+
+    <h2>Why the numbers look like this</h2>
+    <div class="note explain" id="tn-explanations">Loading...</div>
   </section>
 
   <script>
@@ -1371,6 +1423,138 @@
       }
     }
 
+    // --- Binance spot testnet (specs/005-binance-testnet-execution) ----------------
+    const MODEL_LABELS = {
+      full_cross_fill: "full_cross_fill",
+      partial_fill: "partial_fill",
+      latency_prob_fill: "latency_prob_fill",
+    };
+    const secs = (value) => (value === null || value === undefined ? "-" : `${Number(value).toFixed(1)} s`);
+    const qty = (value) => (value === null || value === undefined ? "-" : Number(value).toFixed(5));
+    const usd2 = (value) => (value === null || value === undefined ? "-" : `${Number(value) >= 0 ? "" : "−"}$${Math.abs(Number(value)).toFixed(2)}`);
+
+    function renderTestnetStatus(payload, sessions) {
+      const status = payload.status;
+      const source = payload.source;
+      const sourceBadge = document.getElementById("tn-source");
+      sourceBadge.textContent = source === "recorded" ? "recorded (not live)" : source === "live" ? "live" : "no data";
+      sourceBadge.className = `badge ${source === "live" ? "badge-live" : source === "recorded" ? "badge-replay" : ""}`;
+      const stateBadge = document.getElementById("tn-state");
+      stateBadge.textContent = status.state;
+      stateBadge.className = `badge ${["running", "paused"].includes(status.state) ? "badge-ok" : "badge-warn"}`;
+      const c = status.counters || {};
+      const reason = status.reason ? ` · ${status.reason}` : "";
+      document.getElementById("tn-status").textContent = source === "live"
+        ? `session ${status.session_id} · ${status.open_orders} open · ${c.placed || 0} placed · ${c.cancelled || 0} cancelled · ` +
+          `${c.filled || 0} filled · ${c.partially_filled || 0} partial · weight ${pct(status.weight_used_ratio, 0)}${reason}`
+        : `Trader off${reason}.`;
+      const note = document.getElementById("tn-source-note");
+      if (source === "recorded" && payload.recorded) {
+        const r = payload.recorded;
+        const set = r.settings || {};
+        note.textContent = `Showing a recorded real testnet session from ${new Date(r.recorded_at).toLocaleString()} ` +
+          `(${r.minutes} min, spread ${set.spread_bps} bps, replace threshold ${set.replace_threshold_bps} bps). ` +
+          `${payload.how_to_enable}`;
+      } else if (source === "none") {
+        note.textContent = payload.how_to_enable;
+      } else {
+        note.textContent = payload.explanations.D3;
+      }
+      const titles = {
+        D1: "Testnet only, enforced by the lab.",
+        D2: "Without keys, a recorded session.",
+        D3: "Same inputs, different fill engines.",
+        D4: "Maker-only orders and a kill switch that cancels.",
+        D5: "Fill-model accuracy, not testnet profit.",
+        D6: "Every order reconciled with the exchange.",
+        D7: "Beside the trading loop, within the limits.",
+      };
+      document.getElementById("tn-explanations").innerHTML = Object.keys(titles)
+        .map((key) => `<p><strong>${titles[key]}</strong> ${esc(payload.explanations[key])}</p>`)
+        .join("");
+      const rec = status.reconcile || {};
+      const reconcile = source === "recorded"
+        ? `<span class="badge badge-ok">all orders final</span><span class="sub">${esc(payload.explanations.D6.split(". ")[0])}.</span>`
+        : rec.ok === null || rec.ok === undefined
+          ? "-"
+          : `<span class="badge ${rec.ok ? "badge-ok" : "badge-warn"}">${rec.ok ? "matches the exchange" : "checking"}</span>` +
+            `<span class="sub">last ${fmtTime(rec.last_at)} · ${rec.unexplained || 0} unexplained · ${c.leftovers_cancelled || 0} leftovers cancelled · ${c.resets || 0} resets</span>`;
+      document.getElementById("tn-reconcile").innerHTML = reconcile;
+    }
+
+    function renderTestnetComparison(payload, balances) {
+      const models = payload.models || [];
+      const first = models[0];
+      const ex = payload.explanations || {};
+      document.getElementById("tn-orders").innerHTML = first
+        ? `${first.orders} · ${first.real_filled}<span class="sub">${esc(ex.fill_rate)}</span>`
+        : "-";
+      const r = payload.rejects || {};
+      const rejected = Object.values(r).reduce((a, b) => a + b, 0);
+      document.getElementById("tn-rejects").innerHTML =
+        `${rejected}<span class="sub">post-only ${r.post_only || 0} · min size ${r.min_size || 0} · min value ${r.min_notional || 0} · unfundable ${r.unfundable || 0}. ${esc(ex.rejects)}</span>`;
+      const v = balances.virtual;
+      document.getElementById("tn-pnl").innerHTML = v && v.pnl !== null && v.pnl !== undefined
+        ? `${usd2(v.pnl)}<span class="sub">${qty(v.base)} BTC · ${usd2(v.quote)} USDT at mid ${fmt(v.mid, 2)}. Testnet PnL, not a mainnet forecast (D5).</span>`
+        : "-";
+      const none = "no fills yet";
+      document.getElementById("tn-compare").innerHTML = models.length && first.orders
+        ? models.map((m) => `<tr>
+            <td class="mono">${MODEL_LABELS[m.fill_model] || m.fill_model}</td>
+            <td class="numeric">${m.real_fill_rate === null ? none : `${pct(m.real_fill_rate)} / ${pct(m.paper_fill_rate)}`}</td>
+            <td class="numeric">${m.matched}</td><td class="numeric">${m.paper_only}</td>
+            <td class="numeric">${m.real_only}</td><td class="numeric">${m.neither}</td>
+            <td class="numeric">${secs(m.median_time_to_fill_real_sec)} / ${secs(m.median_time_to_fill_paper_sec)}</td>
+            <td class="numeric">${m.mean_size_diff === null ? "-" : `${qty(m.mean_size_diff)} · ${bps(m.mean_price_diff_bps)}`}</td>
+            <td class="numeric">${usd2(m.real_pnl)} / ${usd2(m.paper_pnl)} / ${usd2(m.pnl_gap)}</td>
+          </tr>`).join("")
+        : `<tr><td colspan="9">${payload.source === "none" ? "No testnet data: set free testnet keys to run it live." : "No orders yet"}</td></tr>`;
+      const order = ["matched", "paper_only", "real_only", "time_to_fill", "size_price", "pnl_gap"];
+      document.getElementById("tn-field-explanations").innerHTML = order
+        .map((key) => `<p><strong>${key.replace(/_/g, " ")}:</strong> ${esc(ex[key])}</p>`)
+        .join("");
+    }
+
+    function renderTestnetOrders(open, recent, fills) {
+      document.getElementById("tn-open").innerHTML = open.length
+        ? open.map((o) => `<tr><td>${fmtTime(o.placed_at)}</td><td class="mono">${esc(o.client_order_id)}</td><td>${o.side}</td>
+            <td class="numeric">${fmt(o.price, 2)}</td><td class="numeric">${qty(o.size)}</td><td>${o.state}</td><td class="numeric">${qty(o.filled_size)}</td></tr>`).join("")
+        : "<tr><td colspan='7'>No open orders</td></tr>";
+      document.getElementById("tn-recent").innerHTML = recent.length
+        ? recent.map((o) => {
+            const p = o.paper || {};
+            const events = (o.events || []).map((e) => e.kind).join(" → ");
+            return `<tr><td>${fmtTime(o.placed_at)}</td><td class="mono">${esc(o.client_order_id)}</td><td>${o.side}</td>
+              <td class="numeric">${fmt(o.price, 2)}</td><td>${o.state}${o.reject_reason ? ` (${o.reject_reason})` : ""}</td>
+              <td class="numeric">${qty(o.filled_size)}</td>
+              <td class="numeric">${qty(p.full_cross_fill || 0)} · ${qty(p.partial_fill || 0)} · ${qty(p.latency_prob_fill || 0)}</td>
+              <td class="muted">${esc(events)}</td></tr>`;
+          }).join("")
+        : "<tr><td colspan='8'>No orders yet</td></tr>";
+      document.getElementById("tn-fills").innerHTML = fills.length
+        ? fills.map((f) => `<tr><td>${fmtTime(f.at)}</td><td class="mono">${esc(f.client_order_id)}</td><td>${f.side}</td>
+            <td class="numeric">${fmt(f.price, 2)}</td><td class="numeric">${qty(f.size)}</td><td class="numeric">${fmt(f.fee, 6)} ${esc(f.fee_asset)}</td></tr>`).join("")
+        : "<tr><td colspan='6'>No fills yet</td></tr>";
+    }
+
+    async function refreshTestnet() {
+      try {
+        const [status, comparison, balances, open, recent, fills] = await Promise.all([
+          fetchJson("/testnet/status"),
+          fetchJson("/testnet/comparison?window_minutes=1440"),
+          fetchJson("/testnet/balances"),
+          fetchJson("/testnet/orders?state=open&limit=20"),
+          fetchJson("/testnet/orders?state=final&limit=25"),
+          fetchJson("/testnet/fills?limit=20"),
+        ]);
+        renderTestnetStatus(status);
+        renderTestnetComparison(comparison, balances);
+        renderTestnetOrders(open.items, recent.items, fills.items);
+      } catch (error) {
+        document.getElementById("tn-status").textContent = `Testnet error: ${error.message}`;
+      }
+    }
+
     async function refreshArb() {
       try {
         const [latest, history, accuracy] = await Promise.all([
@@ -1551,6 +1735,8 @@
     setInterval(refreshArb, 4000);
     refreshMempool();
     setInterval(refreshMempool, 4000);
+    refreshTestnet();
+    setInterval(refreshTestnet, 4000);
   </script>
 </body>
 </html>

@@ -5,7 +5,7 @@
 [![CI](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/hudsonferraz/crypto-mm-lab/branch/main/graph/badge.svg)](https://codecov.io/gh/hudsonferraz/crypto-mm-lab)
 
-**Paper market-making research lab** that pulls live CEX order books, simulates quote placement and fills, tracks PnL, runs a paper **Uniswap V3 concentrated-liquidity** book against the CEX book, compares CEX vs Uniswap V2/V3 prices, ships a tested **Solidity flash-arbitrage contract** that it simulates against live mainnet state every tick, watches the **public mempool** for swaps on its two pools and checks every prediction against the next blocks, and comes with backtest mode plus a Docker observability stack.
+**Paper market-making research lab** that pulls live CEX order books, simulates quote placement and fills, tracks PnL, runs a paper **Uniswap V3 concentrated-liquidity** book against the CEX book, compares CEX vs Uniswap V2/V3 prices, ships a tested **Solidity flash-arbitrage contract** that it simulates against live mainnet state every tick, watches the **public mempool** for swaps on its two pools and checks every prediction against the next blocks, runs the strategy with real post-only orders on the **Binance spot testnet** (free key, fake money) to measure how well the paper fill models match a real matching engine, and comes with backtest mode plus a Docker observability stack.
 
 This is an **education and research project** — useful for exploring MM mechanics, execution models, and CEX/DEX comparison. It is **not** production trading infrastructure.
 
@@ -28,6 +28,7 @@ This is an **education and research project** — useful for exploring MM mechan
 - **Solidity flash-arbitrage executor** — an owner-only contract that captures a V2/V3 price gap in one transaction through a Uniswap V3 flash swap. Tested against the real Uniswap V2 and V3 core contracts: unit, fuzz (1,000 runs per property) and invariant tests, 100% branch coverage, a gas gate, and an opt-in mainnet-fork suite whose profit matches QuoterV2 exactly
 - **Scanner checked against the contract** — every tick, the best V2-vs-V3 trade is simulated against live mainnet state with a read-only `eth_call` (no deploy, no key, no cost). The scanner's estimate matches the simulation to the unit, and the dashboard explains every result
 - **Mempool watcher** — follows pending mainnet transactions on a free keyless websocket, decodes swaps on the two pools (direct calls, V2 router, V3 swap routers, Universal Router), predicts their price impact with the same exact math, and verifies each prediction against its block. Pool state is rolled forward from the pools' own events and matched a fresh chain read after 60 blocks with zero drift; every real swap replayed from those blocks is reproduced with zero math error
+- **Binance spot testnet execution** — with a free key, the strategy places real post-only orders on the testnet (fake money, host fixed in code), reconciles every order with the exchange, and compares each paper fill model with the real fills on identical snapshots. A recorded 30-minute session ships for the keyless demo. It found the paper models too pessimistic: 50% fill rate vs 67% real
 - **CEX/DEX analytics** — Uniswap V2 pool reader, V2 + V3 arbitrage scanner (exact V3 output, net-edge-maximizing size), labeled USDT/USDC basis notes
 - **Backtesting** — replay from SQLite/Postgres snapshots or CSV fixtures; Sharpe-like ratio, drawdown, fill rate
 - **Observability** — Prometheus `/metrics`, Grafana dashboard, structured logging, `last_error` on `/status`
@@ -54,6 +55,10 @@ This is an **education and research project** — useful for exploring MM mechan
 | Mempool watcher, live: public visibility, plus every swap replayed alongside | Mempool watcher, forced block replay |
 |------------------------------------------------------|------------------------------------------------------|
 | ![Mempool tab, live](docs/images/dashboard-mempool.png) | ![Mempool tab, replay](docs/images/dashboard-mempool-replay.png) |
+
+| Testnet: real post-only orders vs the paper fill models (recorded session, keyless demo) |
+|------------------------------------------------------------------------------------------|
+| ![Testnet tab](docs/images/dashboard-testnet.png) |
 
 | Docker stack (live) | Grafana metrics |
 |---------------------|-----------------|
@@ -159,6 +164,12 @@ docker compose up --build
 | `GET /mempool/swaps/{tx_hash}` | One watched swap |
 | `GET /mempool/blocks` | Per-block swaps on our pools and how many were seen pending (`?limit=50&mode=live`) |
 | `GET /mempool/summary` | Accuracy, inclusion latency, visibility, decode coverage and capture rate, live and replay kept separate (`?window_minutes=60`) |
+| `GET /testnet/status` | Testnet trader state, keys present (yes/no only), session, counters, reconciliation, the D1–D7 explanations, and the recorded session's details |
+| `GET /testnet/orders` | Testnet orders with life cycle and what each paper fill model filled (`?state=open\|final\|all&limit=50`) |
+| `GET /testnet/fills` | Real testnet fills (`?limit=50`) |
+| `GET /testnet/balances` | Virtual testnet slice, PnL at the testnet mid, and the account totals |
+| `GET /testnet/comparison` | Per fill model: fill rate real vs paper, matched / paper only / real only / neither, time to fill, PnL gap (`?window_minutes=60`) |
+| `GET /testnet/sessions` | Testnet sessions and why they ended |
 | `POST /kill-switch` | Enable/disable kill switch (`{"active": true}`) |
 | `GET /dashboard` | Static monitoring UI |
 
@@ -286,6 +297,57 @@ python scripts/record_mempool_fixture.py --blocks 60    # re-record the evidence
 - **Beside the loop, never inside it.** The watcher has its own tasks, its own HTTP client, a bounded queue and a fixed budget of optional calls per block (receipts, nonce checks, upstream quotes). A burst of mempool traffic cannot delay quoting or exhaust the free endpoint.
 - **Read-only.** Nothing is signed, sent or acted on, and no key exists. A test fails if a signing or sending API appears in the watcher's code.
 
+## Binance spot testnet execution
+
+Everywhere else in the lab, fills come from a **fill model**: a rule that decides whether a paper quote would have traded. The testnet trader checks those models against a real matching engine.
+
+With a free key, it runs the same strategy on the **Binance spot testnet**: a full copy of the exchange where the balances are fake. It sends real post-only orders, replaces them as the book moves, and reconciles every order with the exchange.
+
+Next to it, one paper book per fill model sees the same testnet snapshots and the same orders. The **Testnet** tab compares them, per model:
+- fill rate, real vs paper;
+- orders both filled, only paper filled, or only the real engine filled;
+- time to fill;
+- size and price differences;
+- the PnL gap.
+
+Free key (two minutes):
+1. Open https://testnet.binance.vision, sign in with GitHub and generate an HMAC key.
+2. Put `BINANCE_TESTNET_API_KEY` and `BINANCE_TESTNET_API_SECRET` in `.env`. The file is git-ignored; never commit a key.
+3. Restart the lab. Without keys, the trader stays off and the tab shows a recorded real session, labeled **recorded**.
+
+Evidence (2026-11-03, real testnet session, replayed offline in CI):
+
+| | |
+|---|---|
+| Session | 30 min on BTCUSDT, 2 bps spread, 3 bps replace threshold, 593 snapshots |
+| Orders | 54 sent: 52 accepted, 2 rejected as post-only (the book moved between snapshot and order), 0 unexplained, every order in a final state at the end |
+| Real fills | 35 of 52 orders filled (67%), 3 of them in several partial fills; 17 cancelled on a price move |
+| `full_cross_fill` / `partial_fill` | 26 matched, 0 paper only, **9 real only**: paper fill rate 50% vs 67% real |
+| `latency_prob_fill` | 0 fills: it needs the book crossed on two snapshots in a row, and a real fill had already ended the order (see below) |
+| Recompute | every one of the 52 paper fills reproduces exactly from the stored snapshots (CI) |
+| Effect on the trading loop | tick p95 6.866 s with the trader on vs 6.869 s off, median 1.307 s vs 1.320 s (18 min, alternating 3-minute blocks, every tick timed in-process): no measurable effect |
+| Kill switch | 5 live trials: every lab order cancelled and confirmed gone in 1.35 s median, 1.45 s worst (target 5 s) |
+
+```bash
+python -m pytest tests -q -k testnet                            # offline: fake exchange + recorded session
+python -m pytest tests/test_testnet_live.py --live -q           # real testnet: place, see, cancel, nothing left
+python scripts/record_testnet_session.py --minutes 30 --spread-bps 2 --threshold-bps 3 --initial-base 0.005
+```
+
+What the recording shows:
+- **The paper models are pessimistic on the testnet.** They never filled an order the real engine left alone. But they missed 9 real fills, because someone traded into our price while the book, seen at our 2-to-3-second snapshot rate, never crossed it.
+- **`latency_prob_fill` cannot fill a resting quote that the real market takes first.** The main paper broker replaces its quotes every tick, which resets the crossing streak the same way. With `FILL_LATENCY_TICKS` of 2 or more, that model never fills in the paper loop either: 0 fills over 20 ticks that were all crossed. The testnet comparison found this existing bug; the fix is left as a follow-up.
+
+### Why it's built this way
+
+- **Testnet only, enforced in code.** The only host the client can reach is `testnet.binance.vision`. It is fixed, there is no base-URL setting, and the client checks the host when it is built and again on every request. A test fails if any other exchange host appears in the trader's code. Testnet and mainnet keys look alike, so this is what makes "never real money" a checkable guarantee.
+- **Free key, and the lab still works without it.** Keys come only from the environment and are never returned, logged, stored or shown; status says only whether they are present. Without them, the hosted demo shows the recorded session, and live and recorded numbers are never mixed.
+- **Same inputs, different fill engines.** The testnet trader quotes from the testnet book, not the mainnet book that drives the paper loop. Comparing paper fills on mainnet data with real fills on testnet data would compare two markets. Here, the three paper models see exactly the snapshots and orders the real engine saw, and every order is counted once per model as matched, paper only, real only or neither.
+- **Maker-only orders, existing limits, a kill switch that cancels.** Quotes are `LIMIT_MAKER` orders rounded to the exchange's tick and lot rules, so they can only add liquidity, as the paper model assumes. A quote that would cross the book is rejected by the exchange and counted, never resent as a taking order. The kill switch cancels every lab order and confirms with the exchange that none remain.
+- **Fill-model accuracy, not testnet profit.** Testnet flow is thin and mostly bots copying mainnet prices. How the engine treats an order is real; how much a strategy earns there is not, so testnet PnL is labeled and never presented as a result.
+- **Reconcile, never assume.** Orders are tagged `mmlab-<session>-<n>`, so the lab only touches its own. Lost answers are resolved from the exchange, and a cancel that arrives after a fill keeps the fill. Leftovers from a crashed run are cancelled at start. A testnet reset (orders and history wiped) starts a new session, so statistics never span one.
+- **Beside the loop, within the limits.** The trader has its own task and HTTP client. It uses about 31 request weight per 2-second cycle, roughly 15% of the limit, and slows down above 70% of it.
+
 ## Architecture
 
 See [docs/architecture.md](docs/architecture.md) for the full diagram and data flow.
@@ -296,7 +358,7 @@ This project is a **paper-trading lab**, not a production market-making system. 
 
 ### Execution
 
-- **No live orders** — quotes and fills are simulated locally. CEX access is read-only (public order books via CCXT). DEX access is read-only (`getReserves()` over RPC).
+- **No real-money orders** — quotes and fills are simulated locally. The only orders ever sent go to the Binance spot testnet (fake money, opt-in with a free key). CEX access is read-only (public order books via CCXT). DEX access is read-only (`getReserves()` over RPC).
 - **Cash account only** — you cannot sell base you do not own or bid beyond available quote balance (including fees). Risk filters reserve aggregate exposure across multiple quotes on the same tick. No margin, leverage, or short selling.
 - **Fill model** (`FILL_MODE`):
   - `full_cross_fill` (default) — if the external best bid/ask crosses your resting quote, the full quote size fills at your price.
@@ -362,6 +424,9 @@ See `.env.example`. Key variables:
 | `ETH_ARCHIVE_RPC_URL` | Optional archive URL for `scripts/backfill_v3.py` only (secret) |
 | `ARB_SIM_ENABLED`, `ARB_SIM_RPC_URL` | Flash-arb simulation once per new block; optional separate RPC serving the same chain and blocks as `ETH_RPC_URL`, such as a keyed provider (secret) |
 | `ARB_REFERENCE_SIZE_QUOTE`, `ARB_GAS_UNITS`, `ARB_SIM_EVERY_TICKS` | Reference trade size when no size is profitable, gas estimate for the scanner, cadence |
+| `TESTNET_ENABLED`, `BINANCE_TESTNET_API_KEY`, `BINANCE_TESTNET_API_SECRET` | Binance spot testnet trader; runs only with both free keys set (secrets, `.env` only) |
+| `TESTNET_QUOTE_SPREAD_BPS`, `TESTNET_QUOTE_SIZE`, `TESTNET_INITIAL_BASE` | Testnet quoting (defaults to `QUOTE_SPREAD_BPS` / `QUOTE_SIZE`) and the virtual BTC slice |
+| `TESTNET_REPLACE_THRESHOLD_BPS`, `TESTNET_POLL_INTERVAL_SEC`, `TESTNET_RECONCILE_INTERVAL_SEC` | When to replace an order, cycle time, full reconciliation interval |
 
 ## Development
 

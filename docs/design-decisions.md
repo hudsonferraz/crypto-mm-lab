@@ -246,6 +246,60 @@ A free endpoint offers a richer feed, or the public websocket changes.
 
 ---
 
+## Testnet trader: a fixed host, not a setting
+
+**Context**
+The project never risks real money. A Binance API key looks the same for mainnet and testnet, so a real key could end up in a testnet variable.
+
+**Decision**
+The trader has its own small REST client instead of ccxt. Its only host is `testnet.binance.vision`, fixed in code. There is no base-URL setting, the host is checked when the client is built and again on every request, and a test fails if any other exchange host appears in the trader's modules. A mainnet key would simply be rejected by the testnet.
+
+**Trade-off**
+About ten endpoints are maintained by hand. ccxt's sandbox mode would cover them, but it has code paths to other hosts that the lab could not vouch for.
+
+**Revisit when**
+Never for real-exchange trading; that is out of scope.
+
+---
+
+## Testnet trader: same inputs, different fill engines
+
+**Context**
+The paper loop quotes against the mainnet book, but testnet prices only follow mainnet loosely, and testnet liquidity is thin. Comparing paper fills on mainnet data with real fills on testnet data would compare two markets, not two fill engines.
+
+**Decision**
+The testnet trader quotes from the testnet book. Three paper shadow books, one per fill model, evaluate each real order on the same testnet snapshots with the main broker's `detect_fills`.
+- **Window**: an order is evaluated from its acknowledgement until the lab cancels it; after a real fill, it gets one more look at the next snapshot.
+- **Outcomes**: every order ends as matched, paper only, real only or neither, so the four add up.
+- **Recompute**: the snapshots and the windows are stored, so the comparison can be recomputed offline.
+
+**Trade-off**
+Shadows never change which quotes are sent, so they measure each model's fill decision, not the path a paper book would have taken. Testnet PnL is labeled as testnet, not a mainnet forecast.
+
+**Revisit when**
+A free venue offers a realistic flow on a sandbox.
+
+---
+
+## Testnet trader: reconcile, never assume
+
+**Context**
+Real order handling fails in small ways: lost answers, cancels that arrive after a fill, restarts with orders still open, and testnet resets that wipe orders and history.
+
+**Decision**
+Every order is tagged `mmlab-<session>-<n>`, so the lab only ever touches its own orders. Each order's life cycle is kept and checked against the exchange:
+- **Every cycle**: open orders and new fills.
+- **Every 30 seconds and after any failure**: a full reconciliation.
+- **Lost answers**: a lost place answer becomes `unknown` and is resolved from the exchange.
+- **Late cancels**: a cancel rejected because the order already filled keeps the fill and is counted as "cancel too late".
+- **Leftovers**: tagged orders from earlier runs are cancelled at start.
+- **Resets**: a vanished order or vanished trade history ends the session as a testnet reset.
+
+**Trade-off**
+Reset detection does not use balances, because the same testnet account may trade other symbols.
+
+---
+
 ## Mempool watcher: split the error, state the back-run rule
 
 **Context**
@@ -393,7 +447,7 @@ The paper LP position is assumed not to move price, but its fee dilution is mode
 The lab is a portfolio project with a hard no-spend constraint.
 
 **Decision**  
-All live reads use the keyless public RPC that V2 already used. API keys are optional and only improve reliability. The one feature that needs history (`scripts/backfill_v3.py`) asks for a free-tier archive URL and fails with a clear message on the public node, which serves only about 128 blocks. RPC URLs are treated as secrets: never returned by an endpoint (`/config` exposes only `rpc_provider: public|custom`) and never logged.
+All live reads use the keyless public RPC that V2 already used. API keys are optional and only improve reliability. Since 2026-11-03, features may also use a **free** API key (the Binance spot testnet trader is the first). Each key comes only from the environment and is never shown or stored, and every key-gated feature switches off cleanly without it, so the hosted demo and CI stay keyless. The one feature that needs history (`scripts/backfill_v3.py`) asks for a free-tier archive URL and fails with a clear message on the public node, which serves only about 128 blocks. RPC URLs are treated as secrets: never returned by an endpoint (`/config` exposes only `rpc_provider: public|custom`) and never logged.
 
 ---
 

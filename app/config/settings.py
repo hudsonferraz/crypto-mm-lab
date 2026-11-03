@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 StrategyName = Literal["pure_mm", "inventory_skew", "volatility_spread"]
@@ -105,6 +105,21 @@ class Settings(BaseSettings):
     mempool_retention_days: float = Field(default=7.0, gt=0)
     mempool_rpc_timeout_sec: float = Field(default=10.0, gt=0)
 
+    # Binance spot testnet trader (specs/005-binance-testnet-execution). Fake money only:
+    # the testnet host is fixed in code (D1); there is deliberately no base-URL setting.
+    # Keys come only from the environment and are never output (FR-003).
+    testnet_enabled: bool = True
+    binance_testnet_api_key: SecretStr | None = None
+    binance_testnet_api_secret: SecretStr | None = None
+    testnet_poll_interval_sec: float = Field(default=2.0, gt=0)
+    testnet_quote_spread_bps: float | None = Field(default=None, ge=0)
+    testnet_quote_size: float | None = Field(default=None, gt=0)
+    testnet_initial_base: float = Field(default=0.0, ge=0)
+    testnet_replace_threshold_bps: float = Field(default=2.0, ge=0)
+    testnet_reconcile_interval_sec: float = Field(default=30.0, gt=0)
+    testnet_timeout_sec: float = Field(default=10.0, gt=0)
+    testnet_recorded_path: str | None = "tests/fixtures/testnet/session.json.gz"
+
     @property
     def v3_active(self) -> bool:
         return self.dex_enabled and self.v3_enabled
@@ -128,6 +143,25 @@ class Settings(BaseSettings):
     @property
     def mempool_http_url(self) -> str:
         return self.mempool_rpc_url or self.eth_rpc_url
+
+    @property
+    def testnet_keys_present(self) -> bool:
+        key, secret = self.binance_testnet_api_key, self.binance_testnet_api_secret
+        return bool(key and key.get_secret_value() and secret and secret.get_secret_value())
+
+    @property
+    def testnet_active(self) -> bool:
+        return self.testnet_enabled and self.testnet_keys_present
+
+    @property
+    def testnet_spread_bps(self) -> float:
+        if self.testnet_quote_spread_bps is None:
+            return self.quote_spread_bps
+        return self.testnet_quote_spread_bps
+
+    @property
+    def testnet_size(self) -> float:
+        return self.testnet_quote_size if self.testnet_quote_size is not None else self.quote_size
 
 
 @lru_cache

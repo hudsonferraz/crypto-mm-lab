@@ -2,7 +2,7 @@
 
 ## Overview
 
-crypto-mm-lab is a paper-trading market-making lab that connects to public CEX order books, simulates quote placement and fills, tracks PnL, compares CEX prices against Uniswap V2 and V3 pools, runs a paper Uniswap V3 concentrated-liquidity book alongside the CEX book, simulates its own Solidity flash-arbitrage contract (`contracts/`) against live mainnet state every tick, and runs a read-only mempool watcher beside the loop that predicts pending swaps on the two pools and verifies them block by block.
+crypto-mm-lab is a paper-trading market-making lab that connects to public CEX order books, simulates quote placement and fills, tracks PnL, compares CEX prices against Uniswap V2 and V3 pools, runs a paper Uniswap V3 concentrated-liquidity book alongside the CEX book, simulates its own Solidity flash-arbitrage contract (`contracts/`) against live mainnet state every tick, runs a read-only mempool watcher beside the loop that predicts pending swaps on the two pools and verifies them block by block, and, with free testnet keys, runs the strategy on the Binance spot testnet with real post-only orders to check the paper fill models against a real matching engine.
 
 ```mermaid
 flowchart TB
@@ -53,6 +53,14 @@ flowchart TB
     MW[watcher]
   end
 
+  subgraph testnet [Testnet trader: own task, beside the loop, testnet host only]
+    TNC[binance_testnet client<br/>fixed host, HMAC]
+    TNT[trader<br/>orders, reconcile, sessions]
+    TNS[shadow books<br/>one per fill model]
+    TNX[comparison]
+    TNR[recorded session<br/>keyless demo]
+  end
+
   subgraph observability [Observability]
     Prom[Prometheus metrics]
     Graf[Grafana dashboards]
@@ -96,6 +104,13 @@ flowchart TB
   Pred --> Ver --> MW
   MW --> Repo
   MW --> Prom
+  TNC --> TNT --> TNS --> TNX
+  Strat --> TNT
+  Risk --> TNT
+  TNT --> Repo
+  TNT --> Prom
+  TNX --> API
+  TNR --> API
 ```
 
 ## Data flow (live loop)
@@ -118,6 +133,19 @@ Started by the app lifespan next to the loop (`MEMPOOL_ENABLED`). It has its own
 3. **Blocks.** For each new block the watcher reads the header (transaction order, base fee, parent hash) and the pools' logs by block hash. It rolls state forward, rewinds to a checkpoint on a reorg, and re-anchors on the window edge or every N blocks. Then it resolves watched swaps: included (with error split and back-run check), reverted, replaced (by nonce) or not included. Receipts and nonce checks come out of a per-block call budget.
 4. **Replay.** When no pending data is available (or `MEMPOOL_MODE=replay`), every swap in each block is replayed from the block's start state instead.
 5. **Persist and metrics.** It writes `mempool_swaps` (upserted as status changes), `mempool_blocks` and `mempool_mode_changes`, and updates the `mm_mempool_*` metrics. A retention sweep runs hourly.
+
+## Testnet trader (beside the loop)
+
+Started by the app lifespan when `TESTNET_ENABLED` is on and both free testnet keys are set (`BINANCE_TESTNET_API_KEY`, `BINANCE_TESTNET_API_SECRET`). It shares only the loop's kill switch and repository. Its REST client can reach `testnet.binance.vision` and nothing else: the host is checked when the client is built and again on every request.
+
+1. **Start.** It syncs the clock with the exchange, reads the trading rules and the account, closes sessions left open by a crashed run, cancels tagged leftover orders, and opens a new session.
+2. **Each cycle** (`TESTNET_POLL_INTERVAL_SEC`):
+   - It reads the testnet book and the new fills, and lists the open orders. Tagged orders it has no record of are cancelled.
+   - The three paper shadows evaluate the orders whose window covers this snapshot.
+   - The strategy quotes from the testnet book. Quotes go through the risk limits and are rounded to the trading rules. A side whose price moved more than the threshold is cancelled and replaced with a post-only (`LIMIT_MAKER`) order.
+3. **Reconcile** (every `TESTNET_RECONCILE_INTERVAL_SEC`, after any failed request, and on the kill switch). It resyncs the clock, re-reads the balances, resolves orders whose answer was lost, and checks that the session's trade history still exists. A recorded order that no longer exists, or lost history, means the testnet was reset, so the session ends and a new one starts.
+4. **Kill switch and stop.** The trader checks the switch every 0.2 s while it waits between cycles. It cancels every tagged order and confirms with the exchange that none remain, showing `cancel_pending` until it can.
+5. **Without keys**, no trader runs. The API serves the recorded session in `tests/fixtures/testnet/session.json.gz`, labeled `recorded`.
 
 ## Backtest flow
 
@@ -142,6 +170,11 @@ Started by the app lifespan next to the loop (`MEMPOOL_ENABLED`). It has its own
 | `mempool_swaps` | One row per watched or replayed swap, upserted as its status changes: prediction, verification, error split (headline columns + full JSON) |
 | `mempool_blocks` | Per block and mode: swaps on our pools, how many were seen pending, back-runs, gap at block end |
 | `mempool_mode_changes` | Live/replay switches with time, source and reason |
+| `testnet_sessions` | Testnet trader sessions: start and end, end reason (stopped, reset, restart), virtual slice, settings |
+| `testnet_orders` | One row per testnet order, upserted through its life cycle (placed, ack, fills, cancel, reject, reconciled) |
+| `testnet_fills` | Real testnet fills, unique by exchange trade id |
+| `testnet_shadow_fills` | What each paper fill model filled, per order and snapshot |
+| `testnet_ticks` | Best bid and ask per testnet snapshot, and the orders the shadows evaluated (for offline recompute) |
 
 SQLite is the default for local dev. Docker Compose uses PostgreSQL via `DATABASE_URL` — the repository abstraction makes the swap config-only.
 

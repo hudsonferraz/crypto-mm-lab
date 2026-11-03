@@ -35,6 +35,22 @@ from app.analytics.performance_report import (
     position_to_dict,
     quote_to_dict,
 )
+from app.analytics.testnet_report import (
+    fill_from_dict as testnet_fill_from_dict,
+)
+from app.analytics.testnet_report import (
+    fill_to_dict as testnet_fill_to_dict,
+)
+from app.analytics.testnet_report import (
+    order_from_dict,
+    order_to_dict,
+    session_from_dict,
+    session_to_dict,
+    shadow_from_dict,
+    shadow_to_dict,
+    tick_from_dict,
+    tick_to_dict,
+)
 from app.execution.tick_ids import new_tick_id
 from app.models.domain import (
     ArbitrageDirection,
@@ -49,6 +65,13 @@ from app.models.domain import (
 )
 from app.models.flash_arb import SimulationResult
 from app.models.mempool import BlockVisibility, ModeChange, WatchedSwap
+from app.models.testnet import (
+    ShadowFill,
+    TestnetFill,
+    TestnetOrder,
+    TestnetSession,
+    TickRecord,
+)
 from app.models.tick_audit import TickAuditBundle
 from app.models.v3 import LpPositionState, RebalanceEvent, V3PoolSnapshot
 from app.storage.database import create_db_engine
@@ -257,6 +280,74 @@ class MempoolModeChangeRow(Base):
     to_mode: Mapped[str] = mapped_column(String(8), nullable=False)
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class TestnetSessionRow(Base):
+    """One continuous testnet trader session (specs/005 FR-016)."""
+
+    __tablename__ = "testnet_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(16), nullable=False, unique=True, index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class TestnetOrderRow(Base):
+    """One testnet order with its life cycle; updated in place."""
+
+    __tablename__ = "testnet_orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    client_order_id: Mapped[str] = mapped_column(
+        String(40), nullable=False, unique=True, index=True
+    )
+    session_id: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    placed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class TestnetFillRow(Base):
+    __tablename__ = "testnet_fills"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    trade_id: Mapped[int] = mapped_column(Integer, nullable=False, unique=True, index=True)
+    session_id: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class TestnetShadowFillRow(Base):
+    __tablename__ = "testnet_shadow_fills"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    fill_model: Mapped[str] = mapped_column(String(24), nullable=False)
+    client_order_id: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    tick_seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class TestnetTickRow(Base):
+    __tablename__ = "testnet_ticks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+for _testnet_row in (
+    TestnetSessionRow,
+    TestnetOrderRow,
+    TestnetFillRow,
+    TestnetShadowFillRow,
+    TestnetTickRow,
+):
+    _testnet_row.__test__ = False  # not pytest test classes
 
 
 def add_missing_nullable_columns(engine: Engine) -> list[str]:
@@ -1137,6 +1228,162 @@ class Repository:
             )
             session.commit()
         return removed
+
+    # --- testnet trader (specs/005-binance-testnet-execution) -----------------------
+
+    def save_testnet_session(self, item: TestnetSession) -> None:
+        with self._session() as session:
+            row = (
+                session.query(TestnetSessionRow)
+                .filter(TestnetSessionRow.session_id == item.session_id)
+                .one_or_none()
+            )
+            if row is None:
+                row = TestnetSessionRow(session_id=item.session_id)
+                session.add(row)
+            row.started_at = item.started_at
+            row.ended_at = item.ended_at
+            row.payload = json.dumps(session_to_dict(item))
+            session.commit()
+
+    def get_testnet_sessions(self, limit: int = 20) -> list[TestnetSession]:
+        with self._session() as session:
+            rows = (
+                session.query(TestnetSessionRow)
+                .order_by(TestnetSessionRow.started_at.desc(), TestnetSessionRow.id.desc())
+                .limit(limit)
+                .all()
+            )
+        return [session_from_dict(json.loads(row.payload)) for row in rows]
+
+    def upsert_testnet_orders(self, orders: list[TestnetOrder]) -> None:
+        if not orders:
+            return
+        with self._session() as session:
+            for order in orders:
+                row = (
+                    session.query(TestnetOrderRow)
+                    .filter(TestnetOrderRow.client_order_id == order.client_order_id)
+                    .one_or_none()
+                )
+                if row is None:
+                    row = TestnetOrderRow(client_order_id=order.client_order_id)
+                    session.add(row)
+                row.session_id = order.session_id
+                row.state = order.state
+                row.placed_at = order.placed_at
+                row.payload = json.dumps(order_to_dict(order))
+            session.commit()
+
+    def get_testnet_orders(
+        self,
+        *,
+        session_id: str | None = None,
+        states: frozenset[str] | set[str] | None = None,
+        limit: int | None = 50,
+    ) -> list[TestnetOrder]:
+        with self._session() as session:
+            query = session.query(TestnetOrderRow)
+            if session_id is not None:
+                query = query.filter(TestnetOrderRow.session_id == session_id)
+            if states is not None:
+                query = query.filter(TestnetOrderRow.state.in_(sorted(states)))
+            query = query.order_by(TestnetOrderRow.placed_at.desc(), TestnetOrderRow.id.desc())
+            if limit is not None:
+                query = query.limit(limit)
+            rows = query.all()
+        return [order_from_dict(json.loads(row.payload)) for row in rows]
+
+    def get_testnet_order(self, client_order_id: str) -> TestnetOrder | None:
+        with self._session() as session:
+            row = (
+                session.query(TestnetOrderRow)
+                .filter(TestnetOrderRow.client_order_id == client_order_id)
+                .one_or_none()
+            )
+        return order_from_dict(json.loads(row.payload)) if row is not None else None
+
+    def save_testnet_fills(self, fills: list[TestnetFill]) -> None:
+        if not fills:
+            return
+        with self._session() as session:
+            for fill in fills:
+                exists = (
+                    session.query(TestnetFillRow.id)
+                    .filter(TestnetFillRow.trade_id == fill.trade_id)
+                    .first()
+                )
+                if exists is None:
+                    session.add(
+                        TestnetFillRow(
+                            trade_id=fill.trade_id,
+                            session_id=fill.session_id,
+                            at=fill.at,
+                            payload=json.dumps(testnet_fill_to_dict(fill)),
+                        )
+                    )
+            session.commit()
+
+    def get_testnet_fills(
+        self, *, session_id: str | None = None, limit: int | None = 50
+    ) -> list[TestnetFill]:
+        with self._session() as session:
+            query = session.query(TestnetFillRow)
+            if session_id is not None:
+                query = query.filter(TestnetFillRow.session_id == session_id)
+            query = query.order_by(TestnetFillRow.at.desc(), TestnetFillRow.id.desc())
+            if limit is not None:
+                query = query.limit(limit)
+            rows = query.all()
+        return [testnet_fill_from_dict(json.loads(row.payload)) for row in rows]
+
+    def save_testnet_shadow_fills(self, fills: list[ShadowFill]) -> None:
+        if not fills:
+            return
+        with self._session() as session:
+            for fill in fills:
+                session.add(
+                    TestnetShadowFillRow(
+                        session_id=fill.session_id,
+                        fill_model=fill.fill_model,
+                        client_order_id=fill.client_order_id,
+                        tick_seq=fill.tick_seq,
+                        payload=json.dumps(shadow_to_dict(fill)),
+                    )
+                )
+            session.commit()
+
+    def get_testnet_shadow_fills(self, session_id: str) -> list[ShadowFill]:
+        with self._session() as session:
+            rows = (
+                session.query(TestnetShadowFillRow)
+                .filter(TestnetShadowFillRow.session_id == session_id)
+                .order_by(TestnetShadowFillRow.tick_seq, TestnetShadowFillRow.id)
+                .all()
+            )
+        return [shadow_from_dict(json.loads(row.payload)) for row in rows]
+
+    def save_testnet_tick(self, tick: TickRecord) -> None:
+        with self._session() as session:
+            session.add(
+                TestnetTickRow(
+                    session_id=tick.session_id,
+                    seq=tick.seq,
+                    at=tick.at,
+                    payload=json.dumps(tick_to_dict(tick)),
+                )
+            )
+            session.commit()
+
+    def get_testnet_ticks(self, session_id: str) -> list[TickRecord]:
+        with self._session() as session:
+            rows = (
+                session.query(TestnetTickRow)
+                .filter(TestnetTickRow.session_id == session_id)
+                .order_by(TestnetTickRow.seq)
+                .all()
+            )
+        return [tick_from_dict(json.loads(row.payload)) for row in rows]
 
     def _session(self) -> Session:
         return self._session_factory()

@@ -167,6 +167,29 @@
       ],
       "title": "Mempool: outcomes, drops and state checks per 15 min",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 64},
+      "id": 15,
+      "targets": [
+        {"expr": "mm_testnet_fill_rate", "legendFormat": "{{source}} fill rate ({{fill_model}})", "refId": "A"}
+      ],
+      "title": "Testnet: real vs paper fill rate per fill model (fake money)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 64},
+      "id": 16,
+      "targets": [
+        {"expr": "mm_testnet_pnl_gap_quote", "legendFormat": "paper minus real PnL ({{fill_model}})", "refId": "A"},
+        {"expr": "mm_testnet_open_orders", "legendFormat": "open testnet orders", "refId": "B"},
+        {"expr": "sum by (event) (increase(mm_testnet_events_total[15m]))", "legendFormat": "{{event}} per 15 min", "refId": "C"}
+      ],
+      "title": "Testnet: PnL gap, open orders and order events",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",

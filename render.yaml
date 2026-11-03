@@ -51,3 +51,8 @@ services:
         value: "true"
       - key: MEMPOOL_MODE
         value: auto
+      # Binance spot testnet trader: needs free testnet keys, set as secrets in the Render
+      # dashboard (BINANCE_TESTNET_API_KEY / _SECRET). Without them the dashboard shows the
+      # recorded session. Testnet only, fake money.
+      - key: TESTNET_ENABLED
+        value: "true"
