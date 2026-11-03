@@ -34,6 +34,7 @@ contract FlashArbForkTest is Test {
     /// Measured on mainnet forks: execute's call frame minus simulate's in-contract gas
     /// (5,198 in both directions). Mirrored in app/adapters/dex/executor_simulator.py.
     uint256 internal constant EXECUTE_OVERHEAD_GAS = 5_200;
+    uint256 internal constant FORK_LAG_BLOCKS = 3;
 
     FlashArbExecutor internal executor;
     address internal owner = makeAddr("owner");
@@ -43,8 +44,13 @@ contract FlashArbForkTest is Test {
         string memory rpc = vm.envOr("FORK_RPC_URL", string(""));
         if (bytes(rpc).length == 0) return;
         uint256 pinned = vm.envOr("FORK_BLOCK", uint256(0));
-        if (pinned == 0) vm.createSelectFork(rpc);
-        else vm.createSelectFork(rpc, pinned);
+        if (pinned == 0) {
+            // A few blocks behind the head: the public endpoint is load-balanced, and a
+            // backend that hasn't seen the newest block yet answers "block not found".
+            vm.createSelectFork(rpc);
+            pinned = block.number - FORK_LAG_BLOCKS;
+        }
+        vm.createSelectFork(rpc, pinned);
         forked = true;
         executor = new FlashArbExecutor(V3_POOL, V2_PAIR, USDC, WETH, owner);
     }

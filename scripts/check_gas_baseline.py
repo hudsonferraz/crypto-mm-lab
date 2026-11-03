@@ -5,7 +5,8 @@ Compares the ``test_gas_*`` entries of a fresh ``forge snapshot`` with the commi
 numbers and are ignored. Fails when a tracked path costs more than baseline + tolerance.
 
 Usage:
-    python scripts/check_gas_baseline.py contracts/.gas-snapshot contracts/.gas-snapshot.ci --tolerance 2
+    python scripts/check_gas_baseline.py BASELINE CURRENT --tolerance 2
+    (BASELINE = contracts/.gas-snapshot, CURRENT = a fresh `forge snapshot --snap` file)
 """
 
 from __future__ import annotations

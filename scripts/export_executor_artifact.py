@@ -34,7 +34,9 @@ def render(artifact: dict) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="fail if the committed artifact is stale")
+    parser.add_argument(
+        "--check", action="store_true", help="fail if the committed artifact is stale"
+    )
     args = parser.parse_args(argv)
     if not FORGE_ARTIFACT.exists():
         print(f"missing {FORGE_ARTIFACT}; run `forge build` in contracts/", file=sys.stderr)
@@ -43,7 +45,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         current = APP_ARTIFACT.read_text(encoding="utf-8") if APP_ARTIFACT.exists() else ""
         if current != fresh:
-            print("FlashArbExecutor artifact is stale: run scripts/export_executor_artifact.py", file=sys.stderr)
+            print(
+                "FlashArbExecutor artifact is stale: run scripts/export_executor_artifact.py",
+                file=sys.stderr,
+            )
             return 1
         print("FlashArbExecutor artifact is up to date")
         return 0

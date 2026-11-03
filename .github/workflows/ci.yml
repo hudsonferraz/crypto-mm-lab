@@ -57,6 +57,45 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: contracts
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.1
+
+      - name: Set up Python (gate scripts use the standard library only)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build
+        run: forge build
+
+      - name: Unit, fuzz and invariant tests (mainnet-fork suite is opt-in)
+        run: forge test -vv
+
+      - name: Gas regression gate (2% tolerance)
+        run: |
+          forge snapshot --snap .gas-snapshot.ci
+          python ../scripts/check_gas_baseline.py .gas-snapshot .gas-snapshot.ci --tolerance 2
+
+      - name: Coverage gate (executor branches and lines >= 90%)
+        run: sh ../scripts/forge_coverage.sh
+
+      - name: Committed artifact matches the build
+        run: python ../scripts/export_executor_artifact.py --check
+
   docker-build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
