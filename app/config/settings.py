@@ -91,6 +91,8 @@ class Settings(BaseSettings):
     # Mempool watcher (read-only; specs/004-mempool-watcher). Never signs or sends.
     mempool_enabled: bool = True
     mempool_mode: Literal["auto", "live", "replay"] = "auto"
+    # Also replay every block's swaps while live (D2); records stay labeled "replay".
+    mempool_replay_alongside: bool = True
     mempool_ws_url: str | None = "wss://ethereum-rpc.publicnode.com"
     mempool_rpc_url: str | None = None
     mempool_resolve_blocks: int = Field(default=5, ge=1, le=50)

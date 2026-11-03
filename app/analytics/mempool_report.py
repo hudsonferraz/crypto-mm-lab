@@ -30,9 +30,11 @@ EXPLANATIONS: dict[str, str] = {
         "public mempool. The 'seen before inclusion' rate measures how much is still public."
     ),
     "D2": (
-        "Live mode follows pending transactions on a free public endpoint. If that endpoint "
-        "stops sharing them, the lab replays each new block's swaps instead, as if they had "
-        "been seen pending. Replay results are labeled and never mixed with live ones."
+        "Live mode follows pending transactions on a free public endpoint. Because most swaps "
+        "are never public, every block's swaps are also replayed: predicted from the state "
+        "before the block, as if they had been seen pending, and checked against their own "
+        "events. If the endpoint stops sharing pending transactions, replay is all that runs. "
+        "Replay results are labeled and never mixed with live ones."
     ),
     "D3": (
         "A pending swap is predicted against the latest block, as if it were the next trade. "
@@ -303,6 +305,7 @@ def status_payload(status: WatcherStatus) -> dict:
         "last_block": status.last_block,
         "last_switch": mode_change_to_dict(status.last_switch),
         "started_at": _dt(status.started_at),
+        "replay_alongside": status.replay_alongside,
     }
 
 

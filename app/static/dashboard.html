@@ -393,15 +393,23 @@
     </div>
     <p class="muted" id="mp-mode-note"></p>
 
+    <h2>Live: what the public mempool shows <span class="badge badge-live">live</span></h2>
     <div class="grid">
       <div class="card"><div class="label">Seen before inclusion</div><div class="value" id="mp-visible">-</div></div>
-      <div class="card"><div class="label">Math error, median / p95 (exact)</div><div class="value" id="mp-math">-</div></div>
-      <div class="card"><div class="label">Ordering effect, median / p95</div><div class="value" id="mp-ordering">-</div></div>
-      <div class="card"><div class="label">Inclusion: rate · latency</div><div class="value" id="mp-inclusion">-</div></div>
       <div class="card"><div class="label">Decoded / seen touching our pools</div><div class="value" id="mp-coverage">-</div></div>
-      <div class="card"><div class="label">Opportunities: flagged · appeared · back-run</div><div class="value" id="mp-opps">-</div></div>
+      <div class="card"><div class="label">Inclusion: rate · latency</div><div class="value" id="mp-inclusion">-</div></div>
+      <div class="card"><div class="label">Live predictions: math error, median / p95</div><div class="value" id="mp-live-math">-</div></div>
     </div>
     <p class="muted" id="mp-window"></p>
+
+    <h2>Every block's swaps, replayed <span class="badge badge-replay">replay (not live)</span></h2>
+    <div class="grid">
+      <div class="card"><div class="label">Swaps replayed · blocks</div><div class="value" id="mp-r-count">-</div></div>
+      <div class="card"><div class="label">Math error, median / p95 (exact)</div><div class="value" id="mp-math">-</div></div>
+      <div class="card"><div class="label">Ordering effect, median / p95</div><div class="value" id="mp-ordering">-</div></div>
+      <div class="card"><div class="label">Opportunities: flagged · appeared · back-run</div><div class="value" id="mp-opps">-</div></div>
+    </div>
+    <p class="muted" id="mp-replay-window"></p>
 
     <h2>Swaps on our pools per block: seen pending vs never public</h2>
     <div class="card chart-card">
@@ -1149,9 +1157,7 @@
         `${(c.seen || 0).toLocaleString()} pending seen · ${c.decoded || 0} decoded · ` +
         `${c.not_decoded || 0} not decoded · ${c.pending_watched || 0} waiting · ` +
         `${c.state_mismatches || 0} state mismatches${reason}`;
-      document.getElementById("mp-mode-note").textContent = live
-        ? payload.explanations.D2.split(". ")[0] + "."
-        : payload.explanations.D2;
+      document.getElementById("mp-mode-note").textContent = payload.explanations.D2;
       const order = ["D1", "D2", "D3", "D4", "D5", "D6", "D7"];
       const titles = {
         D1: "We only see a minority of the swaps.",
@@ -1171,47 +1177,57 @@
         : "<tr><td colspan='5'>None yet</td></tr>";
     }
 
-    function renderMempoolSummary(payload) {
-      const summary = payload.live || payload.replay;
+    function renderMempoolSummary(payload, status) {
       const ex = payload.explanations;
+      const live = payload.live;
+      const replay = payload.replay;
+      const none = "none verified yet";
       const set = (id, value, note) => {
         document.getElementById(id).innerHTML = `${value}${note ? `<span class="sub">${esc(note)}</span>` : ""}`;
       };
-      if (!summary) {
-        ["mp-visible", "mp-math", "mp-ordering", "mp-inclusion", "mp-coverage", "mp-opps"].forEach((id) => set(id, "-"));
-        document.getElementById("mp-window").textContent = `No records in the last ${payload.window_minutes} minutes yet.`;
-        return;
+      const errors = (summary, digits) => summary && summary.math_error_bps_p50 !== null
+        ? `${bps(summary.math_error_bps_p50, digits)} / ${bps(summary.math_error_bps_p95, digits)}`
+        : none;
+
+      // Live group (D1, D4): visibility, decoding, inclusion, and the rare live predictions.
+      const liveMode = status && status.status && status.status.mode === "live";
+      if (live) {
+        set("mp-visible", pct(live.visible_share), ex.visible_share);
+        set("mp-coverage", pct(live.decode_coverage), ex.decode_coverage);
+        const latency = live.latency_blocks_p50 !== null
+          ? ` · ${fmt(live.latency_blocks_p50, 0)} blk · ${fmt(live.latency_seconds_p50, 1)} s` : "";
+        set("mp-inclusion", live.inclusion_rate === null ? none : `${pct(live.inclusion_rate)}${latency}`, ex.inclusion_rate);
+        set("mp-live-math", errors(live, 4), live.exact_rate === null ? ex.math_error_bps : `${pct(live.exact_rate)} exact`);
+        const quiet = live.watched === 0
+          ? " No public swap on our pools was decodable in this window: most of their flow is private (D1) and most public router flow now goes to Uniswap V4 pools (D4, out of scope). The replay group below checks every swap that did land."
+          : "";
+        document.getElementById("mp-window").textContent =
+          `Last ${payload.window_minutes} min: ${live.watched} live swaps watched over ${live.blocks} blocks.${quiet}`;
+      } else {
+        ["mp-visible", "mp-coverage", "mp-inclusion", "mp-live-math"].forEach((id) => set(id, liveMode ? none : "n/a (not live)"));
+        document.getElementById("mp-window").textContent = liveMode
+          ? `No live records in the last ${payload.window_minutes} minutes yet.`
+          : "The watcher is not live right now, so these numbers are not available (D2).";
       }
-      const label = summary.mode === "live" ? "live" : "replay (not live)";
-      set("mp-visible", summary.mode === "live" ? pct(summary.visible_share) : "n/a in replay", ex.visible_share);
-      const none = "none verified yet";
-      const verified = summary.math_error_bps_p50 !== null;
-      set(
-        "mp-math",
-        verified ? `${bps(summary.math_error_bps_p50, 4)} / ${bps(summary.math_error_bps_p95, 4)}` : none,
-        verified ? `${pct(summary.exact_rate)} exact. ${ex.math_error_bps}` : ex.math_error_bps,
-      );
-      set(
-        "mp-ordering",
-        verified ? `${bps(summary.ordering_effect_bps_p50)} / ${bps(summary.ordering_effect_bps_p95)}` : none,
-        ex.ordering_effect_bps,
-      );
-      let inclusion = none;
-      if (summary.inclusion_rate !== null) {
-        const latency = summary.mode === "live" && summary.latency_blocks_p50 !== null
-          ? ` · ${fmt(summary.latency_blocks_p50, 0)} blk · ${fmt(summary.latency_seconds_p50, 1)} s`
-          : summary.mode === "replay" ? " · same block" : "";
-        inclusion = `${pct(summary.inclusion_rate)}${latency}`;
+
+      // Replay group (D2, D3, D5): every swap that landed, checked with exact math.
+      if (replay) {
+        set("mp-r-count", `${replay.watched} · ${replay.blocks}`, "Swap transactions on our pools in recent blocks, not watched live.");
+        set("mp-math", errors(replay, 4), replay.exact_rate === null ? ex.math_error_bps : `${pct(replay.exact_rate)} exact. ${ex.math_error_bps}`);
+        set("mp-ordering", errors({
+          math_error_bps_p50: replay.ordering_effect_bps_p50,
+          math_error_bps_p95: replay.ordering_effect_bps_p95,
+        }, 2), ex.ordering_effect_bps);
+        set("mp-opps", `${replay.opportunities_flagged} · ${replay.opportunities_appeared} · ${replay.backruns}`, ex.capture_rate);
+        document.getElementById("mp-replay-window").textContent =
+          "Each swap is predicted from the state before its block, as if it had been seen pending, then checked against its own event. Kept apart from live numbers.";
+      } else {
+        ["mp-r-count", "mp-math", "mp-ordering", "mp-opps"].forEach((id) => set(id, "-"));
+        document.getElementById("mp-replay-window").textContent =
+          status && status.status && status.status.replay_alongside === false && liveMode
+            ? "Replay alongside live is off (MEMPOOL_REPLAY_ALONGSIDE=false)."
+            : `No replayed swaps in the last ${payload.window_minutes} minutes yet.`;
       }
-      set("mp-inclusion", inclusion, ex.inclusion_rate);
-      set("mp-coverage", summary.mode === "live" ? pct(summary.decode_coverage) : "n/a in replay", ex.decode_coverage);
-      set("mp-opps", `${summary.opportunities_flagged} · ${summary.opportunities_appeared} · ${summary.backruns}`, ex.capture_rate);
-      const other = payload.live && payload.replay ? " Replay records exist too and are reported separately." : "";
-      const quiet = summary.mode === "live" && summary.watched === 0
-        ? " No public swap on our pools was decodable in this window: most of their flow is private (D1) and most public router flow now goes to Uniswap V4 pools (D4, out of scope). Every block is still checked, and the recorded-session test in CI replays real swaps with zero math error."
-        : "";
-      document.getElementById("mp-window").textContent =
-        `Window: last ${payload.window_minutes} min, ${summary.watched} ${label} swaps over ${summary.blocks} blocks.${other}${quiet}`;
     }
 
     function renderMempoolSwaps(pending, verified) {
@@ -1335,15 +1351,18 @@
 
     async function refreshMempool() {
       try {
-        const [status, summary, pending, verified, blocks] = await Promise.all([
+        const [status, summary, pending, verified, liveBlocks, replayBlocks] = await Promise.all([
           fetchJson("/mempool/status"),
           fetchJson("/mempool/summary?window_minutes=60"),
           fetchJson("/mempool/swaps?status=pending&limit=20"),
           fetchJson("/mempool/swaps?limit=40"),
-          fetchJson("/mempool/blocks?limit=60"),
+          fetchJson("/mempool/blocks?limit=60&mode=live"),
+          fetchJson("/mempool/blocks?limit=60&mode=replay"),
         ]);
+        // One row per block: the live row while live, the replay row otherwise.
+        const blocks = status.status.mode === "replay" ? replayBlocks : liveBlocks;
         renderMempoolStatus(status);
-        renderMempoolSummary(summary);
+        renderMempoolSummary(summary, status);
         renderMempoolSwaps(pending.items, verified.items);
         mpBlocksCache = blocks.items;
         renderVisibilityChart(blocks.items);

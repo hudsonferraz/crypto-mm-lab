@@ -34,7 +34,7 @@ uvicorn app.main:app --port 8000
    - The status shows `live · ws · public-rpc` within a few seconds.
    - The pending list fills as router swaps on our pools arrive. Expect a few per minute (D1).
    - Each block adds a visibility row. "Seen before inclusion" is expected to be low.
-2. `GET /mempool/summary?window_minutes=30`: the live summary is filled, and replay is `null`.
+2. `GET /mempool/summary?window_minutes=30`: the live summary is filled, and the replay summary (swaps replayed alongside live) is filled too, separately. With `MEMPOOL_REPLAY_ALONGSIDE=false`, replay is `null` while live.
 3. Force replay with `MEMPOOL_MODE=replay` and restart. Records are labeled `replay`, and every swap in each block is predicted and verified.
 4. Test the automatic fallback with `MEMPOOL_WS_URL=wss://invalid.example` and `MEMPOOL_RPC_URL=https://cloudflare-eth.com`, an endpoint that refuses pending data. The status should read `replay: endpoint does not share pending transactions`.
 

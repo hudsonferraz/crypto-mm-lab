@@ -537,3 +537,48 @@ async def test_multi_hop_leg_amount_comes_from_the_upstream_quote(tmp_path):
     # The fake chain's QuoterV2 answers 1 WETH for the upstream USDT -> WETH hop.
     assert swap.legs[0].amount_specified == 10**18 and "upstream_quoted" in swap.legs[0].flags
     assert "eth_call" in chain.calls
+
+
+@pytest.mark.asyncio
+async def test_live_mode_also_replays_unwatched_swaps_without_double_counting(tmp_path):
+    chain = Chain(_start())
+    watcher, repository = _watcher(tmp_path, chain)
+    state = await _prime(watcher, chain)
+    tx = _router_tx("both")
+    await watcher.on_pending(tx)
+    await watcher.drain()
+    builder = BlockBuilder(state, 102)
+    builder.v3(tx_hash("private"), "buy_weth", "exact_in", 10**10)  # never seen pending
+    builder.v3(tx.tx_hash, "sell_weth", "exact_in", 5 * 10**18)
+    chain.add_block(builder)
+    await watcher.process_block(102)
+
+    live = repository.get_mempool_swap(tx.tx_hash)
+    replayed = repository.get_mempool_swap(tx_hash("private"))
+    assert (live.mode, live.status) == ("live", "included")
+    assert (replayed.mode, replayed.status) == ("replay", "included")
+    assert replayed.outcome.legs[0].exact
+    assert {s.tx_hash for s in repository.get_mempool_swaps(mode="replay")} == {tx_hash("private")}
+    (live_row, *_l) = repository.get_mempool_blocks(limit=1, mode="live")
+    (replay_row, *_r) = repository.get_mempool_blocks(limit=1, mode="replay")
+    assert (live_row.block_number, live_row.watched_included, live_row.seen_pending) == (102, 1, 1)
+    assert (replay_row.block_number, replay_row.watched_included, replay_row.seen_pending) == (
+        102,
+        1,
+        0,
+    )
+    assert watcher.status.mode == "live" and watcher.status.replay_alongside is True
+
+
+@pytest.mark.asyncio
+async def test_replay_alongside_can_be_turned_off(tmp_path):
+    chain = Chain(_start())
+    watcher, repository = _watcher(tmp_path, chain, mempool_replay_alongside=False)
+    state = await _prime(watcher, chain)
+    builder = BlockBuilder(state, 102)
+    builder.v3(tx_hash("private"), "buy_weth", "exact_in", 10**10)
+    chain.add_block(builder)
+    await watcher.process_block(102)
+    assert repository.get_mempool_swaps(mode="replay") == []
+    assert repository.get_mempool_blocks(mode="replay") == []
+    assert watcher.status.replay_alongside is False

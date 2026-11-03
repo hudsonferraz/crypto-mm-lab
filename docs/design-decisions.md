@@ -224,13 +224,15 @@ Uniswap V4 pools are added (singleton contract and hooks change the event model)
 
 ---
 
-## Mempool watcher: live by default, labeled replay as the fallback
+## Mempool watcher: live by default, labeled replay alongside it
 
 **Context**
 Zero cost rules out paid mempool feeds. Free endpoints differ: publicnode streams full pending transactions over a keyless websocket; others refuse pending data on free plans.
 
 **Decision**
 The source chain is websocket full-object subscription, then HTTP pending filter with batched lookups, then block replay. Explicit refusals switch immediately. No pending data for `MEMPOOL_LIVE_GRACE_SEC` switches to replay while live retries continue. Every switch is stored with its reason. Live and replay records are never combined in a statistic.
+
+Since 2026-11-03, replay also runs alongside live mode (`MEMPOOL_REPLAY_ALONGSIDE`, on by default). The first live sessions found almost no decodable public swap on these pools, so the live view alone could not show the verification. Replay covers the swaps that were not watched live, costs no extra calls, and has its own labeled group on the dashboard.
 
 In replay, events do not say whether a trade was exact-input or exact-output, so both are simulated from the true pre-state and the one that reproduces the event wins. Two cases needed adding after real data showed them:
 - **V3 swaps stopped by a price limit** (bots): tried with the event's own post price as the limit.

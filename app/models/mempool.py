@@ -241,6 +241,7 @@ class WatcherStatus:
     last_block: int | None = None
     last_switch: ModeChange | None = None
     started_at: datetime | None = None
+    replay_alongside: bool = False
 
 
 @dataclass(frozen=True, slots=True)

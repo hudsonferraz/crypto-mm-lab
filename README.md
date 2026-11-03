@@ -51,7 +51,7 @@ This is an **education and research project** — useful for exploring MM mechan
 |------------------------------------------------------------|
 | ![Flash arb tab](docs/images/dashboard-arb.png) |
 
-| Mempool watcher, live (how much swap flow is public) | Mempool watcher, block replay (every swap verified) |
+| Mempool watcher, live: public visibility, plus every swap replayed alongside | Mempool watcher, forced block replay |
 |------------------------------------------------------|------------------------------------------------------|
 | ![Mempool tab, live](docs/images/dashboard-mempool.png) | ![Mempool tab, replay](docs/images/dashboard-mempool-replay.png) |
 
@@ -246,7 +246,7 @@ When the swap lands, the tab adds its block, position and wait time. It splits a
 
 How it works:
 
-1. **Pending data.** The free publicnode websocket streams full pending transactions with no key. An HTTP filter with batched lookups is the fallback. If the endpoint shares no pending data, the watcher switches to block replay (below).
+1. **Pending data.** The free publicnode websocket streams full pending transactions with no key. An HTTP filter with batched lookups is the fallback. Block replay runs alongside live and takes over completely if the endpoint shares no pending data (below).
 2. **Decoding.** It decodes direct pool calls and the standard Uniswap routers: V2 Router02, SwapRouter, SwapRouter02 (including `multicall`) and the Universal Router (including `WRAP_ETH` and contract-balance amounts). For a multi-hop leg that is not the first hop, one read-only quote of the upstream hops gives the amount that reaches our pool. Other contracts that touch the pools are counted as "seen, not decoded".
 3. **Pool state per block.** The watcher reads one full anchor state, then rolls it forward block by block from the pools' own events:
    - V2 `Sync` sets the reserves;
@@ -279,7 +279,7 @@ python scripts/record_mempool_fixture.py --blocks 60    # re-record the evidence
 ### Why it's built this way
 
 - **Most swaps are never seen here, and that's measured, not hidden.** Since 2023 most wallets and bots send DEX trades through private relays (Flashbots Protect, MEV Blocker, builder RPCs) straight to block builders. In the recording, 89% of the swaps on these pools never appeared in the public mempool. The "seen before inclusion" rate is shown per block.
-- **Live by default, block replay when live is impossible.** Paid mempool feeds are ruled out by the zero-cost rule. If the endpoint stops sharing pending transactions, or `MEMPOOL_MODE=replay` is set, every swap in each new block is treated as if it had been seen pending. The watcher predicts it from the state before the block and verifies it the same way. Replay results are labeled and never mixed with live ones.
+- **Live by default, with block replay alongside it.** Paid mempool feeds are ruled out by the zero-cost rule. Most swaps are never public, so live watching alone would leave the verification view empty most of the time. Every swap that lands in a block and was not watched live is therefore also replayed: predicted from the state before its block, as if it had been seen pending, and verified the same way. This costs no extra calls, because the block's pool logs are already read. If the endpoint stops sharing pending transactions, replay is all that runs. Replay results are labeled, never mixed with live ones, and shown in their own group. `MEMPOOL_REPLAY_ALONGSIDE=false` limits replay to the fallback.
 - **Predict against the latest block, then explain the miss.** Nobody can know a pending swap's final position. A single error number would hide whether the math was wrong or the queue moved, so the miss is split into math error and ordering effect.
 - **Decode the common routes, count the rest.** Decoding every aggregator's private format is open-ended. The coverage share keeps it honest. Uniswap V4 is out of scope for now, and the recording shows it is where most public Universal Router flow goes today.
 - **Back-runs are a stated rule.** A predicted opportunity counts as "likely back-run" when a later transaction in the same block trades the arbitrage across both pools and the gap ends the block below the fees. Intent cannot be proven from chain data, so the rule is spelled out and checkable on Etherscan.

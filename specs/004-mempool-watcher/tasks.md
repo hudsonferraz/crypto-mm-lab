@@ -98,8 +98,17 @@
 
 The MVP is US1 + US2: decoding, prediction and verification on the recorded fixture. Next come replay, the watcher service and reporting, then the live evidence.
 
+## Phase 10: Replay alongside live (spec change of 2026-11-03, D2 / FR-015 / FR-023)
+
+- [X] T040 Add `MEMPOOL_REPLAY_ALONGSIDE` (default true) in app/config/settings.py and .env.example; expose it in the watcher status and /config
+- [X] T041 In live mode, replay each block's swaps that were not watched live, and store a replay visibility row next to the live one, in app/services/mempool/watcher.py
+- [X] T042 Dashboard: separate live and replay summary groups, and a block chart that follows the current mode, in app/static/dashboard.html
+- [X] T043 Tests for replay alongside live, the off switch, and no double-counting, in tests/test_mempool_watcher.py and tests/test_mempool_api.py
+- [X] T044 Update the README, quickstart and design decision text; take a fresh dashboard screenshot
+
 ## Convergence notes (2026-11-03)
 
 - **Converged.** FR-001 to FR-027, SC-001 to SC-008 and every edge case trace to code, tests or recorded evidence (quickstart.md). No convergence phase was appended.
 - **Found while converging and fixed in place.** A swap with no pool state, or with a failed upstream quote, was dropped silently. It is now stored as `no_state`, as the spec's edge case says. Router and direct-pool V3 price limits are now decoded.
 - **Deviation from the constitution.** The cross-artifact analysis ran at convergence time instead of before coding. Its findings (above) were applied before the PR.
+- **Replay alongside live (Phase 10), 2026-11-03.** Live check over 21 blocks: the live summary showed 5.6% of swaps seen pending; 18 swaps were replayed alongside, 100% exact (p95 math error 0). Each block has one live row and one replay row, and no transaction is in both.

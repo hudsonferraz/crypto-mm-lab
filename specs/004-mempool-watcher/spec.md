@@ -67,19 +67,25 @@ mempool. Pretending the watcher sees everything would be wrong; measuring the
 visible share is itself a useful, little-known fact about how Ethereum works
 today.
 
-### D2. Live mode by default, block replay when live is impossible
+### D2. Live mode by default, with block replay alongside it
 
 **What happens**: With a usable endpoint, the watcher follows pending
-transactions live. When the endpoint refuses pending data, or the user selects
-it, the watcher switches to **block replay**: it takes each new block's swaps on
-our pools, in block order, and predicts each one from the state just before the
-block, as if it had been seen pending. Every record, chart and summary carries
-its mode, and replay results are labeled "replay (not live)".
+transactions live. It also runs **block replay** on every block, alongside live:
+it takes each new block's swaps on our pools that were not watched live, in block
+order, and predicts each one from the state just before the block, as if it had
+been seen pending. When the endpoint refuses pending data, or the user forces it,
+replay is the only mode. Every record, chart and summary carries its mode, and
+replay results are labeled "replay (not live)". `MEMPOOL_REPLAY_ALONGSIDE=false`
+limits replay to the fallback case.
 
-**Why**: Zero cost rules out paid mempool feeds. Replay works on any endpoint,
-still exercises decoding, prediction and verification end to end, and keeps the
-hosted demo useful if the free endpoint changes. Mixing the two silently would
-overstate what live watching achieves, so they are never merged.
+**Why**: Zero cost rules out paid mempool feeds. Most swaps on these pools are
+private or routed to pools we do not cover (D1, D4), so live alone leaves the
+verification view empty most of the time. Replay costs no extra calls (the block's
+pool logs are already read) and shows the exact-math check on every real swap,
+every block. Mixing the two silently would overstate what live watching achieves,
+so they are never combined in a statistic and are shown side by side.
+
+*Changed 2026-11-03 (after the first live sessions): replay was only a fallback.*
 
 ### D3. Predict against the latest block, then explain the miss
 
@@ -295,7 +301,7 @@ recorded blocks.
 
 **Replay mode**
 
-- **FR-015**: The lab MUST support a block-replay mode that, for each new block, treats every swap on our pools as if seen pending, predicts it from the state before that block, and verifies it as in FR-009 to FR-012.
+- **FR-015**: The lab MUST support block replay that, for each new block, treats every swap on our pools as if seen pending, predicts it from the state before that block, and verifies it as in FR-009 to FR-012. By default, replay MUST also run alongside live mode, on the block's swaps that were not watched live. It MUST be possible to turn this off (`MEMPOOL_REPLAY_ALONGSIDE=false`).
 - **FR-016**: The lab MUST switch to replay automatically when the endpoint refuses pending-transaction requests at start, or stops returning pending data for longer than a configured grace period (default 5 minutes), and MUST record each switch with time and reason. The user MAY force either mode.
 - **FR-017**: Every record and statistic MUST carry its mode; live and replay MUST never be combined in a statistic.
 
@@ -309,7 +315,7 @@ recorded blocks.
 **Reporting**
 
 - **FR-022**: The API MUST expose: watcher status (mode, state, reason, backend label, counters for seen, decoded, not decoded, dropped), recent watched swaps with prediction and verification, a single swap by hash, and summary statistics over a window.
-- **FR-023**: The dashboard MUST show a mempool view with pending swaps, recently verified swaps, and the summary statistics of US4; metrics MUST expose the counters and accuracy, latency, visibility and capture statistics.
+- **FR-023**: The dashboard MUST show a mempool view with pending swaps, recently verified swaps, and the summary statistics of US4, with live and replay statistics in separate, labeled groups; metrics MUST expose the counters and accuracy, latency, visibility and capture statistics.
 - **FR-024**: The README MUST explain decisions D1–D7 in plain language with their reasons; the dashboard MUST show the relevant explanation next to the visible-share rate (D1), mode label (D2), error split (D3), decode coverage (D4) and back-run label (D5).
 - **FR-025**: Records MUST be stored so statistics survive restarts; records older than a configured retention (default 7 days) MAY be removed.
 

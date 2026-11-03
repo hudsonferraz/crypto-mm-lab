@@ -149,6 +149,7 @@ async def config() -> dict:
             else None
         ),
         "mempool_resolve_blocks": settings.mempool_resolve_blocks,
+        "mempool_replay_alongside": settings.mempool_replay_alongside,
         "mempool_call_budget_per_block": settings.mempool_call_budget_per_block,
         "assumptions_url": "/docs/simulation-assumptions",
         "design_decisions_path": "docs/design-decisions.md",

@@ -194,6 +194,10 @@ class MempoolWatcher:
         return self._mode
 
     @property
+    def _replays_alongside(self) -> bool:
+        return self._mode == "live" and self._settings.mempool_replay_alongside
+
+    @property
     def tracker(self) -> PoolStateTracker | None:
         return self._tracker
 
@@ -221,6 +225,7 @@ class MempoolWatcher:
             last_block=self._last_block,
             last_switch=self._last_switch,
             started_at=self._started_at,
+            replay_alongside=self._replays_alongside,
         )
 
     def _set_mode(self, mode: Mode, source: SourceName | None, reason: str) -> None:
@@ -625,14 +630,17 @@ class MempoolWatcher:
             if watched.sender is not None and watched.nonce is not None:
                 self._by_nonce.pop((watched.sender, watched.nonce), None)
 
-        if self._mode == "replay":
-            live_hashes = {s.tx_hash for s in resolved}
+        replayed: list[WatchedSwap] = []
+        if self._mode == "replay" or self._replays_alongside:
+            # Swaps watched live (resolved now or still pending) keep their live record (D2).
+            live_hashes = {s.tx_hash for s in resolved} | set(self._watched)
             records = await asyncio.to_thread(replay_block, config, block, self._params, now=now)
             replayed = [r for r in records if r.tx_hash not in live_hashes]
-            resolved.extend(replayed)
             if self._metrics:
                 for record in replayed:
                     prom.MEMPOOL_SWAPS.labels(mode="replay", route="replay").inc()
+        live_resolved = [s for s in resolved if s.mode == "live"]
+        resolved.extend(replayed)
 
         visibility = await asyncio.to_thread(
             block_visibility,
@@ -640,13 +648,31 @@ class MempoolWatcher:
             block,
             self._mode,
             seen_hashes=self._seen if self._mode == "live" else None,
-            watched_included=sum(1 for s in resolved if s.status == "included"),
-            backruns=sum(1 for s in resolved if s.outcome and s.outcome.likely_backrun),
+            watched_included=sum(
+                1
+                for s in (live_resolved if self._mode == "live" else resolved)
+                if s.status == "included"
+            ),
+            backruns=sum(
+                1
+                for s in (live_resolved if self._mode == "live" else resolved)
+                if s.outcome and s.outcome.likely_backrun
+            ),
             params=self._params,
         )
         visibility = replace(visibility, not_decoded=self._not_decoded_since_block)
         self._not_decoded_since_block = 0
         await asyncio.to_thread(self._persist_block, resolved, visibility)
+        if self._replays_alongside:
+            replay_row = replace(
+                visibility,
+                mode="replay",
+                seen_pending=0,
+                not_decoded=0,
+                watched_included=sum(1 for s in replayed if s.status == "included"),
+                backruns=sum(1 for s in replayed if s.outcome and s.outcome.likely_backrun),
+            )
+            await asyncio.to_thread(self._persist_block, [], replay_row)
 
         self._resolved_by_block[number] = originals
         for old in [n for n in self._resolved_by_block if n < number - 16]:
