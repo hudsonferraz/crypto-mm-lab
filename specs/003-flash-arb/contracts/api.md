@@ -26,7 +26,9 @@ error Expired(uint256 deadline, uint256 blockNumber);
 error InsufficientProfit(int256 profit, uint256 minProfit);
 error InvalidCallback();
 error InvalidAmount();
+error InvalidConfig();       // constructor: zero owner, same/zero tokens, pool pair mismatch
 error Reentrancy();
+error TransferFailed();      // token call failed, returned false, or has no code
 error SimulationResult(int256 profit, uint256 v3AmountIn, uint256 v3AmountOut,
                        uint256 v2AmountIn, uint256 v2AmountOut, uint256 gasUsed);
 ```
@@ -34,7 +36,10 @@ error SimulationResult(int256 profit, uint256 v3AmountIn, uint256 v3AmountOut,
 Guarantees:
 
 - `execute` either transfers exactly `profit ≥ minProfit` USDC to `owner` and leaves the contract's balances unchanged, or reverts.
-- The constructor rejects pools whose token pair is not {usdc, weth}.
+- The constructor rejects pools whose token pair is not {usdc, weth} (`InvalidConfig`).
+- `simulate` ignores `minProfit` and `deadline`; it reverts `SimulationResult` after the full trade (including the profit transfer), or a named error if the trade cannot complete.
+- Storage slot 0 is `owner`, slot 1 `pendingOwner` (relied on by the off-chain simulator; pinned by a test).
+- Also exposes `getAmountOut` / `getAmountIn` (V2 library math), `V3_POOL`, `V2_PAIR`, `USDC`, `WETH`, `USDC_IS_TOKEN0_V3`, `USDC_IS_TOKEN0_V2`.
 
 ## 2. HTTP API
 
@@ -42,7 +47,7 @@ All responses are JSON. Amounts are in USDC unless the field name ends in `_raw`
 
 ### `GET /arb/simulation`
 
-Latest simulation and simulator status.
+Latest simulation (falls back to the latest stored one after a restart) and simulator status.
 
 ```json
 {
@@ -70,8 +75,7 @@ Latest simulation and simulator status.
 
 ### `GET /arb/simulations?limit=100`
 
-The latest records, newest first. `limit` is between 1 and 1000. Each item has the
-same shape as `latest`.
+The latest records, newest first. `limit` is between 1 and 1000. Response: `{"never_broadcast": true, "items": [...]}`; each item has the same shape as `latest`.
 
 ### `GET /arb/accuracy?limit=1000`
 
@@ -84,9 +88,11 @@ Adds `arb_sim_enabled`, `arb_sim_backend`, `arb_reference_size_quote`,
 
 ## 3. Metrics (Prometheus)
 
-- `arb_simulations_total{outcome}` counter
-- `arb_simulations_skipped_total{reason}` counter
-- `arb_sim_net_profit_usd` gauge
-- `arb_sim_estimate_error_bps` gauge
-- `arb_sim_latency_seconds` histogram
-- `arb_v2_v3_gap_bps` gauge
+Names use the project's `mm_` prefix (deviation from the draft names, which lacked it):
+
+- `mm_arb_simulations_total{outcome}` counter
+- `mm_arb_simulations_skipped_total{reason}` counter (`fixture`, `stale`, `no_candidate`, `backend`, `error`)
+- `mm_arb_sim_net_profit_usd` gauge
+- `mm_arb_sim_estimate_error_bps` gauge
+- `mm_arb_sim_latency_seconds` histogram
+- `mm_arb_v2_v3_gap_bps` gauge

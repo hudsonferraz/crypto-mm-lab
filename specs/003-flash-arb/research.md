@@ -33,7 +33,7 @@ All findings below were verified on 2026-11-02 against `https://ethereum.publicn
 
 - **Decision**: `simulate(ArbRequest)` (owner-only) runs the identical code path without the deadline and profit checks, then always reverts with `SimulationResult(int256 profit, uint256 v3AmountIn, uint256 v3AmountOut, uint256 v2AmountIn, uint256 v2AmountOut, uint256 gasUsed)`. `gasUsed` is measured in-contract with `gasleft()` around the full trade, including the profit transfer, so it matches `execute` minus the skipped checks.
 - **Rationale**: This is the pattern Uniswap's QuoterV2 uses. A revert can never commit state, so the path is safe by construction. To let an *unprofitable* trade still complete (so amounts and gas are measured), the off-chain caller gives the simulated executor a temporary USDC balance through a state override (R6). In execute mode that balance does not exist and R4 applies.
-- **Gas**: the transaction's intrinsic cost (21,000 + calldata) is added off-chain; the fork test checks that this total is within 1% of the real `execute` gas.
+- **Gas**: measured on mainnet forks, `execute`'s call frame costs exactly 5,198 more than `simulate`'s in-contract figure in both directions (dispatch, deadline and profit checks, event, the call). The simulator adds `EXECUTE_OVERHEAD_GAS = 5_200` plus the transaction's intrinsic cost (21,000 + calldata); the fork test asserts simulated + overhead is within 1% of `execute`.
 
 ## R6. Hosted-demo simulation: `eth_call` with state overrides
 
@@ -44,7 +44,9 @@ All findings below were verified on 2026-11-02 against `https://ethereum.publicn
 - **Executor and owner addresses**: two fixed addresses derived from `keccak256("crypto-mm-lab/flash-arb/executor")` and `.../owner`. They are addresses only; no key exists or is needed, because `eth_call` does not check signatures.
 - **USDC balance slot**: found once by probing (override slot *n* for the executor and check `balanceOf`), then cached. This is the same technique as `forge`'s `deal`. FiatToken v2.2 stores balances at mapping slot 9.
 - **Owner slot**: `owner` is declared first, so it occupies storage slot 0 (transient variables take no storage slots). A Solidity test asserts `vm.load(executor, 0) == owner`.
+- **Local fork**: verified with `anvil --fork-url <public> --chain-id 31337` as `ETH_RPC_URL` (block 26,330,732): simulated profit equals the estimate (difference 0, 164,022 gas). The first V3 window load on a cold fork took 537 s, because anvil fetches each slot lazily through the public endpoint; later reads are cached.
 - **Rationale**: Zero cost, no key, no local node needed on Render (free plan: 512 MB, no sidecar process). The same code runs against anvil locally.
+- **Measured live** (block 26,330,634): runtime code 5,663 bytes in 0.19 s (once), balance slot 9 found in 1.7 s (once), each simulation 0.18 s; the simulated profit equaled the scanner's exact estimate with a difference of 0.
 - **Alternatives**: deploying to mainnet (gas and a key, violates FR-025/026); Tenderly's simulation API (free tier needs an account and key); running anvil on Render (not possible on the free plan).
 
 ## R7. Offline tests with the real protocol code
@@ -54,13 +56,14 @@ All findings below were verified on 2026-11-02 against `https://ethereum.publicn
 
 ## R8. Fork tests that work with a non-archive endpoint
 
-- **Decision**: Fork tests live in `contracts/test/fork/` and call `vm.skip(true)` when `FORK_RPC_URL` is unset. They fork at `latest` by default, or at `FORK_BLOCK` when given (needs an archive endpoint). To induce a gap they `deal` USDC or WETH to a test address and push one real pool's price with a large swap. They then compare the executor's profit with an estimate built from mainnet's QuoterV2 (`0x61fFE014bA17989E743c5F6cB21bF9697530B21e`) and the V2 `getAmountOut`/`getAmountIn` formulas.
+- **Decision**: Fork tests live in `contracts/fork/` under `[profile.fork]` (`FOUNDRY_PROFILE=fork`) and call `vm.skip(true)` when `FORK_RPC_URL` is unset. They fork at `latest` by default, or at `FORK_BLOCK` when given (needs an archive endpoint). To induce a gap they `deal` USDC or WETH to a test address and push one real pool's price with a large swap. They then compare the executor's profit with an estimate built from mainnet's QuoterV2 (`0x61fFE014bA17989E743c5F6cB21bF9697530B21e`) and the V2 `getAmountOut`/`getAmountIn` formulas.
 - **Rationale**: The public endpoint keeps about 128 blocks (see 002 research), so fixed historical blocks are unavailable. Properties that hold at any block keep the suite meaningful (D5).
 
 ## R9. Gas regression gate
 
-- **Decision**: Dedicated tests `test_gas_execute_v3ToV2` and `test_gas_execute_v2ToV3` each call only `execute`. They are recorded in `contracts/.gas-snapshot`, and CI runs `forge snapshot --check --tolerance 2 --no-match-path "test/fork/*"`. The README publishes those two numbers.
-- **Rationale**: Native, free, and directly implements FR-015 / SC-005.
+- **Decision**: Dedicated tests `test_gas_execute_v3ToV2` and `test_gas_execute_v2ToV3` each call only `execute`. They are recorded in `contracts/.gas-snapshot`. CI regenerates a snapshot and `scripts/check_gas_baseline.py` compares only the `test_gas_*` rows at 2% tolerance. Forge's own `--tolerance` also compares fuzz and invariant rows, which aren't gas numbers. The README publishes those two numbers.
+- **Rationale**: Free and directly implements FR-015 / SC-005.
+- **Measured**: V3→V2 175,995 and V2→V3 168,321 (offline, optimal size for a ~4% induced gap). Mainnet forks: 249,903 and 220,856 (cold storage, more ticks crossed).
 
 ## R10. Deterministic artifact for the Python side
 

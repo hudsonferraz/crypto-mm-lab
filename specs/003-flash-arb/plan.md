@@ -28,7 +28,7 @@ outcome, and exported as metrics. Fixes the wrong default V2 pair address.
 
 **Storage**: Existing `Repository`; adds 1 table, `arb_simulations`.
 
-**Testing**: `forge test` (offline; fork suite skips itself without `FORK_RPC_URL`), `forge snapshot --check --tolerance 2`, `forge coverage`; pytest offline by default, `--live` opt-in.
+**Testing**: `forge test` (offline); fork suite in `contracts/fork/` under `FOUNDRY_PROFILE=fork`; gas gate via `scripts/check_gas_baseline.py`; coverage via `scripts/forge_coverage.sh`; pytest offline by default, `--live` opt-in.
 
 **Target Platform**: Same as 002 (Render free plan, Docker Compose, local Windows/macOS/Linux). Render needs no Solidity toolchain (R10).
 
@@ -82,7 +82,8 @@ contracts/                              # NEW Foundry project
 │   ├── FlashArbExecutor.fuzz.t.sol     # sizes and gaps
 │   ├── FlashArbExecutor.invariant.t.sol (+ handler)
 │   ├── FlashArbExecutor.gas.t.sol
-│   └── fork/FlashArbFork.t.sol         # opt-in mainnet fork
+│   └── DeployLocal.t.sol
+├── fork/FlashArbFork.t.sol             # opt-in mainnet fork ([profile.fork], test = "fork")
 └── script/DeployLocal.s.sol            # anvil only (chainid 31337)
 app/
 ├── adapters/dex/
@@ -130,7 +131,7 @@ See research.md R1–R13 and spec D1–D7. Highlights:
 | `ARB_SIM_RPC_URL` | unset → `ETH_RPC_URL` | secret-redacted like other URLs |
 | `ARB_SIM_EVERY_TICKS` | `1` | ≥ 1 |
 | `ARB_REFERENCE_SIZE_QUOTE` | `1000` | > 0 |
-| `ARB_GAS_UNITS` | from gas baseline (set after measuring) | > 0 |
+| `ARB_GAS_UNITS` | `160000` (live simulations of the reference size measured 153k–164k total gas) | > 0 |
 | `ARB_PRIORITY_FEE_GWEI` | `0.05` | ≥ 0 |
 | `ARB_SIM_SUBSIDY_QUOTE` | `1000000` | > 0; temporary simulated USDC balance (R5) |
 | `ARB_SIM_TIMEOUT_SEC` | `10` | > 0 |
@@ -152,3 +153,6 @@ See research.md R1–R13 and spec D1–D7. Highlights:
 | Committed artifact + drift check | Render/Docker have no Solidity toolchain (R10) | Compiling in Docker adds about 70 MB and a network fetch of solc at build |
 | State-override subsidy in simulation | Measure unprofitable ticks exactly (R5) | Reverting before payment loses the gas and V2-leg numbers for most ticks (D1) |
 | New `arb_routes.py` | `routes.py` and `lp_routes.py` stay cohesive | Appending mixes three feature areas in one file |
+| Gas gate script instead of `forge snapshot --check --tolerance` (found during T013) | `--tolerance` also compares fuzz/invariant rows (run counts, not gas) and always fails on them; any test filter makes forge compile a subset that leaves out the Uniswap core compile stubs | Filtering by path or contract breaks `deployCode` of the cores |
+| Fork suite in its own directory and profile (found during T014) | Same subset-compilation problem; a separate `test` root keeps the default suite and the gas snapshot free of fork tests with no filter | `vm.skip` inside the default suite still adds gas-0 rows to the snapshot |
+| `scripts/forge_coverage.sh` rewrites one V2 line for the run (found during T015) | `forge coverage`'s parser rejects 2020-era `chainId := chainid` in v2-core; `chainid()` compiles to identical bytecode under 0.5.16; the submodule is restored on exit | Vendoring a patched v2-core copy adds GPL files to maintain |

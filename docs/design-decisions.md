@@ -203,6 +203,54 @@ Gas models, MEV, or multi-hop routing require a richer cost stack.
 
 ---
 
+## Flash arbitrage: a real contract, only ever simulated
+
+**Context**
+Reading and simulating on-chain state shows half of the skill set. The other half is writing a contract that could act on it, defended and tested the way DeFi teams expect. The project's rules are zero cost and no keys.
+
+**Decision**
+`contracts/src/FlashArbExecutor.sol` (Solidity 0.8.28, Foundry). Both directions start as a Uniswap V3 flash swap, so there is one callback and one authentication rule: the caller must be the fixed V3 pool while a trade is in progress, tracked in transient storage. Profit is decided from computed amounts before paying, and a `simulate()` entry point always reverts with the realized amounts (the QuoterV2 pattern). Tests deploy the real Uniswap V2 and V3 core contracts from git submodules, so fees, tick crossing and the V2 `k` check behave exactly as on mainnet, offline. The Python app never compiles Solidity: it reads a committed ABI + bytecode artifact that CI rebuilds and diffs (metadata hash disabled, so the bytes are identical on every machine).
+
+**Trade-off**
+Git submodules and a second toolchain in CI. Never deploying means the contract is proven by tests and simulation rather than by a transaction history.
+
+**Revisit when**
+A funded testnet demo is wanted (faucets add a dependency), or the scope widens to multi-hop routes or other venues.
+
+---
+
+## Simulating on the free public RPC with state overrides
+
+**Context**
+The hosted demo runs on a free plan with no room for a local mainnet fork, and deploying the executor would cost gas and need a key.
+
+**Decision**
+One backend everywhere: `eth_call` with a state-override object. The executor's runtime code is obtained once by `eth_call`-ing its creation code, which returns the deployed code with immutables filled in. Each simulation then places that code at a fixed keyless address, writes the owner into storage slot 0 (a Solidity test pins the layout), and gives the executor a temporary USDC balance through USDC's balance mapping (slot 9, found by probing like forge's `deal`). That way an unprofitable trade still completes and is measured. `eth_call` checks no signature, so the executor and owner addresses have no keys at all. Gas is the in-contract measurement plus a measured fixed execute overhead (5,200) and the transaction's intrinsic cost. A local `anvil --fork-url` is just a different `ARB_SIM_RPC_URL`.
+
+**Trade-off**
+This relies on the endpoint supporting state overrides. If it stops, the simulator reports "unavailable" and nothing is fabricated.
+
+**Revisit when**
+The public endpoint drops state-override support, or simulations need a sequence of blocks (then run anvil).
+
+---
+
+## Exact V2-vs-V3 scanner, and why it reports "unprofitable"
+
+**Context**
+The existing scanner compares each pool with the CEX. A flash arbitrage needs the gap between the two pools, read on identical state.
+
+**Decision**
+`app/services/dex_arb_scanner.py` reads V2 reserves at the V3 snapshot's block and computes profit with the same integers as the contract: the V3 leg through the bitmap-exact simulator, the V2 leg through `getAmountOut`/`getAmountIn`. It uses an integer ternary search for the best size, and a fixed reference size when none is profitable, so every tick has a comparable simulation. Each result carries a plain-language `outcome_note` built from its own numbers.
+
+**Trade-off**
+Most live ticks are "unprofitable": a trade pays 35 bps of pool fees plus gas, and bots close larger gaps within the block. That honest result is the point. The profitable path is proven by tests that induce a gap.
+
+**Revisit when**
+A second pair or venue is added, which would make a route search worth it.
+
+---
+
 ## Uniswap V2 first
 
 **Context**  

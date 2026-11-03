@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-02
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Solidity flash-arbitrage contract for crypto-mm-lab (feature 003-flash-arb). Add an on-chain executor contract (Solidity, Foundry) that borrows via a Uniswap V3 flash swap, trades across Uniswap V2 and Uniswap V3 WETH/USDC pools, repays the flash loan in the same transaction, and reverts unless profit after repayment meets a caller-supplied minimum. Owner-only execution, no stored funds at risk, reentrancy-safe callbacks that verify the calling pool. Tested with Foundry unit + fuzz + invariant tests and mainnet-fork tests (local fork started from the free public RPC, pinned block), with gas snapshots. Integrate with the existing Python arbitrage scanner: scanner builds the calldata for its best V2/V3 opportunity and simulates the executor against a local mainnet fork (anvil), reporting simulated profit after gas vs the scanner's off-chain estimate on the API, dashboard and metrics. CI runs forge tests offline (no fork) plus fork tests opt-in. Hard constraint: zero cost — Foundry is free, public keyless RPC only (keys optional), no paid services, no testnet faucets required. Paper/simulation only: never broadcasts a transaction, no private keys in the repo or config; a deploy script may exist for local anvil only."
 
@@ -290,7 +290,7 @@ statistics that recompute identically from stored records.
   - the block each result is tied to.
 - **FR-029**: API simulation records MUST carry the backend used and, when unavailable, a human-readable reason, so the dashboard explanation comes from data and not hard-coded text.
 - **FR-030**: The default V2 pool address MUST be the real USDC/WETH pair, and an opt-in live check MUST confirm every configured pool address has contract code and the expected token pair.
-- **FR-031**: The lab MUST scan the V2-vs-V3 gap each tick from both pools read at the same block, using exact integer math for both pools, and produce a best candidate: the profit-maximizing size when a positive gross profit exists, otherwise a configured reference size, so a comparable simulation exists for every tick.
+- **FR-031**: The lab MUST scan the V2-vs-V3 gap each tick from both pools read at the same block, using exact integer math for both pools, and produce a best candidate: the profit-maximizing size when a positive gross profit exists, otherwise a configured reference size, so a comparable simulation exists for every new block. Mainnet state only changes once per block (about 12 s) while the loop ticks every few seconds, so each block is simulated once; repeating it would add identical rows and RPC load without new information.
 
 ### Key Entities
 
@@ -308,7 +308,7 @@ statistics that recompute identically from stored records.
 - **SC-001**: 100% of offline contract tests pass on every CI run, with at least 1,000 fuzz runs per property and at least 256 invariant runs, and branch coverage of the executor of at least 90%.
 - **SC-002**: In every fuzz and invariant run, the executor ends with zero token balance and no pool is underpaid (zero violations).
 - **SC-003**: On the mainnet-copy suite with an induced price gap, the executor's realized profit matches the lab's off-chain estimate within 1 bps of trade size (or exactly, when both legs are fully covered by exact math).
-- **SC-004**: Over a 30-minute live session, at least 95% of ticks with a scanner opportunity produce a simulation record (or a labeled skip), and 0 records are fabricated when the backend is unavailable.
+- **SC-004**: Over a 30-minute live session, at least 95% of new blocks seen by the loop produce a simulation record (or a labeled skip), and 0 records are fabricated when the backend is unavailable.
 - **SC-005**: A successful arbitrage uses no more gas than the committed baseline plus 2%; the baseline is published in the README.
 - **SC-006**: A reviewer can go from clone to passing contract tests with one documented command after installing the free toolchain, in under 10 minutes on a normal connection.
 - **SC-007**: Zero transactions are signed or broadcast to any public network, and zero private keys appear in the repository (enforced by a check).

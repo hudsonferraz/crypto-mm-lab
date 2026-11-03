@@ -2,7 +2,7 @@
 
 ## Overview
 
-crypto-mm-lab is a paper-trading market-making lab that connects to public CEX order books, simulates quote placement and fills, tracks PnL, compares CEX prices against Uniswap V2 and V3 pools, and runs a paper Uniswap V3 concentrated-liquidity book alongside the CEX book.
+crypto-mm-lab is a paper-trading market-making lab that connects to public CEX order books, simulates quote placement and fills, tracks PnL, compares CEX prices against Uniswap V2 and V3 pools, runs a paper Uniswap V3 concentrated-liquidity book alongside the CEX book, and simulates its own Solidity flash-arbitrage contract (`contracts/`) against live mainnet state every tick.
 
 ```mermaid
 flowchart TB
@@ -11,6 +11,8 @@ flowchart TB
     Web3[web3_pool_adapter]
     V3A[v3_pool_adapter + Multicall3]
     V3R[v3_fixture_replay]
+    V2R[v2_reserves]
+    XSim[executor_simulator<br/>eth_call + state overrides]
   end
 
   subgraph core [Core Domain]
@@ -20,6 +22,8 @@ flowchart TB
     V3M[uniswap_v3 exact math]
     LPS[concentrated_lp strategy]
     LPB[lp_paper_book]
+    DXS[dex_arb_scanner<br/>exact V2 vs V3]
+    FAS[flash_arb_service]
     Strat[strategies]
     Exec[paper_broker]
     Risk[risk]
@@ -34,6 +38,11 @@ flowchart TB
     Repo[repository]
   end
 
+  subgraph chain [Solidity: contracts/]
+    FAE[FlashArbExecutor]
+    Art[committed ABI + bytecode]
+  end
+
   subgraph observability [Observability]
     Prom[Prometheus metrics]
     Graf[Grafana dashboards]
@@ -46,6 +55,12 @@ flowchart TB
   V3M --> LPB
   LPS --> LPB
   LPB --> Loop
+  V2R --> DXS
+  V3M --> DXS
+  DXS --> FAS
+  XSim --> FAS
+  FAE --> Art --> XSim
+  FAS --> Loop
   OB --> Strat --> Exec
   AMM --> Loop
   OB --> Loop
@@ -70,8 +85,9 @@ flowchart TB
 3. **Strategy** — generate new bid/ask quotes (pure MM, inventory skew, or volatility-adjusted spread).
 4. **Risk** — filter quotes that breach position limits and cash-account constraints.
 5. **V3 + LP** (when `V3_ENABLED`) — one block-pinned Multicall3 read of the V3 pool; the paper LP book accrues fees from on-chain fee growth, revalues inventory, and rebalances; V3 arbitrage is scanned with exact multi-tick quotes and optimal sizing. A V3 failure never fails the CEX tick.
-6. **Persist** — snapshots, fills, positions, PnL, opportunities, V3 snapshot, LP state and rebalances to SQLite/Postgres in one transaction under the tick's `tick_id`.
-7. **Metrics** — expose Prometheus gauges/counters on `/metrics`.
+6. **Flash arb** (when `ARB_SIM_ENABLED`) — V2 reserves are read at the V3 snapshot's block; the exact V2-vs-V3 scanner picks the best trade (or a reference size); the executor's `simulate()` runs against mainnet state at that block in one `eth_call` with state overrides. Nothing is sent. A failure is a labeled skip, never a failed tick.
+7. **Persist** — snapshots, fills, positions, PnL, opportunities, V3 snapshot, LP state, rebalances and the flash-arb simulation to SQLite/Postgres in one transaction under the tick's `tick_id`.
+8. **Metrics** — expose Prometheus gauges/counters on `/metrics`.
 
 ## Backtest flow
 
@@ -92,6 +108,7 @@ flowchart TB
 | `v3_pool_snapshots` | Block-pinned V3 pool state per tick (big integers as decimal strings) |
 | `lp_position_states` | Paper LP book state per tick (headline columns + full JSON) |
 | `lp_rebalances` | LP open/rebalance events with swap, gas and realized-IL costs |
+| `arb_simulations` | Flash-arb simulation per tick: estimate, simulated legs, gas, outcome and its explanation (headline columns + full JSON) |
 
 SQLite is the default for local dev. Docker Compose uses PostgreSQL via `DATABASE_URL` — the repository abstraction makes the swap config-only.
 
