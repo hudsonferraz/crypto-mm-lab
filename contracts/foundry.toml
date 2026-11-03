@@ -1,0 +1,31 @@
+[profile.default]
+src = "src"
+test = "test"
+script = "script"
+out = "out"
+libs = ["lib"]
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 1_000_000
+# Deterministic bytecode across machines: the committed artifact is diffed in CI.
+bytecode_hash = "none"
+cbor_metadata = false
+auto_detect_solc = true
+fs_permissions = [{ access = "read", path = "./out" }]
+
+[profile.default.fuzz]
+runs = 1000
+seed = "0x2a"
+
+[profile.default.invariant]
+runs = 256
+depth = 50
+fail_on_revert = false
+
+[rpc_endpoints]
+mainnet = "${FORK_RPC_URL}"
+
+# Opt-in mainnet-fork suite (research R8):
+#   FOUNDRY_PROFILE=fork FORK_RPC_URL=https://ethereum.publicnode.com forge test -vv
+[profile.fork]
+test = "fork"

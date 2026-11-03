@@ -8,3 +8,4 @@ data
 *.db
 .env
 notebooks/.ipynb_checkpoints
+contracts
