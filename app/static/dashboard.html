@@ -1184,17 +1184,34 @@
       }
       const label = summary.mode === "live" ? "live" : "replay (not live)";
       set("mp-visible", summary.mode === "live" ? pct(summary.visible_share) : "n/a in replay", ex.visible_share);
-      set("mp-math", `${bps(summary.math_error_bps_p50, 4)} / ${bps(summary.math_error_bps_p95, 4)}`, `${pct(summary.exact_rate)} exact. ${ex.math_error_bps}`);
-      set("mp-ordering", `${bps(summary.ordering_effect_bps_p50)} / ${bps(summary.ordering_effect_bps_p95)}`, ex.ordering_effect_bps);
-      const latency = summary.mode === "live"
-        ? `${fmt(summary.latency_blocks_p50, 0)} blk · ${fmt(summary.latency_seconds_p50, 1)} s`
-        : "same block";
-      set("mp-inclusion", `${pct(summary.inclusion_rate)} · ${latency}`, ex.inclusion_rate);
+      const none = "none verified yet";
+      const verified = summary.math_error_bps_p50 !== null;
+      set(
+        "mp-math",
+        verified ? `${bps(summary.math_error_bps_p50, 4)} / ${bps(summary.math_error_bps_p95, 4)}` : none,
+        verified ? `${pct(summary.exact_rate)} exact. ${ex.math_error_bps}` : ex.math_error_bps,
+      );
+      set(
+        "mp-ordering",
+        verified ? `${bps(summary.ordering_effect_bps_p50)} / ${bps(summary.ordering_effect_bps_p95)}` : none,
+        ex.ordering_effect_bps,
+      );
+      let inclusion = none;
+      if (summary.inclusion_rate !== null) {
+        const latency = summary.mode === "live" && summary.latency_blocks_p50 !== null
+          ? ` · ${fmt(summary.latency_blocks_p50, 0)} blk · ${fmt(summary.latency_seconds_p50, 1)} s`
+          : summary.mode === "replay" ? " · same block" : "";
+        inclusion = `${pct(summary.inclusion_rate)}${latency}`;
+      }
+      set("mp-inclusion", inclusion, ex.inclusion_rate);
       set("mp-coverage", summary.mode === "live" ? pct(summary.decode_coverage) : "n/a in replay", ex.decode_coverage);
       set("mp-opps", `${summary.opportunities_flagged} · ${summary.opportunities_appeared} · ${summary.backruns}`, ex.capture_rate);
       const other = payload.live && payload.replay ? " Replay records exist too and are reported separately." : "";
+      const quiet = summary.mode === "live" && summary.watched === 0
+        ? " No public swap on our pools was decodable in this window: most of their flow is private (D1) and most public router flow now goes to Uniswap V4 pools (D4, out of scope). Every block is still checked, and the recorded-session test in CI replays real swaps with zero math error."
+        : "";
       document.getElementById("mp-window").textContent =
-        `Window: last ${payload.window_minutes} min, ${summary.watched} ${label} swaps over ${summary.blocks} blocks.${other}`;
+        `Window: last ${payload.window_minutes} min, ${summary.watched} ${label} swaps over ${summary.blocks} blocks.${other}${quiet}`;
     }
 
     function renderMempoolSwaps(pending, verified) {

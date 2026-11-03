@@ -77,8 +77,8 @@
 - [X] T035 [P] Add the Grafana mempool panels in deploy/ and the MEMPOOL settings in render.yaml
 - [X] T036 Extend tests/test_no_private_keys.py to cover the new modules (no signing or key APIs)
 - [X] T037 Run ruff and the full pytest suite with coverage; fix any failures
-- [ ] T038 Run a live session of 30 min or more (SC-004), the tick p95 comparison (SC-006) and a replay-mode check (SC-005); record the evidence in quickstart.md; take dashboard screenshots
-- [ ] T039 Run analyze and converge; update the spec status
+- [X] T038 Run a live session of 30 min or more (SC-004), the tick p95 comparison (SC-006) and a replay-mode check (SC-005); record the evidence in quickstart.md; take dashboard screenshots
+- [X] T039 Run analyze and converge; update the spec status
 
 ## Dependencies
 
@@ -97,3 +97,9 @@
 ## Implementation strategy
 
 The MVP is US1 + US2: decoding, prediction and verification on the recorded fixture. Next come replay, the watcher service and reporting, then the live evidence.
+
+## Convergence notes (2026-11-03)
+
+- **Converged.** FR-001 to FR-027, SC-001 to SC-008 and every edge case trace to code, tests or recorded evidence (quickstart.md). No convergence phase was appended.
+- **Found while converging and fixed in place.** A swap with no pool state, or with a failed upstream quote, was dropped silently. It is now stored as `no_state`, as the spec's edge case says. Router and direct-pool V3 price limits are now decoded.
+- **Deviation from the constitution.** The cross-artifact analysis ran at convergence time instead of before coding. Its findings (above) were applied before the PR.

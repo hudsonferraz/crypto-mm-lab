@@ -51,9 +51,9 @@ This is an **education and research project** — useful for exploring MM mechan
 |------------------------------------------------------------|
 | ![Flash arb tab](docs/images/dashboard-arb.png) |
 
-| Mempool watcher (live pending swaps, checked against each block) |
-|------------------------------------------------------------------|
-| ![Mempool tab](docs/images/dashboard-mempool.png) |
+| Mempool watcher, live (how much swap flow is public) | Mempool watcher, block replay (every swap verified) |
+|------------------------------------------------------|------------------------------------------------------|
+| ![Mempool tab, live](docs/images/dashboard-mempool.png) | ![Mempool tab, replay](docs/images/dashboard-mempool-replay.png) |
 
 | Docker stack (live) | Grafana metrics |
 |---------------------|-----------------|
@@ -267,6 +267,8 @@ Evidence (recorded mainnet session, replayed offline in CI):
 | Real swaps on the two pools in those blocks | 46 transactions, 49 legs (40 V3, 9 V2): **49/49 exact**, math error 0 |
 | Seen pending before inclusion | 5 of 46 (11%) |
 | Router transactions decoded on our pools | 0 of 106 to Uniswap routers: 53 of the Universal Router calls were Uniswap V4 swaps, the rest other pools |
+| 32-minute live session | 160/160 blocks processed, 152 swaps on the pools, 7.9% seen pending first, 0 state mismatches |
+| Effect on the trading loop | tick p95 6.39 s with the watcher on vs 6.94 s off (alternating 5-minute blocks): within the noise |
 
 ```bash
 python -m pytest tests -q -k "mempool or router_decoder or exact_output or pool_events"
