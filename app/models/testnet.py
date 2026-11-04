@@ -34,7 +34,12 @@ Source = Literal["live", "recorded", "none"]
 
 FINAL_ORDER_STATES: frozenset[str] = frozenset({"filled", "cancelled", "rejected", "expired"})
 OPEN_ORDER_STATES: frozenset[str] = frozenset({"new", "open", "partially_filled", "unknown"})
-FILL_MODELS: tuple[str, ...] = ("full_cross_fill", "partial_fill", "latency_prob_fill")
+FILL_MODELS: tuple[str, ...] = (
+    "full_cross_fill",
+    "partial_fill",
+    "latency_prob_fill",
+    "calibrated_fill",  # specs/006
+)
 TAG_PREFIX = "mmlab-"
 
 COUNTER_NAMES: tuple[str, ...] = (

@@ -1,16 +1,19 @@
 from dataclasses import dataclass
+from datetime import datetime
 from hashlib import sha256
 from typing import Literal
 
 from app.execution.fee_model import maker_fee
+from app.execution.fill_calibration import FillCalibration
 from app.market_data.orderbook import best_ask, best_ask_size, best_bid, best_bid_size
 from app.models.domain import Fill, OrderBookSnapshot, Quote, QuoteSide
 
-FillMode = Literal["full_cross_fill", "partial_fill", "latency_prob_fill"]
+FillMode = Literal["full_cross_fill", "partial_fill", "latency_prob_fill", "calibrated_fill"]
 
 FILL_MODE_FULL_CROSS: FillMode = "full_cross_fill"
 FILL_MODE_PARTIAL: FillMode = "partial_fill"
 FILL_MODE_LATENCY_PROB: FillMode = "latency_prob_fill"
+FILL_MODE_CALIBRATED: FillMode = "calibrated_fill"
 
 
 @dataclass
@@ -18,6 +21,9 @@ class OpenQuote:
     quote_id: str
     quote: Quote
     crossed_streak: int = 0
+    # Time of the last snapshot this quote was evaluated on; None means "since the
+    # quote was created". calibrated_fill measures its interval from here (specs/006 R8).
+    last_evaluated_at: datetime | None = None
 
 
 def _fill_size_for_cross(
@@ -52,6 +58,7 @@ def detect_fills(
     fill_latency_ticks: int = 1,
     fill_probability: float = 1.0,
     tick_index: int = 0,
+    calibration: FillCalibration | None = None,
 ) -> list[Fill]:
     external_bid = best_bid(snapshot)
     external_ask = best_ask(snapshot)
@@ -74,8 +81,27 @@ def detect_fills(
         elif quote.side == QuoteSide.ASK and external_bid >= quote.price:
             crossed = True
 
+        since = open_quote.last_evaluated_at or quote.timestamp
+        open_quote.last_evaluated_at = fill_timestamp
+
         if not crossed:
             open_quote.crossed_streak = 0
+            if fill_mode != FILL_MODE_CALIBRATED or calibration is None:
+                continue
+            # specs/006 D1, FR-002: the price may have touched the quote and come back
+            # between two snapshots. Chance = 1 - exp(-rate(distance) * dt).
+            if quote.side == QuoteSide.BID:
+                distance_bps = (external_ask - quote.price) / quote.price * 10_000
+            else:
+                distance_bps = (quote.price - external_bid) / quote.price * 10_000
+            dt_sec = (fill_timestamp - since).total_seconds()
+            chance = calibration.fill_chance(distance_bps, dt_sec)
+            # Keyed on the quote's content, not its id: the paper broker's ids are random,
+            # and the same inputs must give the same fills (FR-003).
+            draw_key = f"{quote.side.value}:{quote.price!r}:{quote.timestamp.isoformat()}"
+            if chance <= 0 or _deterministic_unit_random(draw_key, tick_index) >= chance:
+                continue
+            fills.append(_fill(open_quote, quote.size, maker_fee_bps, fill_timestamp))
             continue
 
         open_quote.crossed_streak += 1
@@ -86,6 +112,8 @@ def detect_fills(
             if _deterministic_unit_random(open_quote.quote_id, tick_index) > probability:
                 continue
             size_mode: FillMode = FILL_MODE_PARTIAL
+        elif fill_mode == FILL_MODE_CALIBRATED:
+            size_mode = FILL_MODE_FULL_CROSS
         else:
             size_mode = fill_mode
 
@@ -93,17 +121,19 @@ def detect_fills(
         if fill_size is None or fill_size <= 0:
             continue
 
-        notional = quote.price * fill_size
-        fills.append(
-            Fill(
-                symbol=quote.symbol,
-                side=quote.side,
-                price=quote.price,
-                size=fill_size,
-                fee=maker_fee(notional, maker_fee_bps),
-                timestamp=fill_timestamp,
-                quote_id=open_quote.quote_id,
-            )
-        )
+        fills.append(_fill(open_quote, fill_size, maker_fee_bps, fill_timestamp))
 
     return fills
+
+
+def _fill(open_quote: OpenQuote, size: float, maker_fee_bps: float, at: datetime) -> Fill:
+    quote = open_quote.quote
+    return Fill(
+        symbol=quote.symbol,
+        side=quote.side,
+        price=quote.price,
+        size=size,
+        fee=maker_fee(quote.price * size, maker_fee_bps),
+        timestamp=at,
+        quote_id=open_quote.quote_id,
+    )

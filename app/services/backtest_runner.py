@@ -8,6 +8,7 @@ from app.analytics.backtest_metrics import BacktestMetrics, compute_backtest_met
 from app.analytics.performance_report import format_backtest_report
 from app.analytics.pnl import compute_pnl_snapshot
 from app.config.settings import Settings
+from app.execution.fill_calibration import load_fill_calibration
 from app.execution.paper_broker import PaperBroker
 from app.models.domain import Fill, OrderBookLevel, OrderBookSnapshot
 from app.risk.limits import filter_quotes_by_position_limit
@@ -73,6 +74,7 @@ class BacktestRunner:
             fill_mode=settings.fill_mode,
             fill_latency_ticks=settings.fill_latency_ticks,
             fill_probability=settings.fill_probability,
+            calibration=load_fill_calibration(settings.fill_calibration_path),
         )
         self._repository = Repository(settings.db_url)
 

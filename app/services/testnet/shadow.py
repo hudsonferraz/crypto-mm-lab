@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime
 
+from app.execution.fill_calibration import FillCalibration
 from app.execution.fill_model import FillMode, OpenQuote, detect_fills
 from app.models.domain import OrderBookSnapshot, Quote, QuoteSide
 from app.models.testnet import ShadowFill, TestnetOrder
@@ -40,11 +41,13 @@ class ShadowBook:
         maker_fee_bps: float,
         fill_latency_ticks: int,
         fill_probability: float,
+        calibration: FillCalibration | None = None,
     ) -> None:
         self.fill_model = fill_model
         self._maker_fee_bps = maker_fee_bps
         self._latency = fill_latency_ticks
         self._probability = fill_probability
+        self._calibration = calibration
         self._quotes: dict[str, OpenQuote] = {}
         self.filled: dict[str, float] = {}
 
@@ -88,6 +91,7 @@ class ShadowBook:
             fill_latency_ticks=self._latency,
             fill_probability=self._probability,
             tick_index=tick_seq,
+            calibration=self._calibration,
         )
         out: list[ShadowFill] = []
         for fill in fills:
@@ -100,6 +104,7 @@ class ShadowBook:
                     quote_id=cid,
                     quote=replace(open_quote.quote, size=remaining),
                     crossed_streak=0,
+                    last_evaluated_at=snapshot.timestamp,
                 )
             else:
                 del self._quotes[cid]

@@ -18,6 +18,7 @@ from app.models.domain import OrderBookLevel, OrderBookSnapshot
 from app.models.testnet import FILL_MODELS
 from app.services.testnet.comparison import compare
 from app.services.testnet.recorded import load_recording
+from app.services.testnet.replay import complete_recording, stored_models
 from app.services.testnet.shadow import ShadowBook
 
 PATH = Path(__file__).parent / "fixtures" / "testnet" / "session.json.gz"
@@ -53,7 +54,7 @@ def test_shadow_fills_recompute_exactly_from_the_ticks(recording) -> None:
             fill_latency_ticks=settings["fill_latency_ticks"],
             fill_probability=settings["fill_probability"],
         )
-        for model in FILL_MODELS
+        for model in stored_models(recording)
     }
     orders = {o.client_order_id: o for o in recording.orders}
     recomputed = []
@@ -73,6 +74,7 @@ def test_shadow_fills_recompute_exactly_from_the_ticks(recording) -> None:
 
 def test_comparison_adds_up(recording) -> None:
     accepted = [o for o in recording.orders if o.accepted]
+    recording = complete_recording(recording, None)
     results = compare(
         recording.orders, recording.fills, recording.shadow_fills, last_mid=recording.last_mid
     )

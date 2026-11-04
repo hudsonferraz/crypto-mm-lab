@@ -2,7 +2,7 @@
 
 Runs the configured market-making strategy on the testnet with real post-only orders,
 beside the main tick loop and never inside it (D7). Every order is tagged, tracked
-through its life cycle and reconciled with the exchange (D6). Three paper shadow books
+through its life cycle and reconciled with the exchange (D6). Paper shadow books
 evaluate the same orders on the same testnet snapshots (D3).
 
 Public steps (``startup``, ``iterate``, ``reconcile``, ``shutdown``) are what the
@@ -31,6 +31,7 @@ from app.adapters.cex.binance_testnet import (
 )
 from app.analytics.inventory import InventoryTracker
 from app.config.settings import Settings
+from app.execution.fill_calibration import load_fill_calibration
 from app.market_data.normalizer import normalize_ccxt_orderbook
 from app.market_data.orderbook import mid_price
 from app.models.domain import Fill, OrderBookSnapshot, Quote, QuoteSide
@@ -392,12 +393,14 @@ class TestnetTrader:
             last_updated=None,
         )
         self._inventory = inventory
+        calibration = load_fill_calibration(self._settings.fill_calibration_path)
         self._shadows = [
             ShadowBook(
                 model,
                 maker_fee_bps=self._maker_bps,
                 fill_latency_ticks=self._settings.fill_latency_ticks,
                 fill_probability=self._settings.fill_probability,
+                calibration=calibration if model == "calibrated_fill" else None,
             )
             for model in FILL_MODELS
         ]

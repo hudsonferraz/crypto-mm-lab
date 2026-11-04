@@ -480,6 +480,22 @@
     </table>
     <div class="note explain" id="tn-field-explanations"></div>
 
+    <h2>Fill-model calibration: fitted on recorded sessions, judged on held-out ones</h2>
+    <p class="muted" id="tn-cal-summary">Loading calibration...</p>
+    <table>
+      <thead><tr>
+        <th>Held-out session</th><th class="numeric">Spread</th><th class="numeric">Orders</th><th class="numeric">Real fills</th>
+        <th class="numeric">full_cross_fill</th><th class="numeric">partial_fill</th><th class="numeric">latency_prob_fill</th>
+        <th class="numeric">calibrated_fill: expected / drawn</th>
+      </tr></thead>
+      <tbody id="tn-cal-heldout"><tr><td colspan="8">Loading...</td></tr></tbody>
+    </table>
+    <table>
+      <thead><tr><th class="numeric">Distance from the other side</th><th class="numeric">Fill chance per 2 s, uncrossed</th><th>Fitted range?</th></tr></thead>
+      <tbody id="tn-cal-curve"><tr><td colspan="3">Loading...</td></tr></tbody>
+    </table>
+    <div class="note explain" id="tn-cal-explanations"></div>
+
     <h2>Open orders</h2>
     <table>
       <thead><tr><th>Placed</th><th>Order</th><th>Side</th><th class="numeric">Price</th><th class="numeric">Size</th><th>State</th><th class="numeric">Filled</th></tr></thead>
@@ -488,7 +504,7 @@
 
     <h2>Recent orders and what each fill model said</h2>
     <table>
-      <thead><tr><th>Placed</th><th>Order</th><th>Side</th><th class="numeric">Price</th><th>Final state</th><th class="numeric">Real filled</th><th class="numeric">Paper: full · partial · latency</th><th>Life cycle</th></tr></thead>
+      <thead><tr><th>Placed</th><th>Order</th><th>Side</th><th class="numeric">Price</th><th>Final state</th><th class="numeric">Real filled</th><th class="numeric">Paper: full · partial · latency · calibrated</th><th>Life cycle</th></tr></thead>
       <tbody id="tn-recent"><tr><td colspan="8">No orders yet</td></tr></tbody>
     </table>
 
@@ -1428,6 +1444,7 @@
       full_cross_fill: "full_cross_fill",
       partial_fill: "partial_fill",
       latency_prob_fill: "latency_prob_fill",
+      calibrated_fill: "calibrated_fill",
     };
     const secs = (value) => (value === null || value === undefined ? "-" : `${Number(value).toFixed(1)} s`);
     const qty = (value) => (value === null || value === undefined ? "-" : Number(value).toFixed(5));
@@ -1527,7 +1544,7 @@
             return `<tr><td>${fmtTime(o.placed_at)}</td><td class="mono">${esc(o.client_order_id)}</td><td>${o.side}</td>
               <td class="numeric">${fmt(o.price, 2)}</td><td>${o.state}${o.reject_reason ? ` (${o.reject_reason})` : ""}</td>
               <td class="numeric">${qty(o.filled_size)}</td>
-              <td class="numeric">${qty(p.full_cross_fill || 0)} · ${qty(p.partial_fill || 0)} · ${qty(p.latency_prob_fill || 0)}</td>
+              <td class="numeric">${qty(p.full_cross_fill || 0)} · ${qty(p.partial_fill || 0)} · ${qty(p.latency_prob_fill || 0)} · ${qty(p.calibrated_fill || 0)}</td>
               <td class="muted">${esc(events)}</td></tr>`;
           }).join("")
         : "<tr><td colspan='8'>No orders yet</td></tr>";
@@ -1537,7 +1554,69 @@
         : "<tr><td colspan='6'>No fills yet</td></tr>";
     }
 
+    // --- fill-model calibration (specs/006-fill-model-calibration) ------------------
+    function renderCalibration(payload) {
+      const cal = payload.calibration;
+      const titles = {
+        D1: "A fill chance for touches the snapshots cannot see.",
+        D2: "Fitted from recorded real sessions, offline.",
+        D3: "Judged on sessions it was not fitted on.",
+        D4: "An option, not the default; labeled outside its range.",
+        D5: "Random but repeatable; expected count shown.",
+        D6: "Several spreads, every recording replayed.",
+        trades: "What the public trades show.",
+      };
+      document.getElementById("tn-cal-explanations").innerHTML = Object.keys(titles)
+        .map((key) => `<p><strong>${titles[key]}</strong> ${esc(payload.explanations[key])}</p>`)
+        .join("");
+      if (!payload.available || !cal) {
+        document.getElementById("tn-cal-summary").textContent =
+          `No calibration file: calibrated_fill behaves like full_cross_fill. Create one with ${payload.how_to_calibrate}`;
+        document.getElementById("tn-cal-heldout").innerHTML = "<tr><td colspan='8'>No calibration yet</td></tr>";
+        document.getElementById("tn-cal-curve").innerHTML = "<tr><td colspan='3'>No calibration yet</td></tr>";
+        return;
+      }
+      const range = cal.distance_range_bps || [];
+      const decay = cal.decay_bps === null ? "no decay" : `falls by e every ${fmt(cal.decay_bps, 2)} bps`;
+      const v = cal.validation;
+      const verdict = v
+        ? ` Held out, calibrated_fill was closest to the real count in ${v.calibrated_closest_in} of ${v.held_out.length} sessions` +
+          ` (goal: 3 of 4) — ${v.goal_met ? "goal met" : "goal not met"}.`
+        : " Leave-one-out needs at least two sessions.";
+      document.getElementById("tn-cal-summary").textContent =
+        `Fill rate at the touch ${fmt(cal.touch_rate_per_sec, 5)} per second, ${decay}; fitted on ${cal.sources.length} sessions, ` +
+        `${cal.intervals} intervals, ${cal.events} fills the snapshots missed, distances ${fmt(range[0], 2)} to ${fmt(range[1], 2)} bps.${verdict}`;
+      const rows = v ? v.held_out.map((r) => `<tr>
+          <td class="mono">${esc(r.session_id)}</td><td class="numeric">${fmt(r.spread_bps, 0)} bps</td>
+          <td class="numeric">${r.orders}</td><td class="numeric"><strong>${r.real_fills}</strong></td>
+          <td class="numeric">${r.models.full_cross_fill}</td><td class="numeric">${r.models.partial_fill}</td>
+          <td class="numeric">${r.models.latency_prob_fill}</td>
+          <td class="numeric">${fmt(r.calibrated_expected, 1)} / ${r.models.calibrated_fill}</td></tr>`) : [];
+      if (v) {
+        const e = v.mean_abs_error;
+        rows.push(`<tr><td colspan="4"><strong>Mean |model − real|</strong></td>
+          <td class="numeric">${fmt(e.full_cross_fill, 1)}</td><td class="numeric">${fmt(e.partial_fill, 1)}</td>
+          <td class="numeric">${fmt(e.latency_prob_fill, 1)}</td><td class="numeric">${fmt(e.calibrated_fill, 1)} (expected)</td></tr>`);
+      }
+      document.getElementById("tn-cal-heldout").innerHTML = rows.length ? rows.join("") : "<tr><td colspan='8'>Leave-one-out needs at least two sessions</td></tr>";
+      document.getElementById("tn-cal-curve").innerHTML = payload.rate_curve.map((p) => `<tr>
+          <td class="numeric">${fmt(p.distance_bps, 1)} bps</td><td class="numeric">${pct(p.fill_chance_per_tick, 2)}</td>
+          <td>${p.extended ? '<span class="badge badge-warn">extended, not measured</span>' : '<span class="badge badge-ok">calibrated</span>'}</td></tr>`).join("");
+    }
+
+    let calibrationLoaded = false;
+    async function refreshCalibration() {
+      if (calibrationLoaded) return;
+      try {
+        renderCalibration(await fetchJson("/testnet/calibration"));
+        calibrationLoaded = true;
+      } catch (error) {
+        document.getElementById("tn-cal-summary").textContent = `Calibration error: ${error.message}`;
+      }
+    }
+
     async function refreshTestnet() {
+      refreshCalibration();
       try {
         const [status, comparison, balances, open, recent, fills] = await Promise.all([
           fetchJson("/testnet/status"),

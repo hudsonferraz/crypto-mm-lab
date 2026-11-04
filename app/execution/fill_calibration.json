@@ -1,0 +1,134 @@
+{
+  "format": 1,
+  "model": "calibrated_fill",
+  "touch_rate_per_sec": 0.00924108,
+  "decay_bps": 4.095022,
+  "fitted_at": "2026-11-04T01:14:34.976828+00:00",
+  "intervals": 3967,
+  "events": 66,
+  "log_likelihood": -331.128379,
+  "distance_range_bps": [
+    0.0052,
+    17.2815
+  ],
+  "max_interval_sec": 60.0,
+  "sources": [
+    {
+      "session_id": "6a1aca",
+      "file": "session.json.gz",
+      "spread_bps": 2.0,
+      "minutes": 30.0,
+      "orders": 52,
+      "intervals": 1090,
+      "events": 9
+    },
+    {
+      "session_id": "5117df",
+      "file": "session-2bps.json.gz",
+      "spread_bps": 2.0,
+      "minutes": 30.0,
+      "orders": 77,
+      "intervals": 989,
+      "events": 11
+    },
+    {
+      "session_id": "b2127d",
+      "file": "session-4bps.json.gz",
+      "spread_bps": 4.0,
+      "minutes": 30.0,
+      "orders": 105,
+      "intervals": 873,
+      "events": 26
+    },
+    {
+      "session_id": "ce7562",
+      "file": "session-6bps.json.gz",
+      "spread_bps": 6.0,
+      "minutes": 30.0,
+      "orders": 92,
+      "intervals": 1015,
+      "events": 20
+    }
+  ],
+  "validation": {
+    "method": "leave_one_session_out",
+    "held_out": [
+      {
+        "session_id": "6a1aca",
+        "spread_bps": 2.0,
+        "orders": 52,
+        "real_fills": 35,
+        "models": {
+          "full_cross_fill": 26,
+          "partial_fill": 26,
+          "latency_prob_fill": 0,
+          "calibrated_fill": 35
+        },
+        "calibrated_expected": 34.599,
+        "params": {
+          "touch_rate_per_sec": 0.01272817,
+          "decay_bps": 3.367139
+        }
+      },
+      {
+        "session_id": "5117df",
+        "spread_bps": 2.0,
+        "orders": 77,
+        "real_fills": 44,
+        "models": {
+          "full_cross_fill": 33,
+          "partial_fill": 33,
+          "latency_prob_fill": 0,
+          "calibrated_fill": 41
+        },
+        "calibrated_expected": 43.329,
+        "params": {
+          "touch_rate_per_sec": 0.01045945,
+          "decay_bps": 4.317185
+        }
+      },
+      {
+        "session_id": "b2127d",
+        "spread_bps": 4.0,
+        "orders": 105,
+        "real_fills": 58,
+        "models": {
+          "full_cross_fill": 32,
+          "partial_fill": 32,
+          "latency_prob_fill": 0,
+          "calibrated_fill": 39
+        },
+        "calibrated_expected": 38.929,
+        "params": {
+          "touch_rate_per_sec": 0.00677055,
+          "decay_bps": 4.541688
+        }
+      },
+      {
+        "session_id": "ce7562",
+        "spread_bps": 6.0,
+        "orders": 92,
+        "real_fills": 45,
+        "models": {
+          "full_cross_fill": 25,
+          "partial_fill": 25,
+          "latency_prob_fill": 0,
+          "calibrated_fill": 35
+        },
+        "calibrated_expected": 32.281,
+        "params": {
+          "touch_rate_per_sec": 0.00878233,
+          "decay_bps": 3.376714
+        }
+      }
+    ],
+    "mean_abs_error": {
+      "full_cross_fill": 16.5,
+      "partial_fill": 16.5,
+      "latency_prob_fill": 45.5,
+      "calibrated_fill": 8.215
+    },
+    "calibrated_closest_in": 4,
+    "goal_met": true
+  }
+}

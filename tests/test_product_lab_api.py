@@ -51,6 +51,21 @@ def test_research_sweep_returns_multiple_rows(monkeypatch, tmp_path) -> None:
     get_settings.cache_clear()
 
 
+def test_research_sweep_accepts_calibrated_fill(monkeypatch, tmp_path) -> None:
+    # specs/006 FR-010: calibrated_fill is selectable wherever a fill model is chosen.
+    with _client(monkeypatch, tmp_path) as client:
+        response = client.post(
+            "/research/sweep",
+            json={"spreads_bps": [20], "fill_modes": ["full_cross_fill", "calibrated_fill"]},
+        )
+        assert response.status_code == 200
+        assert {row["fill_mode"] for row in response.json()["rows"]} == {
+            "full_cross_fill",
+            "calibrated_fill",
+        }
+    get_settings.cache_clear()
+
+
 def test_opportunities_label_when_dex_disabled(monkeypatch, tmp_path) -> None:
     with _client(monkeypatch, tmp_path) as client:
         payload = client.get("/opportunities").json()

@@ -13,6 +13,7 @@ from app.analytics.performance_report import (
 from app.api.operator_auth import require_operator_token
 from app.config.redaction import rpc_provider_label
 from app.config.settings import Settings, get_settings
+from app.execution.fill_calibration import load_fill_calibration
 from app.market_data.orderbook import best_ask, best_bid, mid_price, spread_bps
 from app.services.flash_arb_service import backend_label
 from app.services.market_maker_loop import MarketMakerLoop
@@ -106,6 +107,22 @@ async def status(request: Request) -> dict:
     }
 
 
+def _fill_calibration_config(path: str) -> dict:
+    calibration = load_fill_calibration(path)
+    return {
+        "fill_calibration_available": calibration is not None,
+        "fill_calibration": (
+            {
+                "touch_rate_per_sec": calibration.touch_rate_per_sec,
+                "decay_bps": calibration.decay_bps,
+                "distance_range_bps": calibration.distance_range_bps,
+            }
+            if calibration is not None
+            else None
+        ),
+    }
+
+
 @router.get("/config")
 async def config() -> dict:
     settings = get_settings()
@@ -118,6 +135,7 @@ async def config() -> dict:
         "fill_mode": settings.fill_mode,
         "fill_latency_ticks": settings.fill_latency_ticks,
         "fill_probability": settings.fill_probability,
+        **_fill_calibration_config(settings.fill_calibration_path),
         "quote_spread_bps": settings.quote_spread_bps,
         "maker_fee_bps": settings.maker_fee_bps,
         "taker_fee_bps": settings.taker_fee_bps,

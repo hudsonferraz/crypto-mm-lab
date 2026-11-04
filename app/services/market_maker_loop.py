@@ -13,6 +13,7 @@ from app.adapters.dex.web3_pool_adapter import Web3PoolAdapter
 from app.analytics.performance_report import format_performance_report
 from app.analytics.pnl import compute_pnl_snapshot
 from app.config.settings import Settings
+from app.execution.fill_calibration import load_fill_calibration
 from app.execution.lp_paper_book import LpPaperBook
 from app.execution.paper_broker import PaperBroker
 from app.execution.tick_ids import new_tick_id
@@ -107,6 +108,7 @@ class MarketMakerLoop:
             fill_mode=settings.fill_mode,
             fill_latency_ticks=settings.fill_latency_ticks,
             fill_probability=settings.fill_probability,
+            calibration=load_fill_calibration(settings.fill_calibration_path),
         )
         self._kill_switch = KillSwitch()
         self._repository = Repository(settings.db_url)

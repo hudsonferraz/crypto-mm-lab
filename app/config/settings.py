@@ -5,7 +5,7 @@ from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 StrategyName = Literal["pure_mm", "inventory_skew", "volatility_spread"]
-FillMode = Literal["full_cross_fill", "partial_fill", "latency_prob_fill"]
+FillMode = Literal["full_cross_fill", "partial_fill", "latency_prob_fill", "calibrated_fill"]
 MarketDataMode = Literal["poll", "websocket"]
 
 
@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     fill_mode: FillMode = "full_cross_fill"
     fill_latency_ticks: int = Field(default=2, ge=1)
     fill_probability: float = Field(default=0.7, ge=0.0, le=1.0)
+    # Fitted parameters for calibrated_fill (specs/006); missing file = full_cross_fill.
+    fill_calibration_path: str = "app/execution/fill_calibration.json"
     strategy: StrategyName = "pure_mm"
     initial_quote_balance: float = Field(default=10_000.0, gt=0)
     max_position_notional: float = Field(default=1_000.0, gt=0)

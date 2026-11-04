@@ -19,7 +19,7 @@ This is an **education and research project** — useful for exploring MM mechan
 
 - **Automated tests + CI** — order book math, fill models (including latency/prob), PnL, AMM, arbitrage scanner, backtest, strategy comparison, research APIs, operator auth, stale-data guards, loop recovery, tick audit
 - **Product dashboard** — paper banner, config chips, Live / Opportunities / Research tabs, open quotes, kill confirm, fixture compare + scenario sweep
-- **Execution simulation** — cash-account fills (`full_cross_fill`, `partial_fill`, or toy `latency_prob_fill`), auditable quote/fill IDs and per-tick `tick_id` joins
+- **Execution simulation** — cash-account fills (`full_cross_fill`, `partial_fill`, toy `latency_prob_fill`, or `calibrated_fill` fitted on real testnet sessions), auditable quote/fill IDs and per-tick `tick_id` joins
 - **Risk and inventory controls** — position caps, cumulative cash reservation, kill switch (optional operator token), stale-tick safeguards
 - **Strategy research** — pure MM, inventory skew, volatility-adjusted spread + API/CLI comparison and sweeps
 - **Uniswap V3, exact to the wei** — block-pinned pool reads via Multicall3 and a pure-integer port of TickMath / SqrtPriceMath / SwapMath / TickBitmap; simulated swaps match Uniswap's on-chain QuoterV2 with zero difference (47/47 sizes, up to 543 initialized ticks crossed), enforced offline in CI
@@ -28,7 +28,7 @@ This is an **education and research project** — useful for exploring MM mechan
 - **Solidity flash-arbitrage executor** — an owner-only contract that captures a V2/V3 price gap in one transaction through a Uniswap V3 flash swap. Tested against the real Uniswap V2 and V3 core contracts: unit, fuzz (1,000 runs per property) and invariant tests, 100% branch coverage, a gas gate, and an opt-in mainnet-fork suite whose profit matches QuoterV2 exactly
 - **Scanner checked against the contract** — every tick, the best V2-vs-V3 trade is simulated against live mainnet state with a read-only `eth_call` (no deploy, no key, no cost). The scanner's estimate matches the simulation to the unit, and the dashboard explains every result
 - **Mempool watcher** — follows pending mainnet transactions on a free keyless websocket, decodes swaps on the two pools (direct calls, V2 router, V3 swap routers, Universal Router), predicts their price impact with the same exact math, and verifies each prediction against its block. Pool state is rolled forward from the pools' own events and matched a fresh chain read after 60 blocks with zero drift; every real swap replayed from those blocks is reproduced with zero math error
-- **Binance spot testnet execution** — with a free key, the strategy places real post-only orders on the testnet (fake money, host fixed in code), reconciles every order with the exchange, and compares each paper fill model with the real fills on identical snapshots. A recorded 30-minute session ships for the keyless demo. It found the paper models too pessimistic: 50% fill rate vs 67% real
+- **Binance spot testnet execution** — with a free key, the strategy places real post-only orders on the testnet (fake money, host fixed in code), reconciles every order with the exchange, and compares each paper fill model with the real fills on identical snapshots. Four recorded 30-minute sessions ship for the keyless demo. They found the paper models too pessimistic (50% fill rate vs 67% real), so a fourth model, `calibrated_fill`, is fitted on them: held out one session at a time, it is the closest model to the real fill count in 4 of 4 sessions, with half the error
 - **CEX/DEX analytics** — Uniswap V2 pool reader, V2 + V3 arbitrage scanner (exact V3 output, net-edge-maximizing size), labeled USDT/USDC basis notes
 - **Backtesting** — replay from SQLite/Postgres snapshots or CSV fixtures; Sharpe-like ratio, drawdown, fill rate
 - **Observability** — Prometheus `/metrics`, Grafana dashboard, structured logging, `last_error` on `/status`
@@ -56,7 +56,7 @@ This is an **education and research project** — useful for exploring MM mechan
 |------------------------------------------------------|------------------------------------------------------|
 | ![Mempool tab, live](docs/images/dashboard-mempool.png) | ![Mempool tab, replay](docs/images/dashboard-mempool-replay.png) |
 
-| Testnet: real post-only orders vs the paper fill models (recorded session, keyless demo) |
+| Testnet: real post-only orders vs the paper fill models, and the fill-model calibration judged on held-out sessions (recorded, keyless demo) |
 |------------------------------------------------------------------------------------------|
 | ![Testnet tab](docs/images/dashboard-testnet.png) |
 
@@ -170,6 +170,7 @@ docker compose up --build
 | `GET /testnet/balances` | Virtual testnet slice, PnL at the testnet mid, and the account totals |
 | `GET /testnet/comparison` | Per fill model: fill rate real vs paper, matched / paper only / real only / neither, time to fill, PnL gap (`?window_minutes=60`) |
 | `GET /testnet/sessions` | Testnet sessions and why they ended |
+| `GET /testnet/calibration` | The fitted `calibrated_fill` parameters, their source sessions, the leave-one-session-out results, the fill-chance curve and the D1–D6 explanations |
 | `POST /kill-switch` | Enable/disable kill switch (`{"active": true}`) |
 | `GET /dashboard` | Static monitoring UI |
 
@@ -338,14 +339,48 @@ What the recording shows:
 - **The paper models are pessimistic on the testnet.** They never filled an order the real engine left alone. But they missed 9 real fills, because someone traded into our price while the book, seen at our 2-to-3-second snapshot rate, never crossed it.
 - **`latency_prob_fill` cannot fill a resting quote that the real market takes first.** This comparison also exposed a bug in the main paper broker: it replaced every quote each tick, which reset the crossing streak, so with `FILL_LATENCY_TICKS` of 2 or more the model never filled (0 fills over 20 ticks that were all crossed). Fixed: in this mode, a crossed quote now stays resting until it fills or the cross ends (9 fills over the same 20 ticks).
 
+### Fill-model calibration
+
+The three hand-written models miss real fills: the price touches our quote and comes back between two snapshots, and someone trades with us in that gap. In the public testnet trade history, other traders printed through our price during 5 of the 9 missed orders and during none of the 17 orders that never filled.
+
+`calibrated_fill` keeps the rule that a crossed quote fills. It adds a chance that a quote the snapshots show uncrossed filled since the last look:
+
+```
+chance = 1 - exp(-rate * seconds since last look),   rate = touch_rate * exp(-distance_bps / decay_bps)
+```
+
+`distance_bps` is how far the quote sits from the best price on the other side. The two parameters are fitted by maximum likelihood on every (snapshot, open order) look in the recorded sessions. The fit is stored in [app/execution/fill_calibration.json](app/execution/fill_calibration.json) with its sources and its validation, and refitted with one command, no key or network needed:
+
+```bash
+python scripts/calibrate_fill_model.py      # replays every recording, fits, validates, writes the file (under 1 s)
+```
+
+Evidence (2026-11-03, 4 real testnet sessions of 30 min each on BTCUSDT; each row is fitted on the other three sessions and judged on that one):
+
+| Session | Spread | Orders | Real fills | `full_cross_fill` / `partial_fill` | `latency_prob_fill` | `calibrated_fill` (expected / drawn) |
+|---|---|---|---|---|---|---|
+| 6a1aca | 2 bps | 52 | 35 | 26 | 0 | 34.6 / 35 |
+| 5117df | 2 bps | 77 | 44 | 33 | 0 | 43.3 / 41 |
+| b2127d | 4 bps | 105 | 58 | 32 | 0 | 38.9 / 39 |
+| ce7562 | 6 bps | 92 | 45 | 25 | 0 | 32.3 / 35 |
+| **Mean error** | | | | **16.5** | 45.5 | **8.2** (expected) |
+
+- Fitted on all four sessions: `touch_rate` 0.0092 per second, `decay` 4.1 bps, from 3,967 looks and 66 fills the snapshots did not show.
+- The hand-written models never filled an order the real engine left alone, in any of the four sessions. Every gap is a fill they missed.
+- Replay is exact: rebuilding each recording's snapshots reproduces every stored paper fill, so older recordings are scored by the new model too.
+- Cost: about 16 µs more per tick, against a tick p95 of about 7 s.
+- **Limit: the count gets closer, the PnL gap does not yet.** On the first session, `calibrated_fill` matches 29 real fills but also fills 3 orders the real engine left alone and misses 6. Fills on different orders move inventory differently, so its paper PnL gap there is $0.44, against $0.09 for `full_cross_fill`.
+- **Limit:** one rate curve for all spreads still undershoots the 4 bps session (39 against 58 real). The default `FILL_MODE` stays `full_cross_fill`; choose `calibrated_fill` in the loop, backtests or sweeps when you want the testnet-fitted estimate. The calibration describes the testnet's thin, bot-driven flow, not mainnet.
+
 ### Why it's built this way
 
 - **Testnet only, enforced in code.** The only host the client can reach is `testnet.binance.vision`. It is fixed, there is no base-URL setting, and the client checks the host when it is built and again on every request. A test fails if any other exchange host appears in the trader's code. Testnet and mainnet keys look alike, so this is what makes "never real money" a checkable guarantee.
 - **Free key, and the lab still works without it.** Keys come only from the environment and are never returned, logged, stored or shown; status says only whether they are present. Without them, the hosted demo shows the recorded session, and live and recorded numbers are never mixed.
-- **Same inputs, different fill engines.** The testnet trader quotes from the testnet book, not the mainnet book that drives the paper loop. Comparing paper fills on mainnet data with real fills on testnet data would compare two markets. Here, the three paper models see exactly the snapshots and orders the real engine saw, and every order is counted once per model as matched, paper only, real only or neither.
+- **Same inputs, different fill engines.** The testnet trader quotes from the testnet book, not the mainnet book that drives the paper loop. Comparing paper fills on mainnet data with real fills on testnet data would compare two markets. Here, the paper models see exactly the snapshots and orders the real engine saw, and every order is counted once per model as matched, paper only, real only or neither.
 - **Maker-only orders, existing limits, a kill switch that cancels.** Quotes are `LIMIT_MAKER` orders rounded to the exchange's tick and lot rules, so they can only add liquidity, as the paper model assumes. A quote that would cross the book is rejected by the exchange and counted, never resent as a taking order. The kill switch cancels every lab order and confirms with the exchange that none remain.
 - **Fill-model accuracy, not testnet profit.** Testnet flow is thin and mostly bots copying mainnet prices. How the engine treats an order is real; how much a strategy earns there is not, so testnet PnL is labeled and never presented as a result.
 - **Reconcile, never assume.** Orders are tagged `mmlab-<session>-<n>`, so the lab only touches its own. Lost answers are resolved from the exchange, and a cancel that arrives after a fill keeps the fill. Leftovers from a crashed run are cancelled at start. A testnet reset (orders and history wiped) starts a new session, so statistics never span one.
+- **A fitted model, judged on sessions it never saw.** A fill chance tuned to the same session it is scored on would look better than it is. The calibration leaves each session out in turn, and the goal (closest model in at least 3 of 4 held-out sessions) is checked by the command and in CI. A model driven by the public trade feed was rejected: backtests have no trade feed, and on the testnet our own order often absorbs the very trade the model would need.
 - **Beside the loop, within the limits.** The trader has its own task and HTTP client. It uses about 31 request weight per 2-second cycle, roughly 15% of the limit, and slows down above 70% of it.
 
 ## Architecture
@@ -365,6 +400,7 @@ This project is a **paper-trading lab**, not a production market-making system. 
   - `partial_fill` — same trigger, but fill size is capped by opposing top-of-book depth.
   - Neither mode models queue position, order-flow priority, or latency.
   - `latency_prob_fill` (toy) — a quote fills only after the book has crossed it for `FILL_LATENCY_TICKS` ticks in a row, and then with probability `FILL_PROBABILITY`. A crossed quote stays resting (it is not replaced) until it fills or the cross ends.
+  - `calibrated_fill` — a crossed quote fills as in `full_cross_fill`; an uncrossed quote also fills with a chance that grows with the time since it was last checked and falls with its distance from the other side of the book. The two parameters come from `FILL_CALIBRATION_PATH`, fitted on real testnet sessions ([Fill-model calibration](#fill-model-calibration)). The draw is seeded by the quote's side, price and time, so runs repeat exactly. Without a calibration file it behaves as `full_cross_fill`.
 - **Quote lifecycle** — resting quotes are replaced each tick (except crossed quotes in `latency_prob_fill`); partial remainders persist only until the next submission. Each quote receives a UUID at submission; fills carry the same ID for audit joins. Every persisted tick receives a shared `tick_id` so operators can reconstruct the full state via `GET /audit/ticks/{tick_id}`.
 
 ### Market data
@@ -413,7 +449,8 @@ See `.env.example`. Key variables:
 | `EXCHANGE`, `SYMBOL` | CEX data source (default `binance`, `BTC/USDT`) |
 | `DB_URL` / `DATABASE_URL` | SQLite (local) or PostgreSQL (Docker) |
 | `STRATEGY` | `pure_mm`, `inventory_skew`, or `volatility_spread` |
-| `FILL_MODE` | `full_cross_fill`, `partial_fill`, or `latency_prob_fill` |
+| `FILL_MODE` | `full_cross_fill`, `partial_fill`, `latency_prob_fill`, or `calibrated_fill` |
+| `FILL_CALIBRATION_PATH` | Calibration file for `calibrated_fill` (default `app/execution/fill_calibration.json`, written by `scripts/calibrate_fill_model.py`) |
 | `MARKET_DATA_MODE` | `poll` (default) or `websocket` (falls back to poll if unsupported) |
 | `OPERATOR_API_TOKEN` | Optional; protects kill switch when set |
 | `DEX_ENABLED` | Enable on-chain pool reader + arbitrage scanner |

@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.config.settings import Settings  # noqa: E402
+from app.models.testnet import FILL_MODELS  # noqa: E402
 from app.risk.kill_switch import KillSwitch  # noqa: E402
 from app.services.testnet.comparison import compare  # noqa: E402
 from app.services.testnet.recorded import export_session  # noqa: E402
@@ -109,7 +110,12 @@ async def record(
             ticks,
             recorded_at=datetime.now(UTC),
             last_mid=last_mid,
-            notes={"minutes": minutes, "counters": trader.status.counters},
+            notes={
+                "minutes": minutes,
+                "counters": trader.status.counters,
+                # specs/006: which models' shadow fills are stored; others get replayed.
+                "shadow_models": list(FILL_MODELS),
+            },
         )
         text = json.dumps(data)
         secrets = [

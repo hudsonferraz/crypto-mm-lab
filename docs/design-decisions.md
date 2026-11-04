@@ -268,7 +268,7 @@ Never for real-exchange trading; that is out of scope.
 The paper loop quotes against the mainnet book, but testnet prices only follow mainnet loosely, and testnet liquidity is thin. Comparing paper fills on mainnet data with real fills on testnet data would compare two markets, not two fill engines.
 
 **Decision**
-The testnet trader quotes from the testnet book. Three paper shadow books, one per fill model, evaluate each real order on the same testnet snapshots with the main broker's `detect_fills`.
+The testnet trader quotes from the testnet book. One paper shadow book per fill model evaluates each real order on the same testnet snapshots with the main broker's `detect_fills`.
 - **Window**: an order is evaluated from its acknowledgement until the lab cancels it; after a real fill, it gets one more look at the next snapshot.
 - **Outcomes**: every order ends as matched, paper only, real only or neither, so the four add up.
 - **Recompute**: the snapshots and the windows are stored, so the comparison can be recomputed offline.
@@ -278,6 +278,25 @@ Shadows never change which quotes are sent, so they measure each model's fill de
 
 **Revisit when**
 A free venue offers a realistic flow on a sandbox.
+
+---
+
+## Calibrated fill model: a time-and-distance fill chance, fitted and held out
+
+**Context**
+On the testnet, the deterministic models missed real fills: the price reached the lab's quote and came back between two snapshots, 2 to 3 seconds apart. The testnet's public trades confirmed it (other traders printed through the lab's price during 5 of the 9 missed orders, and during none of the unfilled ones).
+
+**Decision**
+`calibrated_fill` keeps the crossed-snapshot rule and adds, for uncrossed quotes, a fill chance `1 − exp(−rate·Δt)` with `rate = touch_rate·exp(−distance/decay)`.
+- **Fit**: maximum likelihood from recorded real sessions, offline, by `scripts/calibrate_fill_model.py`. The result is a committed file that names its sources.
+- **Validation**: leave one session out. The report gives each held-out session's real fills, every model's count, and the calibrated model's expected and drawn counts.
+- **Scope**: an option everywhere a fill model is chosen, never the main loop's default. Distances outside the fitted range are labeled extended.
+
+**Trade-off**
+The fit describes the testnet's bot-driven flow at 1 to 3 bps from the mid. The main loop quotes 15 bps out by default, where the curve is extrapolated. A model driven by public trades would be more mechanical, but backtests replay snapshots only, and on the testnet the lab's own order absorbs the very trade the model would need.
+
+**Revisit when**
+Recordings exist at the main loop's distances, or the market-data feed carries trades for every mode.
 
 ---
 

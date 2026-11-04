@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 
 from fastapi import APIRouter, Query, Request
 
@@ -16,6 +17,7 @@ from app.analytics.testnet_report import (
     EXPLANATIONS,
     FIELD_EXPLANATIONS,
     HOW_TO_ENABLE,
+    calibration_payload,
     comparison_payload,
     fill_payload,
     order_payload,
@@ -24,6 +26,7 @@ from app.analytics.testnet_report import (
     status_payload,
 )
 from app.config.settings import get_settings
+from app.execution.fill_calibration import load_calibration_file, load_fill_calibration
 from app.models.testnet import (
     FINAL_ORDER_STATES,
     OPEN_ORDER_STATES,
@@ -34,6 +37,7 @@ from app.models.testnet import (
 )
 from app.services.testnet.comparison import compare, fee_in_quote
 from app.services.testnet.recorded import RecordedSession, load_recording
+from app.services.testnet.replay import complete_recording
 from app.services.testnet.trader import disabled_status
 
 router = APIRouter()
@@ -58,10 +62,20 @@ def _repository(request: Request):
 
 
 def _recording() -> RecordedSession | None:
+    settings = get_settings()
     try:
-        return load_recording(get_settings().testnet_recorded_path)
+        return _completed_recording(settings.testnet_recorded_path, settings.fill_calibration_path)
     except (OSError, ValueError):
         return None
+
+
+@lru_cache(maxsize=4)
+def _completed_recording(path: str | None, calibration_path: str | None) -> RecordedSession | None:
+    recording = load_recording(path)
+    if recording is None:
+        return None
+    # specs/006 FR-012: models newer than the recording are replayed from its ticks.
+    return complete_recording(recording, load_fill_calibration(calibration_path))
 
 
 def _view(request: Request) -> _View:
@@ -238,3 +252,9 @@ async def testnet_sessions(request: Request, limit: int = Query(default=20, ge=1
         "source": "recorded",
         "items": [session_payload(recording.session, len(recording.orders), len(recording.fills))],
     }
+
+
+@router.get("/testnet/calibration")
+async def testnet_calibration() -> dict:
+    path = get_settings().fill_calibration_path
+    return calibration_payload(load_calibration_file(path), load_fill_calibration(path))

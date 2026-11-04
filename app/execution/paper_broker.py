@@ -2,6 +2,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 
 from app.analytics.inventory import InventoryTracker
+from app.execution.fill_calibration import FillCalibration
 from app.execution.fill_model import FILL_MODE_LATENCY_PROB, FillMode, OpenQuote, detect_fills
 from app.execution.quote_ids import assign_quote_id
 from app.models.domain import Fill, OrderBookSnapshot, Quote
@@ -28,12 +29,14 @@ class PaperBroker:
         fill_mode: FillMode = "full_cross_fill",
         fill_latency_ticks: int = 1,
         fill_probability: float = 1.0,
+        calibration: FillCalibration | None = None,
     ) -> None:
         self._symbol = symbol
         self._maker_fee_bps = maker_fee_bps
         self._fill_mode = fill_mode
         self._fill_latency_ticks = fill_latency_ticks
         self._fill_probability = fill_probability
+        self._calibration = calibration
         self._open_quotes: list[OpenQuote] = []
         self._tick_index = 0
         self._inventory = InventoryTracker(
@@ -59,6 +62,7 @@ class PaperBroker:
                     quote_id=open_quote.quote_id,
                     quote=open_quote.quote,
                     crossed_streak=open_quote.crossed_streak,
+                    last_evaluated_at=open_quote.last_evaluated_at,
                 )
                 for open_quote in self._open_quotes
             ),
@@ -78,6 +82,7 @@ class PaperBroker:
                 quote_id=open_quote.quote_id,
                 quote=open_quote.quote,
                 crossed_streak=open_quote.crossed_streak,
+                last_evaluated_at=open_quote.last_evaluated_at,
             )
             for open_quote in checkpoint.open_quotes
         ]
@@ -92,6 +97,7 @@ class PaperBroker:
             fill_latency_ticks=self._fill_latency_ticks,
             fill_probability=self._fill_probability,
             tick_index=self._tick_index,
+            calibration=self._calibration,
         )
         if not fills:
             return []
@@ -119,6 +125,7 @@ class PaperBroker:
                         quote_id=open_quote.quote_id,
                         quote=replace(open_quote.quote, size=remaining_size),
                         crossed_streak=0,
+                        last_evaluated_at=fill_timestamp,
                     )
                 )
 

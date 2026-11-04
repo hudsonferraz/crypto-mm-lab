@@ -334,3 +334,24 @@ def test_trader_active_only_with_both_keys(monkeypatch) -> None:
     )
     assert with_keys.testnet_active
     assert "k" not in repr(with_keys.binance_testnet_api_key)
+
+
+async def test_trader_runs_one_shadow_per_fill_model(setup, tmp_path) -> None:
+    # specs/006 FR-011: calibrated_fill is the fourth shadow book.
+    import json
+
+    from app.models.testnet import FILL_MODELS
+
+    path = tmp_path / "cal.json"
+    path.write_text(
+        json.dumps(
+            {"format": 1, "model": "calibrated_fill", "touch_rate_per_sec": 0.01, "decay_bps": 1.0}
+        ),
+        encoding="utf-8",
+    )
+    trader, _, _, _ = await started(setup, fill_calibration_path=str(path))
+    assert list(trader.shadow_filled()) == list(FILL_MODELS)
+    assert "calibrated_fill" in FILL_MODELS
+    calibrated = [s for s in trader._shadows if s.fill_model == "calibrated_fill"][0]
+    assert calibrated._calibration is not None and calibrated._calibration.decay_bps == 1.0
+    await trader.shutdown()

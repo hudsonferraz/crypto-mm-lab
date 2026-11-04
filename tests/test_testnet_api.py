@@ -181,3 +181,73 @@ def test_limits_are_validated(client) -> None:
     config = client.get("/config").json()
     assert config["testnet_keys_present"] is False
     assert "binance_testnet_api_key" not in config
+
+
+# --- fill-model calibration (specs/006 US2, FR-011 to FR-015) ----------------------------
+
+CALIBRATION = {
+    "format": 1,
+    "model": "calibrated_fill",
+    "touch_rate_per_sec": 0.01,
+    "decay_bps": 1.5,
+    "fitted_at": "2026-11-04T00:00:00+00:00",
+    "intervals": 100,
+    "events": 4,
+    "distance_range_bps": [0.5, 3.0],
+    "max_interval_sec": 60,
+    "sources": [{"session_id": "rec001", "file": "session.json.gz", "spread_bps": 4}],
+    "validation": None,
+}
+
+
+def _client_with_calibration(monkeypatch, tmp_path, calibration: dict | None) -> TestClient:
+    monkeypatch.setenv("DB_URL", f"sqlite:///{tmp_path / 'api.db'}")
+    monkeypatch.setenv("METRICS_ENABLED", "false")
+    recording = tmp_path / "session.json.gz"
+    _recording(recording)
+    monkeypatch.setenv("TESTNET_RECORDED_PATH", str(recording))
+    path = tmp_path / "fill_calibration.json"
+    if calibration is not None:
+        path.write_text(json.dumps(calibration), encoding="utf-8")
+    monkeypatch.setenv("FILL_CALIBRATION_PATH", str(path))
+    get_settings.cache_clear()
+    return TestClient(create_app())
+
+
+def test_calibration_endpoint_serves_the_file(monkeypatch, tmp_path) -> None:
+    with _client_with_calibration(monkeypatch, tmp_path, CALIBRATION) as client:
+        body = client.get("/testnet/calibration").json()
+        config = client.get("/config").json()
+    assert body["testnet_only"] is True and body["available"] is True
+    assert body["calibration"]["touch_rate_per_sec"] == 0.01
+    assert set(body["explanations"]) == {"D1", "D2", "D3", "D4", "D5", "D6", "trades"}
+    curve = {p["distance_bps"]: p for p in body["rate_curve"]}
+    assert curve[1]["extended"] is False and curve[15]["extended"] is True  # FR-015
+    assert curve[0.5]["fill_chance_per_tick"] > curve[3]["fill_chance_per_tick"] > 0
+    assert config["fill_calibration_available"] is True
+    assert config["fill_calibration"]["distance_range_bps"] == [0.5, 3.0]
+    text = json.dumps(body)
+    assert str(tmp_path) not in text and "http" not in text
+
+
+def test_calibration_endpoint_without_a_file(monkeypatch, tmp_path) -> None:
+    with _client_with_calibration(monkeypatch, tmp_path, None) as client:
+        body = client.get("/testnet/calibration").json()
+        config = client.get("/config").json()
+    assert body["available"] is False and body["calibration"] is None
+    assert body["rate_curve"] == [] and "calibrate_fill_model.py" in body["how_to_calibrate"]
+    assert config["fill_calibration_available"] is False and config["fill_calibration"] is None
+
+
+def test_recorded_comparison_includes_the_calibrated_model(monkeypatch, tmp_path) -> None:
+    with _client_with_calibration(monkeypatch, tmp_path, CALIBRATION) as client:
+        models = client.get("/testnet/comparison").json()["models"]
+        orders = client.get("/testnet/orders").json()["items"]
+    assert [m["fill_model"] for m in models] == [
+        "full_cross_fill",
+        "partial_fill",
+        "latency_prob_fill",
+        "calibrated_fill",
+    ]
+    assert all(set(m) >= {"orders", "paper_filled"} for m in models)
+    assert orders

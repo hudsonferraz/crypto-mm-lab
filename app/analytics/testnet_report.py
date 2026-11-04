@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import datetime
 
+from app.execution.fill_calibration import FillCalibration
 from app.models.testnet import (
     FillComparison,
     OrderEvent,
@@ -33,7 +34,7 @@ EXPLANATIONS: dict[str, str] = {
     ),
     "D3": (
         "The testnet trader is its own book: it quotes from the testnet order book, not the "
-        "mainnet book of the main paper loop. Three paper books, one per fill model, see the "
+        "mainnet book of the main paper loop. One paper book per fill model sees the "
         "same testnet snapshots and the same orders, so paper and real are compared on "
         "identical inputs."
     ),
@@ -279,3 +280,80 @@ def reject_counts(orders: list[TestnetOrder]) -> dict[str, int]:
         if order.state == "rejected" and order.reject_reason in counts:
             counts[order.reject_reason] += 1
     return counts
+
+
+# --- fill-model calibration (specs/006) ---------------------------------------------------
+
+CALIBRATION_EXPLANATIONS: dict[str, str] = {
+    "D1": (
+        "calibrated_fill fills a quote whenever a snapshot shows it crossed, like "
+        "full_cross_fill. It also gives an uncrossed quote a chance to have filled since the "
+        "last snapshot: the price can reach the quote and come back in the 2 to 3 seconds "
+        "between two reads. The chance grows with that time and falls quickly with the "
+        "quote's distance from the other side of the book."
+    ),
+    "D2": (
+        "Its two numbers, the fill rate at the touch and how fast it falls with distance, "
+        "are fitted by maximum likelihood: the values under which the real fills recorded "
+        "on the testnet were most likely. The fit runs offline from the shipped recordings "
+        "and is stored in the repository with its sources; the lab never fits while running."
+    ),
+    "D3": (
+        "Each session in the table was left out of the fit that predicts it: the model was "
+        "fitted on the other sessions only. A model can always match the data it was fitted "
+        "on; only a prediction for unseen data shows whether it learned something. With a "
+        "few sessions of about 50 orders, this check is coarse."
+    ),
+    "D4": (
+        "calibrated_fill is an option, not the main loop's default. The fit describes the "
+        "testnet's bot-driven flow at the distances shown; distances outside that range "
+        "are marked extended, because the curve there is extrapolated, not measured."
+    ),
+    "D5": (
+        "Whether a quote fills is a repeatable pseudo-random draw, so rerunning the same data "
+        "gives the same fills. Expected fills (the sum of each order's fill chance) are shown "
+        "next to the drawn count, because one draw over 50 orders is noisy."
+    ),
+    "D6": (
+        "Sessions were recorded at several spreads so the fit can see how the fill rate "
+        "falls with distance. Every recording is replayed through every fill model; "
+        "replaying the original models reproduces their stored fills exactly."
+    ),
+    "trades": (
+        "The testnet's public trade history backs this up: other traders' trades printed "
+        "through the lab's price during 5 of the 9 fills the snapshots missed in the first "
+        "session, and during none of the orders that never filled. A trade-driven model was "
+        "not chosen, because backtests replay snapshots only, and the lab's own order absorbs "
+        "the incoming trade exactly when the snapshots miss it."
+    ),
+}
+
+HOW_TO_CALIBRATE = "py -3.12 scripts/calibrate_fill_model.py"
+RATE_CURVE_DISTANCES_BPS: tuple[float, ...] = (0.5, 1, 1.5, 2, 3, 4, 5, 7.5, 10, 15)
+RATE_CURVE_INTERVAL_SEC = 2.0
+
+
+def rate_curve(calibration: FillCalibration | None) -> list[dict]:
+    if calibration is None:
+        return []
+    return [
+        {
+            "distance_bps": d,
+            "fill_chance_per_tick": round(calibration.fill_chance(d, RATE_CURVE_INTERVAL_SEC), 6),
+            "extended": calibration.extended(d),
+        }
+        for d in RATE_CURVE_DISTANCES_BPS
+    ]
+
+
+def calibration_payload(data: dict | None, calibration: FillCalibration | None) -> dict:
+    """GET /testnet/calibration (specs/006 contracts/api.md)."""
+    return {
+        "testnet_only": True,
+        "available": data is not None,
+        "calibration": data,
+        "rate_curve": rate_curve(calibration),
+        "rate_curve_interval_sec": RATE_CURVE_INTERVAL_SEC,
+        "explanations": CALIBRATION_EXPLANATIONS,
+        "how_to_calibrate": HOW_TO_CALIBRATE,
+    }
