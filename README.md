@@ -5,34 +5,39 @@
 [![CI](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/hudsonferraz/crypto-mm-lab/branch/main/graph/badge.svg)](https://codecov.io/gh/hudsonferraz/crypto-mm-lab)
 
-**Paper market-making research lab** that pulls live CEX order books, simulates quote placement and fills, tracks PnL, runs a paper **Uniswap V3 concentrated-liquidity** book against the CEX book, compares CEX vs Uniswap V2/V3 prices, ships a tested **Solidity flash-arbitrage contract** that it simulates against live mainnet state every tick, watches the **public mempool** for swaps on its two pools and checks every prediction against the next blocks, runs the strategy with real post-only orders on the **Binance spot testnet** (free key, fake money) to measure how well the paper fill models match a real matching engine, and comes with backtest mode plus a Docker observability stack.
+**A paper market-making research lab for crypto.** It quotes on live Binance order books, runs a paper Uniswap V3 liquidity position, simulates a Solidity flash-arbitrage contract against live mainnet state, watches the public mempool, and checks its paper fill models against real orders on the Binance testnet. Everything runs on free public data, with no API keys, no wallet and no real money.
 
-This is an **education and research project** — useful for exploring MM mechanics, execution models, and CEX/DEX comparison. It is **not** production trading infrastructure.
+This is an **education and research project**, not production trading infrastructure.
 
-**What it does:** end-to-end MM loop on public Binance data plus on-chain Uniswap V3 reads (no API keys, zero cost).  
-**How it's built:** FastAPI, CCXT, web3.py + Multicall3, an exact integer port of the Uniswap V3 math, Solidity 0.8.28 + Foundry, SQLAlchemy, Prometheus/Grafana.  
-**Scope and safety:** paper-only, optional operator token for kill switch, conservative fill models — see [Simulation assumptions](#simulation-assumptions), [interview story](docs/interview-story.md), and [design decisions](docs/design-decisions.md).
+## What this shows
 
-![Demo](docs/images/demo.gif)
+| Area | Result | Evidence |
+|---|---|---|
+| Exact DeFi math | A pure-integer port of Uniswap V3's swap math matches the on-chain QuoterV2 to the wei (47 of 47 sizes, up to 543 ticks crossed), checked offline in CI | [Uniswap V3](#uniswap-v3-concentrated-liquidity) |
+| Smart contracts | An owner-only flash-arbitrage contract with unit, fuzz and invariant tests, 100% branch coverage and a gas gate. Every tick it is simulated against live mainnet state, and the scanner's estimate matches to the unit | [Flash-arbitrage executor](#flash-arbitrage-executor-solidity) |
+| Mempool | Pending swaps on the two pools are decoded and their price impact predicted, then checked against the block they land in. Every replayed swap is reproduced with zero math error | [Mempool watcher](#mempool-watcher) |
+| Execution realism | Real post-only orders on the Binance testnet show the paper fill models are too pessimistic (50% vs 67% fill rate). A fill model fitted on 8 recorded sessions is the closest to real fills in 8 of 8 sessions it was not fitted on. A volatility term was tested against a rule fixed in advance, failed, and was reported as failed | [Testnet execution](#binance-spot-testnet-execution) |
+| Market making | Pure, inventory-skew and volatility-adjusted strategies, with position caps, a kill switch, backtests and strategy sweeps | [Capabilities](#capabilities) |
+| Engineering | FastAPI, web3.py with Multicall3, Solidity 0.8.28 with Foundry, SQLAlchemy, Prometheus and Grafana; 570+ tests in CI; every design choice written down with its trade-off | [Design decisions](docs/design-decisions.md) |
+
+Start with the [Quickstart](#quickstart-local): four commands run the whole lab locally, without keys. See also the [simulation assumptions](#simulation-assumptions) and the [interview story](docs/interview-story.md).
+
+![Demo: the Live MM, Opportunities, On-chain LP, Flash arb, Mempool and Testnet tabs](docs/images/demo.gif)
 
 ## Highlights
 
-- **Automated tests + CI** — order book math, fill models (including latency/prob), PnL, AMM, arbitrage scanner, backtest, strategy comparison, research APIs, operator auth, stale-data guards, loop recovery, tick audit
-- **Product dashboard** — paper banner, config chips, Live / Opportunities / Research tabs, open quotes, kill confirm, fixture compare + scenario sweep
-- **Execution simulation** — cash-account fills (`full_cross_fill`, `partial_fill`, toy `latency_prob_fill`, or `calibrated_fill` fitted on real testnet sessions), auditable quote/fill IDs and per-tick `tick_id` joins
+- **Product dashboard** — paper-trading banner, config chips, seven tabs (Live MM, Opportunities, Research, On-chain LP, Flash arb, Mempool, Testnet), each result explained in plain language
+- **Execution simulation** — cash-account fills (`full_cross_fill`, `partial_fill`, toy `latency_prob_fill`, or `calibrated_fill` fitted on real testnet sessions), auditable quote and fill IDs, per-tick `tick_id` joins
 - **Risk and inventory controls** — position caps, cumulative cash reservation, kill switch (optional operator token), stale-tick safeguards
-- **Strategy research** — pure MM, inventory skew, volatility-adjusted spread + API/CLI comparison and sweeps
-- **Uniswap V3, exact to the wei** — block-pinned pool reads via Multicall3 and a pure-integer port of TickMath / SqrtPriceMath / SwapMath / TickBitmap; simulated swaps match Uniswap's on-chain QuoterV2 with zero difference (47/47 sizes, up to 543 initialized ticks crossed), enforced offline in CI
-- **Paper concentrated-liquidity LP book** — ranges around the CEX mid, rebalancing on range exit or drift with cooldown, fees from on-chain fee growth, and a reconciling PnL split: fees, impermanent loss, HODL revaluation, swap cost, gas
-- **CEX MM vs on-chain LP** — side-by-side comparison over the same window, on return on capital
-- **Solidity flash-arbitrage executor** — an owner-only contract that captures a V2/V3 price gap in one transaction through a Uniswap V3 flash swap. Tested against the real Uniswap V2 and V3 core contracts: unit, fuzz (1,000 runs per property) and invariant tests, 100% branch coverage, a gas gate, and an opt-in mainnet-fork suite whose profit matches QuoterV2 exactly
-- **Scanner checked against the contract** — every tick, the best V2-vs-V3 trade is simulated against live mainnet state with a read-only `eth_call` (no deploy, no key, no cost). The scanner's estimate matches the simulation to the unit, and the dashboard explains every result
-- **Mempool watcher** — follows pending mainnet transactions on a free keyless websocket, decodes swaps on the two pools (direct calls, V2 router, V3 swap routers, Universal Router), predicts their price impact with the same exact math, and verifies each prediction against its block. Pool state is rolled forward from the pools' own events and matched a fresh chain read after 60 blocks with zero drift; every real swap replayed from those blocks is reproduced with zero math error
-- **Binance spot testnet execution** — with a free key, the strategy places real post-only orders on the testnet (fake money, host fixed in code), reconciles every order with the exchange, and compares each paper fill model with the real fills on identical snapshots. Eight recorded 30-minute sessions ship for the keyless demo. They found the paper models too pessimistic (50% fill rate vs 67% real), so a fourth model, `calibrated_fill`, is fitted on them: held out one session at a time, it is the closest model to the real fill count in 8 of 8 sessions, with about half the error. A volatility term was tested against a rule fixed in advance and not adopted
+- **Strategy research** — pure MM, inventory skew, volatility-adjusted spread, with API/CLI comparison and sweeps
+- **Uniswap V3, exact to the wei** — block-pinned pool reads via Multicall3 and a pure-integer port of TickMath, SqrtPriceMath, SwapMath and TickBitmap
+- **Paper concentrated-liquidity LP book** — ranges around the CEX mid, rebalancing with cooldown, fees from on-chain fee growth, and a PnL split that reconciles: fees, impermanent loss, HODL revaluation, swap cost, gas. Compared side by side with CEX market making on return on capital
+- **Solidity flash-arbitrage executor** — captures a V2/V3 price gap in one transaction through a Uniswap V3 flash swap, tested against the real Uniswap V2 and V3 core contracts, with an opt-in mainnet-fork suite whose profit matches QuoterV2 exactly
+- **Mempool watcher** — a free keyless websocket; decodes direct pool calls, the V2 router, the V3 swap routers and the Universal Router. Pool state rolled forward from events matched a fresh chain read after 60 blocks with zero drift
+- **Binance spot testnet execution** — with a free key: real post-only orders (fake money, host fixed in code), reconciled with the exchange, compared with every paper fill model on identical snapshots. Eight recorded sessions ship for the keyless demo
 - **CEX/DEX analytics** — Uniswap V2 pool reader, V2 + V3 arbitrage scanner (exact V3 output, net-edge-maximizing size), labeled USDT/USDC basis notes
 - **Backtesting** — replay from SQLite/Postgres snapshots or CSV fixtures; Sharpe-like ratio, drawdown, fill rate
-- **Observability** — Prometheus `/metrics`, Grafana dashboard, structured logging, `last_error` on `/status`
-- **Loop resilience** — bounded exponential backoff on tick failures, last-error visibility, automatic shutdown after repeated failures
+- **Observability and resilience** — Prometheus `/metrics`, Grafana dashboard, structured logging, `last_error` on `/status`, bounded backoff on tick failures and shutdown after repeated failures
 
 ## Screenshots
 
