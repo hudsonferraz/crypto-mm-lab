@@ -492,6 +492,22 @@ All live reads use the keyless public RPC that V2 already used. API keys are opt
 
 ---
 
+## Binance public data through its market-data host
+
+**Context**
+The hosted demo runs on Render in the US. `api.binance.com` answers US addresses with HTTP 451, so every order book request failed and the demo replayed bundled fixtures. The adapter also replaced the error with an empty stale book, so the dashboard said only "empty/stale".
+
+**Decision**
+Public market data goes to `data-api.binance.vision`, Binance's host for public spot data, with spot markets only, so nothing reaches the futures or account hosts. The host is fixed in code. The adapter keeps its last failure as a short message without URLs, and the fixture fallback puts it in `last_error`.
+
+**Trade-off**
+Moving the service to an EU region would also work, but Render cannot move a service, so it would mean a new service and possibly a new URL. It stays the fallback plan.
+
+**Revisit when**
+Binance changes or restricts the market-data host, or the lab needs data the host does not serve.
+
+---
+
 ## SQLite and PostgreSQL
 
 **Context**  

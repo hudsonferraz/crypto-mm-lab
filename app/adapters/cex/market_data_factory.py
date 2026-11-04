@@ -11,7 +11,7 @@ import asyncio
 
 import structlog
 
-from app.adapters.cex.ccxt_adapter import CcxtAdapter
+from app.adapters.cex.ccxt_adapter import CcxtAdapter, short_error
 from app.adapters.cex.fixture_replay import (
     FallbackMarketDataSource,
     FixtureReplayAdapter,
@@ -54,8 +54,11 @@ class WebsocketCcxtAdapter:
     async def fetch_orderbook(self) -> OrderBookSnapshot:
         if not self._supports_watch:
             self._using_fallback = True
-            self._last_error = "watch_order_book unavailable; using REST poll fallback"
-            return await self._poll_fallback.fetch_orderbook()
+            snapshot = await self._poll_fallback.fetch_orderbook()
+            self._last_error = self._poll_fallback.last_error or (
+                "watch_order_book unavailable; using REST poll fallback"
+            )
+            return snapshot
 
         try:
             raw = await self._exchange.watch_order_book(self._symbol, self._orderbook_limit)
@@ -65,14 +68,17 @@ class WebsocketCcxtAdapter:
             return snapshot
         except Exception as error:
             self._using_fallback = True
-            self._last_error = f"websocket failed: {error}; using REST poll fallback"
+            self._last_error = f"websocket failed: {short_error(error)}; using REST poll fallback"
             logger.warning(
                 "orderbook_watch_failed",
                 symbol=self._symbol,
                 error=str(error),
             )
             await asyncio.sleep(0)
-            return await self._poll_fallback.fetch_orderbook()
+            snapshot = await self._poll_fallback.fetch_orderbook()
+            if self._poll_fallback.last_error:
+                self._last_error = self._poll_fallback.last_error
+            return snapshot
 
     def close(self) -> None:
         self._poll_fallback.close()

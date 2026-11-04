@@ -1,4 +1,5 @@
 import asyncio
+import re
 from datetime import UTC, datetime
 
 import ccxt
@@ -8,6 +9,22 @@ from app.market_data.normalizer import normalize_ccxt_orderbook
 from app.models.domain import OrderBookSnapshot
 
 logger = structlog.get_logger(__name__)
+
+# specs/008 D1: public market data only. Binance serves the same spot books on its
+# market-data host, which answers where api.binance.com returns HTTP 451 (for example
+# from US cloud regions). Fixed in code: there is no setting to point it elsewhere.
+PUBLIC_MARKET_DATA_HOSTS = {"binance": "https://data-api.binance.vision/api/v3"}
+SPOT_ONLY_OPTIONS = {"binance": {"fetchMarkets": ["spot"]}}
+
+_URL = re.compile(r"https?://\S+")
+_MAX_ERROR_CHARS = 160
+
+
+def short_error(error: Exception) -> str:
+    """Exception type and text, URLs removed, one line, at most 160 characters."""
+    text = " ".join(_URL.sub("<url>", str(error)).split())
+    message = f"{type(error).__name__}: {text}" if text else type(error).__name__
+    return message if len(message) <= _MAX_ERROR_CHARS else message[: _MAX_ERROR_CHARS - 1] + "…"
 
 
 class CcxtAdapter:
@@ -21,12 +38,23 @@ class CcxtAdapter:
         retry_delay_sec: float = 1.0,
     ) -> None:
         exchange_class = getattr(ccxt, exchange_id)
-        self._exchange = exchange_class({"enableRateLimit": True})
+        config = {"enableRateLimit": True}
+        if exchange_id in SPOT_ONLY_OPTIONS:
+            config["options"] = dict(SPOT_ONLY_OPTIONS[exchange_id])
+        self._exchange = exchange_class(config)
+        if exchange_id in PUBLIC_MARKET_DATA_HOSTS:
+            self._exchange.urls["api"]["public"] = PUBLIC_MARKET_DATA_HOSTS[exchange_id]
         self._symbol = symbol
         self._orderbook_limit = orderbook_limit
         self._max_retries = max_retries
         self._retry_delay_sec = retry_delay_sec
         self._last_good_snapshot: OrderBookSnapshot | None = None
+        self._last_error: str | None = None
+
+    @property
+    def last_error(self) -> str | None:
+        """Why the last fetch failed, or None after a success (specs/008 D2)."""
+        return self._last_error
 
     async def fetch_orderbook(self) -> OrderBookSnapshot:
         for attempt in range(1, self._max_retries + 1):
@@ -38,8 +66,10 @@ class CcxtAdapter:
                 )
                 snapshot = normalize_ccxt_orderbook(self._symbol, raw)
                 self._last_good_snapshot = snapshot
+                self._last_error = None
                 return snapshot
             except Exception as error:
+                self._last_error = short_error(error)
                 logger.warning(
                     "orderbook_fetch_failed",
                     symbol=self._symbol,

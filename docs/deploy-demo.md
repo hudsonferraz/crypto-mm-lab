@@ -43,6 +43,8 @@ DB_URL=sqlite:///./data/mm_lab.db
 
 Do **not** use Vercel — this app needs a long-running process for the paper MM loop.
 
-If the host blocks public CEX IPs (common on free Render), the app **automatically replays bundled fixture order books** so Live MM still shows mids/quotes. The dashboard labels this as fixture replay — not live Binance.
+Binance order books are read from `data-api.binance.vision`, Binance's host for public market data. `api.binance.com` answers US addresses, including Render's Oregon region, with HTTP 451 ("restricted location"); the market-data host serves the same spot books there.
+
+If live books still fail, the app **automatically replays bundled fixture order books** so Live MM still shows mids/quotes. The dashboard labels this as fixture replay, not live Binance, and `last_error` on `/status` says why live data failed (for example `ExchangeNotAvailable: ... 451 ... restricted location`).
 
 Any other container host that can run the Dockerfile also works (Fly, Railway, etc.). Plug the resulting URL into the portfolio case study when ready.

@@ -440,6 +440,7 @@ This project is a **paper-trading lab**, not a production market-making system. 
 ### Market data
 
 - **Polling by default; optional websocket** — order books refresh on a fixed interval (default 2s). `MARKET_DATA_MODE=websocket` uses `watch_order_book` when available and falls back to REST with an explicit status note.
+- **Binance through its market-data host** — public order books come from `data-api.binance.vision`, which serves the same spot books as `api.binance.com` but also answers from US cloud regions, where `api.binance.com` returns HTTP 451. Spot markets only; no key, no account endpoints. If live books still fail, the hosted demo replays bundled fixtures, and `last_error` on `/status` says why.
 - **Top-of-book focus** — strategies quote from mid price; stored snapshots keep best bid/ask only. Backtests reconstruct a minimal two-level book from those prices.
 - **Stale fallback** — if a CEX fetch fails, the adapter may reuse the last cached book (flagged `is_stale`). Stale ticks cancel resting quotes, skip fills and new quoting, increment `mm_stale_ticks_total`, and suppress DEX arbitrage opportunities when either the primary or compare CEX snapshot is stale. Stale books remain observable in storage and on the dashboard, but they are never executable.
 
