@@ -15,7 +15,12 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime
 
-from app.execution.fill_calibration import MAX_INTERVAL_SEC, FillCalibration
+from app.execution.fill_calibration import (
+    MAX_INTERVAL_SEC,
+    FillCalibration,
+    VolatilityTracker,
+    calibration_from_params,
+)
 from app.models.domain import OrderBookLevel, OrderBookSnapshot
 from app.models.testnet import FILL_MODELS, ShadowFill, TickRecord
 from app.services.testnet.recorded import RecordedSession
@@ -37,6 +42,7 @@ class Evaluation:
     distance_bps: float  # to the other side's best price; <= 0 when crossed
     dt_sec: float  # since the previous look (or the acknowledgement), capped
     event: bool | None  # first real fill inside this interval; None after the first fill
+    volatility: float | None = None  # bps per sqrt(s) at this look (specs/007 D2)
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +52,7 @@ class CalibrationInterval:
     dt_sec: float
     distance_bps: float
     event: bool
+    volatility: float | None = None
 
 
 def stored_models(recording: RecordedSession) -> tuple[str, ...]:
@@ -97,11 +104,41 @@ def _fill_key(fill: ShadowFill) -> tuple:
     return (fill.fill_model, fill.client_order_id, fill.tick_seq, round(fill.size, 12), fill.price)
 
 
-def replay_mismatches(recording: RecordedSession) -> list[str]:
-    """Differences between stored and replayed shadow fills for the stored models (FR-009)."""
+_UNKNOWN = object()
+
+
+def used_calibration(recording: RecordedSession, known: dict | None = None):
+    """The calibration the recording's calibrated_fill shadow used (specs/007 D6, FR-010).
+
+    From the recording's own notes when the recorder stored it, else from ``known``
+    (session id to parameters, for recordings made before that), else ``_UNKNOWN``.
+    """
+    notes = recording.notes or {}
+    if "calibration" in notes:
+        params = notes["calibration"]
+    elif known is not None and recording.session.session_id in known:
+        params = known[recording.session.session_id]
+    else:
+        return _UNKNOWN
+    return calibration_from_params(params) if params else None
+
+
+def checked_models(recording: RecordedSession, known: dict | None = None) -> tuple[str, ...]:
+    """The stored models replay can verify: calibrated_fill needs its calibration."""
     models = stored_models(recording)
+    if CALIBRATED_MODEL in models and used_calibration(recording, known) is _UNKNOWN:
+        return tuple(m for m in models if m != CALIBRATED_MODEL)
+    return models
+
+
+def replay_mismatches(recording: RecordedSession, known: dict | None = None) -> list[str]:
+    """Differences between stored and replayed shadow fills for the checked models."""
+    models = checked_models(recording, known)
+    calibration = used_calibration(recording, known)
+    if calibration is _UNKNOWN:
+        calibration = None
     stored = sorted(_fill_key(f) for f in recording.shadow_fills if f.fill_model in models)
-    replayed = sorted(_fill_key(f) for f in replay_shadows(recording, models))
+    replayed = sorted(_fill_key(f) for f in replay_shadows(recording, models, calibration))
     if stored == replayed:
         return []
     missing = sorted(set(stored) - set(replayed))
@@ -118,8 +155,12 @@ def evaluations(recording: RecordedSession) -> dict[str, list[Evaluation]]:
             first_fill[fill.client_order_id] = fill.at
     last_look: dict[str, datetime] = {}
     out: dict[str, list[Evaluation]] = {}
+    tracker = VolatilityTracker()
     for tick in sorted(recording.ticks, key=lambda t: t.seq):
-        if tick.best_bid is None or tick.best_ask is None:
+        # Fed on every tick exactly as each ShadowBook feeds its own (specs/007 FR-002).
+        both = tick.best_bid is not None and tick.best_ask is not None
+        volatility = tracker.update(tick.at, (tick.best_bid + tick.best_ask) / 2 if both else None)
+        if not both:
             continue  # the models skip such a tick and keep the interval open
         for cid in tick.open_orders:
             order = orders.get(cid)
@@ -139,7 +180,7 @@ def evaluations(recording: RecordedSession) -> dict[str, list[Evaluation]]:
             else:
                 event = fill_at is not None and fill_at <= tick.at
             out.setdefault(cid, []).append(
-                Evaluation(cid, tick.seq, tick.at, crossed, distance, dt, event)
+                Evaluation(cid, tick.seq, tick.at, crossed, distance, dt, event, volatility)
             )
     return out
 
@@ -152,7 +193,11 @@ def calibration_intervals(recording: RecordedSession) -> list[CalibrationInterva
         for look in looks:
             if look.crossed or look.event is None:
                 continue
-            out.append(CalibrationInterval(sid, cid, look.dt_sec, look.distance_bps, look.event))
+            out.append(
+                CalibrationInterval(
+                    sid, cid, look.dt_sec, look.distance_bps, look.event, look.volatility
+                )
+            )
     return out
 
 

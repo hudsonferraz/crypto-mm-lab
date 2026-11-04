@@ -116,6 +116,10 @@ def _fill_calibration_config(path: str) -> dict:
                 "touch_rate_per_sec": calibration.touch_rate_per_sec,
                 "decay_bps": calibration.decay_bps,
                 "distance_range_bps": calibration.distance_range_bps,
+                # specs/007: the volatility term, when the shipped form uses it.
+                "form": "volatility" if calibration.uses_volatility else "base",
+                "volatility_exponent": calibration.volatility_exponent,
+                "volatility_reference": calibration.volatility_reference,
             }
             if calibration is not None
             else None

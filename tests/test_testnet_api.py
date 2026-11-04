@@ -220,14 +220,42 @@ def test_calibration_endpoint_serves_the_file(monkeypatch, tmp_path) -> None:
         config = client.get("/config").json()
     assert body["testnet_only"] is True and body["available"] is True
     assert body["calibration"]["touch_rate_per_sec"] == 0.01
-    assert set(body["explanations"]) == {"D1", "D2", "D3", "D4", "D5", "D6", "trades"}
+    assert set(body["explanations"]) == {
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D6",
+        "trades",
+        "volatility",
+        "volatility_measure",
+        "volatility_gate",
+        "volatility_sessions",
+    }
+    assert body["form_in_use"] == "base"
     curve = {p["distance_bps"]: p for p in body["rate_curve"]}
     assert curve[1]["extended"] is False and curve[15]["extended"] is True  # FR-015
     assert curve[0.5]["fill_chance_per_tick"] > curve[3]["fill_chance_per_tick"] > 0
+    assert curve[1]["fill_chance_calm"] is None  # base form: no volatility columns
     assert config["fill_calibration_available"] is True
     assert config["fill_calibration"]["distance_range_bps"] == [0.5, 3.0]
+    assert config["fill_calibration"]["form"] == "base"
     text = json.dumps(body)
     assert str(tmp_path) not in text and "http" not in text
+
+
+def test_calibration_endpoint_with_the_volatility_form(monkeypatch, tmp_path) -> None:
+    # specs/007 FR-012: the form in use, k, and the curve at calm and busy volatility.
+    data = {**CALIBRATION, "format": 2, "volatility_exponent": 0.5, "volatility_reference": 0.6}
+    with _client_with_calibration(monkeypatch, tmp_path, data) as client:
+        body = client.get("/testnet/calibration").json()
+        config = client.get("/config").json()
+    assert body["form_in_use"] == "volatility"
+    point = next(p for p in body["rate_curve"] if p["distance_bps"] == 1)
+    assert point["fill_chance_calm"] < point["fill_chance_per_tick"] < point["fill_chance_busy"]
+    assert config["fill_calibration"]["volatility_exponent"] == 0.5
+    assert config["fill_calibration"]["form"] == "volatility"
 
 
 def test_calibration_endpoint_without_a_file(monkeypatch, tmp_path) -> None:

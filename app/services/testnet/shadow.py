@@ -15,8 +15,8 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime
 
-from app.execution.fill_calibration import FillCalibration
-from app.execution.fill_model import FillMode, OpenQuote, detect_fills
+from app.execution.fill_calibration import FillCalibration, VolatilityTracker
+from app.execution.fill_model import FillMode, OpenQuote, detect_fills, snapshot_mid
 from app.models.domain import OrderBookSnapshot, Quote, QuoteSide
 from app.models.testnet import ShadowFill, TestnetOrder
 
@@ -48,6 +48,7 @@ class ShadowBook:
         self._latency = fill_latency_ticks
         self._probability = fill_probability
         self._calibration = calibration
+        self._volatility = VolatilityTracker()  # specs/007 D2
         self._quotes: dict[str, OpenQuote] = {}
         self.filled: dict[str, float] = {}
 
@@ -59,6 +60,9 @@ class ShadowBook:
         tick_seq: int,
         session_id: str,
     ) -> list[ShadowFill]:
+        # Every snapshot feeds the volatility measure, even one with no order to evaluate,
+        # so replay and the live shadow see the same history (specs/007 FR-002).
+        volatility = self._volatility.update(snapshot.timestamp, snapshot_mid(snapshot))
         live_ids = {order.client_order_id for order in orders}
         self._quotes = {cid: q for cid, q in self._quotes.items() if cid in live_ids}
         batch: list[OpenQuote] = []
@@ -92,6 +96,7 @@ class ShadowBook:
             fill_probability=self._probability,
             tick_index=tick_seq,
             calibration=self._calibration,
+            volatility=volatility,
         )
         out: list[ShadowFill] = []
         for fill in fills:

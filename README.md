@@ -28,7 +28,7 @@ This is an **education and research project** — useful for exploring MM mechan
 - **Solidity flash-arbitrage executor** — an owner-only contract that captures a V2/V3 price gap in one transaction through a Uniswap V3 flash swap. Tested against the real Uniswap V2 and V3 core contracts: unit, fuzz (1,000 runs per property) and invariant tests, 100% branch coverage, a gas gate, and an opt-in mainnet-fork suite whose profit matches QuoterV2 exactly
 - **Scanner checked against the contract** — every tick, the best V2-vs-V3 trade is simulated against live mainnet state with a read-only `eth_call` (no deploy, no key, no cost). The scanner's estimate matches the simulation to the unit, and the dashboard explains every result
 - **Mempool watcher** — follows pending mainnet transactions on a free keyless websocket, decodes swaps on the two pools (direct calls, V2 router, V3 swap routers, Universal Router), predicts their price impact with the same exact math, and verifies each prediction against its block. Pool state is rolled forward from the pools' own events and matched a fresh chain read after 60 blocks with zero drift; every real swap replayed from those blocks is reproduced with zero math error
-- **Binance spot testnet execution** — with a free key, the strategy places real post-only orders on the testnet (fake money, host fixed in code), reconciles every order with the exchange, and compares each paper fill model with the real fills on identical snapshots. Four recorded 30-minute sessions ship for the keyless demo. They found the paper models too pessimistic (50% fill rate vs 67% real), so a fourth model, `calibrated_fill`, is fitted on them: held out one session at a time, it is the closest model to the real fill count in 4 of 4 sessions, with half the error
+- **Binance spot testnet execution** — with a free key, the strategy places real post-only orders on the testnet (fake money, host fixed in code), reconciles every order with the exchange, and compares each paper fill model with the real fills on identical snapshots. Eight recorded 30-minute sessions ship for the keyless demo. They found the paper models too pessimistic (50% fill rate vs 67% real), so a fourth model, `calibrated_fill`, is fitted on them: held out one session at a time, it is the closest model to the real fill count in 8 of 8 sessions, with about half the error. A volatility term was tested against a rule fixed in advance and not adopted
 - **CEX/DEX analytics** — Uniswap V2 pool reader, V2 + V3 arbitrage scanner (exact V3 output, net-edge-maximizing size), labeled USDT/USDC basis notes
 - **Backtesting** — replay from SQLite/Postgres snapshots or CSV fixtures; Sharpe-like ratio, drawdown, fill rate
 - **Observability** — Prometheus `/metrics`, Grafana dashboard, structured logging, `last_error` on `/status`
@@ -170,7 +170,7 @@ docker compose up --build
 | `GET /testnet/balances` | Virtual testnet slice, PnL at the testnet mid, and the account totals |
 | `GET /testnet/comparison` | Per fill model: fill rate real vs paper, matched / paper only / real only / neither, time to fill, PnL gap (`?window_minutes=60`) |
 | `GET /testnet/sessions` | Testnet sessions and why they ended |
-| `GET /testnet/calibration` | The fitted `calibrated_fill` parameters, their source sessions, the leave-one-session-out results, the fill-chance curve and the D1–D6 explanations |
+| `GET /testnet/calibration` | The fitted `calibrated_fill` parameters and the form in use, their source sessions, the leave-one-session-out results for both forms and the gate, the fill-chance curve (with calm and busy columns when the volatility form is in use) and the explanations |
 | `POST /kill-switch` | Enable/disable kill switch (`{"active": true}`) |
 | `GET /dashboard` | Static monitoring UI |
 
@@ -352,25 +352,54 @@ chance = 1 - exp(-rate * seconds since last look),   rate = touch_rate * exp(-di
 `distance_bps` is how far the quote sits from the best price on the other side. The two parameters are fitted by maximum likelihood on every (snapshot, open order) look in the recorded sessions. The fit is stored in [app/execution/fill_calibration.json](app/execution/fill_calibration.json) with its sources and its validation, and refitted with one command, no key or network needed:
 
 ```bash
-python scripts/calibrate_fill_model.py      # replays every recording, fits, validates, writes the file (under 1 s)
+python scripts/calibrate_fill_model.py      # replays every recording, fits both forms, validates, writes the file (about 3 s)
 ```
 
-Evidence (2026-11-03, 4 real testnet sessions of 30 min each on BTCUSDT; each row is fitted on the other three sessions and judged on that one):
+Evidence (8 real testnet sessions of 30 min each on BTCUSDT: four at 2, 2, 4 and 6 bps on the evening of 2026-11-03, and four alternating 6, 2, 6 and 2 bps on the morning of 2026-11-04; each row is fitted on the other seven sessions and judged on that one):
 
 | Session | Spread | Orders | Real fills | `full_cross_fill` / `partial_fill` | `latency_prob_fill` | `calibrated_fill` (expected / drawn) |
 |---|---|---|---|---|---|---|
-| 6a1aca | 2 bps | 52 | 35 | 26 | 0 | 34.6 / 35 |
-| 5117df | 2 bps | 77 | 44 | 33 | 0 | 43.3 / 41 |
-| b2127d | 4 bps | 105 | 58 | 32 | 0 | 38.9 / 39 |
-| ce7562 | 6 bps | 92 | 45 | 25 | 0 | 32.3 / 35 |
-| **Mean error** | | | | **16.5** | 45.5 | **8.2** (expected) |
+| 6a1aca | 2 bps | 52 | 35 | 26 | 0 | 37.7 / 37 |
+| 5117df | 2 bps | 77 | 44 | 33 | 0 | 49.3 / 44 |
+| b2127d | 4 bps | 105 | 58 | 32 | 0 | 45.7 / 47 |
+| ce7562 | 6 bps | 92 | 45 | 25 | 0 | 37.0 / 44 |
+| 426494 | 6 bps | 55 | 24 | 3 | 0 | 16.8 / 12 |
+| eca4c8 | 2 bps | 101 | 60 | 5 | 0 | 28.5 / 27 |
+| f0af28 | 6 bps | 95 | 52 | 0 | 0 | 14.8 / 11 |
+| ef78ea | 2 bps | 104 | 65 | 2 | 0 | 28.8 / 31 |
+| **Mean error** | | | | **32.1** | 47.9 | **17.5** (expected) |
 
-- Fitted on all four sessions: `touch_rate` 0.0092 per second, `decay` 4.1 bps, from 3,967 looks and 66 fills the snapshots did not show.
-- The hand-written models never filled an order the real engine left alone, in any of the four sessions. Every gap is a fill they missed.
-- Replay is exact: rebuilding each recording's snapshots reproduces every stored paper fill, so older recordings are scored by the new model too.
-- Cost: about 16 µs more per tick, against a tick p95 of about 7 s.
+- Fitted on all eight sessions: `touch_rate` 0.0236 per second, `decay` 2.2 bps, from 8,067 looks and 237 fills the snapshots did not show. Held out, `calibrated_fill` is the closest model in 8 of 8 sessions.
+- The hand-written models never filled an order the real engine left alone, in any session. Every gap is a fill they missed.
+- Replay is exact: rebuilding each recording's snapshots reproduces every stored paper fill, `calibrated_fill` included, with the calibration that recording used.
+- Cost: about 11 µs more per tick than `full_cross_fill`, volatility tracker included, against a tick p95 of about 7 s.
 - **Limit: the count gets closer, the PnL gap does not yet.** On the first session, `calibrated_fill` matches 29 real fills but also fills 3 orders the real engine left alone and misses 6. Fills on different orders move inventory differently, so its paper PnL gap there is $0.44, against $0.09 for `full_cross_fill`.
-- **Limit:** one rate curve for all spreads still undershoots the 4 bps session (39 against 58 real). The default `FILL_MODE` stays `full_cross_fill`; choose `calibrated_fill` in the loop, backtests or sweeps when you want the testnet-fitted estimate. The calibration describes the testnet's thin, bot-driven flow, not mainnet.
+- **Limit: sessions differ by more than spread.** The morning sessions had about twice the fills either fitted form expected (60 real against 28.5 expected at 2 bps), while the evening ones were close. The default `FILL_MODE` stays `full_cross_fill`; choose `calibrated_fill` in the loop, backtests or sweeps when you want the testnet-fitted estimate. The calibration describes the testnet's thin, bot-driven flow, not mainnet.
+
+#### Volatility term: tested, not adopted
+
+In the first four sessions the fills the snapshots missed rose with how much the market moved (9, 11, 26 and 20 missed fills at 0.65, 1.11, 2.11 and 1.83 bps of mid move per snapshot), not with the spread. Those sessions were recorded in spread order in one evening, so spread and volatility could not be told apart. The four morning sessions alternate spreads back to back to separate them, and a second form was fitted:
+
+```
+rate = touch_rate * exp(-distance_bps / decay_bps) * (volatility / typical volatility)^k
+```
+
+Volatility is the mid's realized movement over the last 60 seconds of snapshots, in bps per square root of a second, so it reads the same at any snapshot rate. It is computed identically in backtests, the paper loop and the testnet shadows. The rule was fixed before the morning data came in: the form ships only if it predicts at least 6 of 8 held-out sessions better (log-likelihood of every look at every order) and k is above zero.
+
+| Session | Spread | Volatility (bps/√s) | Fills the snapshots missed | Score, base | Score, with volatility |
+|---|---|---|---|---|---|
+| 6a1aca | 2 bps | 0.25 | 9 | -73.4 | **-69.5** |
+| 5117df | 2 bps | 0.40 | 11 | -73.2 | **-71.5** |
+| b2127d | 4 bps | 1.07 | 26 | **-114.0** | -115.3 |
+| ce7562 | 6 bps | 0.84 | 20 | **-95.4** | -95.9 |
+| 426494 | 6 bps | 0.45 | 20 | -90.4 | -90.4 |
+| eca4c8 | 2 bps | 0.53 | 55 | -211.9 | **-211.4** |
+| f0af28 | 6 bps | 0.70 | 40 | -176.6 | **-175.1** |
+| ef78ea | 2 bps | 0.58 | 56 | **-217.2** | -218.5 |
+
+- **Result: 4 of 8, short of the 6 needed, so the base form stays.** Fitted on all eight sessions, k is 0.26: positive, but small, and it does not carry to unseen sessions.
+- In the morning, volatility stayed in a narrow band (0.45 to 0.70) while missed fills ranged from 20 to 56, and the 2 bps sessions missed more than the 6 bps ones. The distance term already covers that. What neither form explains is the level: the whole morning filled about twice as often as the evening.
+- The code stays: the calibration file can carry k, the dashboard shows both forms and the gate, and each new recording stores the calibration its shadow used. A future fit can pass the gate without code changes.
 
 ### Why it's built this way
 
@@ -380,7 +409,7 @@ Evidence (2026-11-03, 4 real testnet sessions of 30 min each on BTCUSDT; each ro
 - **Maker-only orders, existing limits, a kill switch that cancels.** Quotes are `LIMIT_MAKER` orders rounded to the exchange's tick and lot rules, so they can only add liquidity, as the paper model assumes. A quote that would cross the book is rejected by the exchange and counted, never resent as a taking order. The kill switch cancels every lab order and confirms with the exchange that none remain.
 - **Fill-model accuracy, not testnet profit.** Testnet flow is thin and mostly bots copying mainnet prices. How the engine treats an order is real; how much a strategy earns there is not, so testnet PnL is labeled and never presented as a result.
 - **Reconcile, never assume.** Orders are tagged `mmlab-<session>-<n>`, so the lab only touches its own. Lost answers are resolved from the exchange, and a cancel that arrives after a fill keeps the fill. Leftovers from a crashed run are cancelled at start. A testnet reset (orders and history wiped) starts a new session, so statistics never span one.
-- **A fitted model, judged on sessions it never saw.** A fill chance tuned to the same session it is scored on would look better than it is. The calibration leaves each session out in turn, and the goal (closest model in at least 3 of 4 held-out sessions) is checked by the command and in CI. A model driven by the public trade feed was rejected: backtests have no trade feed, and on the testnet our own order often absorbs the very trade the model would need.
+- **A fitted model, judged on sessions it never saw.** A fill chance tuned to the same session it is scored on would look better than it is. The calibration leaves each session out in turn, and the goal (closest model in at least three quarters of the held-out sessions) is checked by the command and in CI. A model driven by the public trade feed was rejected: backtests have no trade feed, and on the testnet our own order often absorbs the very trade the model would need.
 - **Beside the loop, within the limits.** The trader has its own task and HTTP client. It uses about 31 request weight per 2-second cycle, roughly 15% of the limit, and slows down above 70% of it.
 
 ## Architecture
@@ -400,7 +429,7 @@ This project is a **paper-trading lab**, not a production market-making system. 
   - `partial_fill` — same trigger, but fill size is capped by opposing top-of-book depth.
   - Neither mode models queue position, order-flow priority, or latency.
   - `latency_prob_fill` (toy) — a quote fills only after the book has crossed it for `FILL_LATENCY_TICKS` ticks in a row, and then with probability `FILL_PROBABILITY`. A crossed quote stays resting (it is not replaced) until it fills or the cross ends.
-  - `calibrated_fill` — a crossed quote fills as in `full_cross_fill`; an uncrossed quote also fills with a chance that grows with the time since it was last checked and falls with its distance from the other side of the book. The two parameters come from `FILL_CALIBRATION_PATH`, fitted on real testnet sessions ([Fill-model calibration](#fill-model-calibration)). The draw is seeded by the quote's side, price and time, so runs repeat exactly. Without a calibration file it behaves as `full_cross_fill`.
+  - `calibrated_fill` — a crossed quote fills as in `full_cross_fill`; an uncrossed quote also fills with a chance that grows with the time since it was last checked and falls with its distance from the other side of the book. The two parameters come from `FILL_CALIBRATION_PATH`, fitted on real testnet sessions ([Fill-model calibration](#fill-model-calibration)). The draw is seeded by the quote's side, price and time, so runs repeat exactly. Without a calibration file it behaves as `full_cross_fill`. A calibration file may also set a volatility exponent, which scales the rate with the mid's recent movement; the shipped file does not, because that form failed its held-out test ([Volatility term](#volatility-term-tested-not-adopted)).
 - **Quote lifecycle** — resting quotes are replaced each tick (except crossed quotes in `latency_prob_fill`); partial remainders persist only until the next submission. Each quote receives a UUID at submission; fills carry the same ID for audit joins. Every persisted tick receives a shared `tick_id` so operators can reconstruct the full state via `GET /audit/ticks/{tick_id}`.
 
 ### Market data

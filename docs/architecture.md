@@ -149,12 +149,12 @@ Started by the app lifespan when `TESTNET_ENABLED` is on and both free testnet k
 
 ## Fill-model calibration (offline)
 
-`scripts/calibrate_fill_model.py` fits `calibrated_fill` from the recorded sessions in `tests/fixtures/testnet/` (specs/006). It needs no keys and no network.
+`scripts/calibrate_fill_model.py` fits `calibrated_fill` from the recorded sessions in `tests/fixtures/testnet/` (specs/006, specs/007). It needs no keys and no network.
 
-1. **Replay check.** Each recording's ticks are replayed through the shadow books (`app/services/testnet/replay.py`). The replayed fills of the models stored in the recording must equal the stored ones exactly, or the command fails.
-2. **Intervals.** Every look a shadow took at an order becomes an interval: from its previous look to the snapshot, with the order's distance from the other side of the book. Crossed looks are left to the deterministic rule. A look counts as a fill when the order's first real fill fell inside it.
-3. **Fit.** Maximum likelihood for `chance = 1 − exp(−rate·Δt)`, `rate = touch_rate·exp(−distance/decay)`, by Newton's method (`app/services/testnet/calibration.py`).
-4. **Validate.** Leave one session out: fit on the others, predict the held-out session's fills as an expected count and as one replayed draw, next to the other models' counts.
+1. **Replay check.** Each recording's ticks are replayed through the shadow books (`app/services/testnet/replay.py`). The replayed fills of the models stored in the recording must equal the stored ones exactly, or the command fails. `calibrated_fill` is replayed with the calibration the recording used: `notes.calibration`, or for older recordings `tests/fixtures/testnet/calibration/calibrations-used.json`.
+2. **Intervals.** Every look a shadow took at an order becomes an interval: from its previous look to the snapshot, with the order's distance from the other side of the book and the volatility at that snapshot (realized mid movement over the last 60 s, in bps per √s, from the same `VolatilityTracker` each shadow book keeps). Crossed looks are left to the deterministic rule. A look counts as a fill when the order's first real fill fell inside it.
+3. **Fit.** Maximum likelihood for `chance = 1 − exp(−rate·Δt)`, in two forms: the base form `rate = touch_rate·exp(−distance/decay)`, and the volatility form, which multiplies it by `(volatility/reference)^k`. Newton's method on a 2- or 3-parameter system (`app/services/testnet/calibration.py`).
+4. **Validate.** Leave one session out: fit both forms on the others, then score the held-out session's looks (log-likelihood) and predict its fills as an expected count and as one replayed draw, next to the other models' counts. The volatility form is written only if it scores better on at least 75% of held-out sessions and `k > 0` (the gate).
 5. **Write.** `app/execution/fill_calibration.json`, committed. `PaperBroker`, the backtest runner, spread sweeps and the testnet shadows read it through `load_fill_calibration`; without it, `calibrated_fill` behaves as `full_cross_fill`. `GET /testnet/calibration` serves it to the dashboard.
 
 ## Backtest flow

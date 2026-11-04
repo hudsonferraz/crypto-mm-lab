@@ -1,0 +1,44 @@
+{
+  "source": "specs/007 D6: the calibrated_fill parameters each recording's shadow used, for recordings made before the recorder stored them in notes.calibration. null: recorded from code with no calibration file (006 evening, frozen before app/execution/fill_calibration.json existed), so calibrated_fill behaved as full_cross_fill. The parameters: app/execution/fill_calibration.json at commit 2451b9f, which the 007 recordings were made from.",
+  "sessions": {
+    "5117df": null,
+    "b2127d": null,
+    "ce7562": null,
+    "426494": {
+      "touch_rate_per_sec": 0.00924108,
+      "decay_bps": 4.095022,
+      "distance_range_bps": [
+        0.0052,
+        17.2815
+      ],
+      "max_interval_sec": 60.0
+    },
+    "eca4c8": {
+      "touch_rate_per_sec": 0.00924108,
+      "decay_bps": 4.095022,
+      "distance_range_bps": [
+        0.0052,
+        17.2815
+      ],
+      "max_interval_sec": 60.0
+    },
+    "f0af28": {
+      "touch_rate_per_sec": 0.00924108,
+      "decay_bps": 4.095022,
+      "distance_range_bps": [
+        0.0052,
+        17.2815
+      ],
+      "max_interval_sec": 60.0
+    },
+    "ef78ea": {
+      "touch_rate_per_sec": 0.00924108,
+      "decay_bps": 4.095022,
+      "distance_range_bps": [
+        0.0052,
+        17.2815
+      ],
+      "max_interval_sec": 60.0
+    }
+  }
+}

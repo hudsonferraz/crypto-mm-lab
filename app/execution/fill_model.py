@@ -49,6 +49,14 @@ def _deterministic_unit_random(quote_id: str, tick_index: int) -> float:
     return int(digest[:12], 16) / float(0xFFFFFFFFFFFF)
 
 
+def snapshot_mid(snapshot: OrderBookSnapshot) -> float | None:
+    """Mid of the best bid and ask, or None when a side is missing."""
+    bid, ask = best_bid(snapshot), best_ask(snapshot)
+    if bid is None or ask is None:
+        return None
+    return (bid + ask) / 2
+
+
 def detect_fills(
     open_quotes: list[OpenQuote],
     snapshot: OrderBookSnapshot,
@@ -59,6 +67,7 @@ def detect_fills(
     fill_probability: float = 1.0,
     tick_index: int = 0,
     calibration: FillCalibration | None = None,
+    volatility: float | None = None,
 ) -> list[Fill]:
     external_bid = best_bid(snapshot)
     external_ask = best_ask(snapshot)
@@ -95,7 +104,8 @@ def detect_fills(
             else:
                 distance_bps = (quote.price - external_bid) / quote.price * 10_000
             dt_sec = (fill_timestamp - since).total_seconds()
-            chance = calibration.fill_chance(distance_bps, dt_sec)
+            # specs/007 D3: scaled by recent volatility when the calibration has k.
+            chance = calibration.fill_chance(distance_bps, dt_sec, volatility)
             # Keyed on the quote's content, not its id: the paper broker's ids are random,
             # and the same inputs must give the same fills (FR-003).
             draw_key = f"{quote.side.value}:{quote.price!r}:{quote.timestamp.isoformat()}"

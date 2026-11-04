@@ -490,9 +490,20 @@
       </tr></thead>
       <tbody id="tn-cal-heldout"><tr><td colspan="8">Loading...</td></tr></tbody>
     </table>
+    <p class="muted" id="tn-cal-gate"></p>
     <table>
-      <thead><tr><th class="numeric">Distance from the other side</th><th class="numeric">Fill chance per 2 s, uncrossed</th><th>Fitted range?</th></tr></thead>
-      <tbody id="tn-cal-curve"><tr><td colspan="3">Loading...</td></tr></tbody>
+      <thead><tr>
+        <th>Held-out session</th><th class="numeric">Spread</th><th class="numeric">Volatility (bps/√s)</th>
+        <th class="numeric">Fills the snapshots missed</th>
+        <th class="numeric">Base form: expected / drawn</th><th class="numeric">With volatility: expected / drawn</th>
+        <th class="numeric">Score, base</th><th class="numeric">Score, with volatility</th>
+      </tr></thead>
+      <tbody id="tn-cal-forms"><tr><td colspan="8">Loading...</td></tr></tbody>
+    </table>
+    <table>
+      <thead><tr><th class="numeric">Distance from the other side</th><th class="numeric">Fill chance per 2 s, uncrossed</th>
+        <th class="numeric">Calm market (½ typical volatility)</th><th class="numeric">Busy market (2× typical)</th><th>Fitted range?</th></tr></thead>
+      <tbody id="tn-cal-curve"><tr><td colspan="5">Loading...</td></tr></tbody>
     </table>
     <div class="note explain" id="tn-cal-explanations"></div>
 
@@ -1565,6 +1576,10 @@
         D5: "Random but repeatable; expected count shown.",
         D6: "Several spreads, every recording replayed.",
         trades: "What the public trades show.",
+        volatility: "Volatility: tested, not adopted.",
+        volatility_measure: "Measured from the snapshots the model already has.",
+        volatility_gate: "Kept only if it wins on held-out sessions.",
+        volatility_sessions: "Spreads alternated; replay checks every model.",
       };
       document.getElementById("tn-cal-explanations").innerHTML = Object.keys(titles)
         .map((key) => `<p><strong>${titles[key]}</strong> ${esc(payload.explanations[key])}</p>`)
@@ -1573,7 +1588,9 @@
         document.getElementById("tn-cal-summary").textContent =
           `No calibration file: calibrated_fill behaves like full_cross_fill. Create one with ${payload.how_to_calibrate}`;
         document.getElementById("tn-cal-heldout").innerHTML = "<tr><td colspan='8'>No calibration yet</td></tr>";
-        document.getElementById("tn-cal-curve").innerHTML = "<tr><td colspan='3'>No calibration yet</td></tr>";
+        document.getElementById("tn-cal-curve").innerHTML = "<tr><td colspan='5'>No calibration yet</td></tr>";
+        document.getElementById("tn-cal-forms").innerHTML = "<tr><td colspan='8'>No calibration yet</td></tr>";
+        document.getElementById("tn-cal-gate").textContent = "";
         return;
       }
       const range = cal.distance_range_bps || [];
@@ -1581,10 +1598,13 @@
       const v = cal.validation;
       const verdict = v
         ? ` Held out, calibrated_fill was closest to the real count in ${v.calibrated_closest_in} of ${v.held_out.length} sessions` +
-          ` (goal: 3 of 4) — ${v.goal_met ? "goal met" : "goal not met"}.`
+          ` (goal: ${Math.ceil(0.75 * v.held_out.length)}) — ${v.goal_met ? "goal met" : "goal not met"}.`
         : " Leave-one-out needs at least two sessions.";
+      const vol = cal.volatility_exponent === null || cal.volatility_exponent === undefined
+        ? ""
+        : `, scales as (volatility / ${fmt(cal.volatility_reference, 2)} bps/√s)^${fmt(cal.volatility_exponent, 2)}`;
       document.getElementById("tn-cal-summary").textContent =
-        `Fill rate at the touch ${fmt(cal.touch_rate_per_sec, 5)} per second, ${decay}; fitted on ${cal.sources.length} sessions, ` +
+        `Fill rate at the touch ${fmt(cal.touch_rate_per_sec, 5)} per second, ${decay}${vol}; fitted on ${cal.sources.length} sessions, ` +
         `${cal.intervals} intervals, ${cal.events} fills the snapshots missed, distances ${fmt(range[0], 2)} to ${fmt(range[1], 2)} bps.${verdict}`;
       const rows = v ? v.held_out.map((r) => `<tr>
           <td class="mono">${esc(r.session_id)}</td><td class="numeric">${fmt(r.spread_bps, 0)} bps</td>
@@ -1599,8 +1619,28 @@
           <td class="numeric">${fmt(e.latency_prob_fill, 1)}</td><td class="numeric">${fmt(e.calibrated_fill, 1)} (expected)</td></tr>`);
       }
       document.getElementById("tn-cal-heldout").innerHTML = rows.length ? rows.join("") : "<tr><td colspan='8'>Leave-one-out needs at least two sessions</td></tr>";
+      const gate = cal.gate;
+      document.getElementById("tn-cal-gate").textContent = gate
+        ? `Volatility term: scored better on ${gate.held_out_wins} of ${gate.sessions} held-out sessions (needs ${gate.needed}), ` +
+          `k above zero: ${gate.k_positive ? "yes" : "no"} — ${gate.passed ? "kept, in use" : "not kept, base form in use"}. ` +
+          "Score: log-likelihood of every look at every order in the held-out session; higher is better."
+        : "Volatility term: not tested (needs at least two sessions).";
+      document.getElementById("tn-cal-forms").innerHTML = v && v.held_out[0] && v.held_out[0].forms
+        ? v.held_out.map((r) => {
+            const b = r.forms.base, w = r.forms.volatility;
+            const better = w.log_likelihood > b.log_likelihood;
+            return `<tr>
+              <td class="mono">${esc(r.session_id)}</td><td class="numeric">${fmt(r.spread_bps, 0)} bps</td>
+              <td class="numeric">${fmt(r.volatility_bps_sqrt_s, 2)}</td><td class="numeric"><strong>${r.unseen_fills}</strong></td>
+              <td class="numeric">${fmt(b.expected, 1)} / ${b.drawn}</td><td class="numeric">${fmt(w.expected, 1)} / ${w.drawn}</td>
+              <td class="numeric">${fmt(b.log_likelihood, 1)}</td>
+              <td class="numeric">${better ? "<strong>" : ""}${fmt(w.log_likelihood, 1)}${better ? "</strong>" : ""}</td></tr>`;
+          }).join("")
+        : "<tr><td colspan='8'>Not available</td></tr>";
+      const chanceCell = (value) => (value === null || value === undefined ? "—" : pct(value, 2));
       document.getElementById("tn-cal-curve").innerHTML = payload.rate_curve.map((p) => `<tr>
           <td class="numeric">${fmt(p.distance_bps, 1)} bps</td><td class="numeric">${pct(p.fill_chance_per_tick, 2)}</td>
+          <td class="numeric">${chanceCell(p.fill_chance_calm)}</td><td class="numeric">${chanceCell(p.fill_chance_busy)}</td>
           <td>${p.extended ? '<span class="badge badge-warn">extended, not measured</span>' : '<span class="badge badge-ok">calibrated</span>'}</td></tr>`).join("");
     }
 

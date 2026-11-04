@@ -2,8 +2,15 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 
 from app.analytics.inventory import InventoryTracker
-from app.execution.fill_calibration import FillCalibration
-from app.execution.fill_model import FILL_MODE_LATENCY_PROB, FillMode, OpenQuote, detect_fills
+from app.execution.fill_calibration import FillCalibration, VolatilityTracker
+from app.execution.fill_model import (
+    FILL_MODE_CALIBRATED,
+    FILL_MODE_LATENCY_PROB,
+    FillMode,
+    OpenQuote,
+    detect_fills,
+    snapshot_mid,
+)
 from app.execution.quote_ids import assign_quote_id
 from app.models.domain import Fill, OrderBookSnapshot, Quote
 
@@ -37,6 +44,8 @@ class PaperBroker:
         self._fill_latency_ticks = fill_latency_ticks
         self._fill_probability = fill_probability
         self._calibration = calibration
+        # specs/007 D2: recent mid movement, for calibrated_fill's volatility term.
+        self._volatility = VolatilityTracker()
         self._open_quotes: list[OpenQuote] = []
         self._tick_index = 0
         self._inventory = InventoryTracker(
@@ -89,6 +98,9 @@ class PaperBroker:
 
     def apply_fills(self, snapshot: OrderBookSnapshot) -> list[Fill]:
         self._tick_index += 1
+        volatility = None
+        if self._fill_mode == FILL_MODE_CALIBRATED:
+            volatility = self._volatility.update(snapshot.timestamp, snapshot_mid(snapshot))
         fills = detect_fills(
             self._open_quotes,
             snapshot,
@@ -98,6 +110,7 @@ class PaperBroker:
             fill_probability=self._fill_probability,
             tick_index=self._tick_index,
             calibration=self._calibration,
+            volatility=volatility,
         )
         if not fills:
             return []

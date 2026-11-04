@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.config.settings import Settings  # noqa: E402
+from app.execution.fill_calibration import load_fill_calibration  # noqa: E402
 from app.models.testnet import FILL_MODELS  # noqa: E402
 from app.risk.kill_switch import KillSwitch  # noqa: E402
 from app.services.testnet.comparison import compare  # noqa: E402
@@ -115,6 +116,13 @@ async def record(
                 "counters": trader.status.counters,
                 # specs/006: which models' shadow fills are stored; others get replayed.
                 "shadow_models": list(FILL_MODELS),
+                # specs/007 FR-009: the parameters the calibrated_fill shadow used, so
+                # replay can check its stored fills exactly. The trader loads the same file.
+                "calibration": (
+                    cal.params()
+                    if (cal := load_fill_calibration(settings.fill_calibration_path))
+                    else None
+                ),
             },
         )
         text = json.dumps(data)

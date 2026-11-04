@@ -1,4 +1,4 @@
-"""calibrated_fill: the model, the fit, the replay and the validation (specs/006).
+"""calibrated_fill: the model, the fit, the replay and the validation (specs/006, specs/007).
 
 Covers FR-001 to FR-010 and SC-001/SC-002: the fill chance follows FR-002, draws repeat,
 no calibration means full_cross_fill, the Newton fit recovers known parameters, replaying
@@ -20,7 +20,12 @@ from pathlib import Path
 import pytest
 
 from app.config.settings import Settings
-from app.execution.fill_calibration import FillCalibration, calibration_from_dict
+from app.execution.fill_calibration import (
+    FillCalibration,
+    VolatilityTracker,
+    calibration_from_dict,
+    calibration_from_params,
+)
 from app.execution.fill_model import (
     FILL_MODE_CALIBRATED,
     FILL_MODE_FULL_CROSS,
@@ -29,9 +34,11 @@ from app.execution.fill_model import (
 )
 from app.execution.paper_broker import PaperBroker
 from app.models.domain import OrderBookLevel, OrderBookSnapshot, Quote, QuoteSide
-from app.models.testnet import FILL_MODELS
+from app.models.testnet import FILL_MODELS, TestnetOrder
 from app.services.backtest_runner import BacktestRunner
 from app.services.testnet.calibration import (
+    BASE_FORM,
+    VOLATILITY_FORM,
     build_calibration,
     expected_fills,
     fit,
@@ -39,16 +46,22 @@ from app.services.testnet.calibration import (
 )
 from app.services.testnet.recorded import load_recording
 from app.services.testnet.replay import (
+    CALIBRATED_MODEL,
     CalibrationInterval,
     calibration_intervals,
+    checked_models,
     complete_recording,
     evaluations,
     replay_mismatches,
     stored_models,
 )
+from app.services.testnet.shadow import ShadowBook
 
 FIXTURES = Path(__file__).parent / "fixtures" / "testnet"
 RECORDINGS = [FIXTURES / "session.json.gz", *sorted((FIXTURES / "calibration").glob("*.json.gz"))]
+KNOWN = json.loads((FIXTURES / "calibration" / "calibrations-used.json").read_text("utf-8"))[
+    "sessions"
+]
 T0 = datetime(2026, 11, 3, 20, 0, tzinfo=UTC)
 FAST = FillCalibration(touch_rate_per_sec=5.0, decay_bps=None, distance_range_bps=(0.5, 3.0))
 
@@ -146,9 +159,11 @@ def test_calibration_file_validation() -> None:
     good = {"format": 1, "model": "calibrated_fill", "touch_rate_per_sec": 0.01, "decay_bps": 2}
     assert calibration_from_dict(good).decay_bps == 2.0
     for bad in (
-        {**good, "format": 2},
+        {**good, "format": 3},
         {**good, "touch_rate_per_sec": -1},
         {**good, "decay_bps": 0},
+        {**good, "format": 2, "volatility_exponent": 0.5},  # k needs a reference
+        {**good, "format": 2, "volatility_exponent": 0.5, "volatility_reference": 0},
     ):
         with pytest.raises(ValueError):
             calibration_from_dict(bad)
@@ -193,7 +208,10 @@ def test_fit_without_events_is_zero_and_with_rising_rate_has_no_decay() -> None:
 def test_replay_reproduces_every_recording(path: Path) -> None:
     recording = load_recording(str(path))
     assert recording.orders and recording.ticks
-    assert replay_mismatches(recording) == []
+    # specs/007 FR-010: every stored model is checked, calibrated_fill with the
+    # calibration the recording used.
+    assert checked_models(recording, KNOWN) == stored_models(recording)
+    assert replay_mismatches(recording, KNOWN) == []
 
 
 @pytest.mark.parametrize("path", RECORDINGS, ids=lambda p: p.name)
@@ -203,9 +221,16 @@ def test_recordings_hold_no_secrets(path: Path) -> None:
     assert not re.search(r"\b[0-9a-fA-F]{64}\b", text)
 
 
-def test_new_recordings_ship_at_three_spreads() -> None:
-    spreads = sorted(load_recording(str(p)).session.settings["spread_bps"] for p in RECORDINGS[1:])
-    assert spreads == [2.0, 4.0, 6.0]  # SC-005, D6
+def _spreads(paths) -> list[float]:
+    recordings = sorted((load_recording(str(p)) for p in paths), key=lambda r: r.session.started_at)
+    return [r.session.settings["spread_bps"] for r in recordings]
+
+
+def test_new_recordings_ship_at_the_planned_spreads() -> None:
+    evening = [p for p in RECORDINGS[1:] if not p.name.startswith("session-2026")]
+    morning = [p for p in RECORDINGS[1:] if p.name.startswith("session-20261104")]
+    assert sorted(_spreads(evening)) == [2.0, 4.0, 6.0]  # specs/006 SC-005, D6
+    assert _spreads(morning) == [6.0, 2.0, 6.0, 2.0]  # specs/007 FR-001, D5: alternating
 
 
 def test_intervals_follow_research_r4() -> None:
@@ -246,8 +271,16 @@ def _two_sessions():
 def test_leave_one_out_needs_two_sessions() -> None:
     sessions = _two_sessions()
     intervals = {r.session.session_id: calibration_intervals(r) for _, r in sessions}
-    assert leave_one_out(sessions[:1], intervals) is None
-    report = leave_one_out(sessions, intervals)
+    everything = [i for data in intervals.values() for i in data]
+    fits = {
+        BASE_FORM: fit(everything),
+        VOLATILITY_FORM: fit(everything, with_volatility=True),
+    }
+    assert leave_one_out(sessions[:1], intervals, fits) == (None, None)
+    report, gate = leave_one_out(sessions, intervals, fits)
+    assert gate["sessions"] == 2 and gate["needed"] == 2
+    assert report["form"] == (VOLATILITY_FORM if gate["passed"] else BASE_FORM)
+    assert set(report["held_out"][0]["forms"]) == {BASE_FORM, VOLATILITY_FORM}
     assert [row["session_id"] for row in report["held_out"]] == ["6a1aca", "copy01"]
     row = report["held_out"][0]
     assert row["real_fills"] == 35 and row["orders"] == 52
@@ -272,9 +305,23 @@ def test_shipped_calibration_matches_the_recordings() -> None:
     shipped = json.loads(path.read_text(encoding="utf-8"))
     sessions = [(p.name, load_recording(str(p))) for p in RECORDINGS]
     rebuilt = build_calibration(sessions, fitted_at=T0)
-    for key in ("touch_rate_per_sec", "decay_bps", "intervals", "events", "validation"):
+    for key in (
+        "form",
+        "touch_rate_per_sec",
+        "decay_bps",
+        "volatility_exponent",
+        "volatility_reference",
+        "intervals",
+        "events",
+        "forms",
+        "gate",
+        "validation",
+    ):
         assert shipped[key] == rebuilt[key], key
-    assert len(shipped["sources"]) == len(RECORDINGS) >= 4
+    assert len(shipped["sources"]) == len(RECORDINGS) >= 8
+    # specs/007 FR-007: the volatility form ships only when the gate passed.
+    assert (shipped["form"] == VOLATILITY_FORM) == shipped["gate"]["passed"]
+    assert (shipped["volatility_exponent"] is not None) == shipped["gate"]["passed"]
     # SC-003: the calibrated model is closest to real in at least 3 of 4 held-out sessions.
     assert shipped["validation"]["goal_met"] is True
 
@@ -315,3 +362,124 @@ def test_backtest_with_calibrated_fill(tmp_path) -> None:
     assert calibrated >= base
     assert calibrated > 0
     assert run("calibrated_fill") == calibrated
+
+
+# --- the volatility term (specs/007) -----------------------------------------------------
+
+
+def test_volatility_tracker_is_independent_of_the_snapshot_rate() -> None:
+    def measure(step_sec: float) -> float | None:
+        # Moves of +/- sqrt(step) bps per step: 1 bps squared per second at any rate.
+        tracker, mid, value = VolatilityTracker(), 100_000.0, None
+        for i in range(int(60 / step_sec)):
+            value = tracker.update(T0 + timedelta(seconds=i * step_sec), mid)
+            mid *= 1 + (1 if i % 2 else -1) * math.sqrt(step_sec) / 10_000
+        return value
+
+    assert measure(1.0) == pytest.approx(1.0, rel=0.02)
+    assert measure(4.0) == pytest.approx(1.0, rel=0.02)
+
+
+def test_volatility_tracker_window_and_unknown() -> None:
+    tracker = VolatilityTracker()
+    assert tracker.update(T0, 100.0) is None  # one point: unknown
+    assert tracker.update(T0 + timedelta(seconds=1), None) is None  # no mid: not a point
+    assert tracker.update(T0 + timedelta(seconds=2), 100.01) == pytest.approx(math.sqrt(1 / 2))
+    # 70 s on, the old points have left the 60 s window.
+    assert tracker.update(T0 + timedelta(seconds=72), 100.01) is None
+
+
+def test_volatility_factor_follows_fr003() -> None:
+    cal = FillCalibration(0.02, 2.0, volatility_exponent=0.5, volatility_reference=1.0)
+    assert cal.rate(1.0, 4.0) == pytest.approx(2 * cal.rate(1.0, 1.0))  # (4 / 1)^0.5
+    assert cal.rate(1.0, None) == cal.rate(1.0, 1.0)  # unknown: the reference
+    assert cal.rate(1.0, 0.0) == pytest.approx(cal.rate(1.0, 0.01))  # floored at 1%
+    assert cal.fill_chance(1.0, 2.0, 4.0) > cal.fill_chance(1.0, 2.0, 0.25)
+    # FR-004: the 006 form ignores volatility.
+    base = FillCalibration(0.02, 2.0)
+    assert base.fill_chance(1.0, 2.0, 9.0) == base.fill_chance(1.0, 2.0)
+    assert calibration_from_params(cal.params()) == cal
+
+
+def _synthetic_volatility(k: float, n: int, seed: int = 11) -> list[CalibrationInterval]:
+    rng = random.Random(seed)
+    out = []
+    for i in range(n):
+        d, dt = rng.uniform(0.1, 5.0), rng.uniform(1.5, 3.5)
+        v = math.exp(rng.uniform(-1.5, 1.5))
+        r = 0.05 * math.exp(-d / 1.5) * v**k
+        event = rng.random() < 1 - math.exp(-r * dt)
+        out.append(CalibrationInterval("s", f"o{i}", dt, d, event, v))
+    return out
+
+
+def test_fit_recovers_the_volatility_exponent() -> None:
+    result = fit(_synthetic_volatility(0.8, 40_000), with_volatility=True)
+    assert result.volatility_exponent == pytest.approx(0.8, abs=0.12)
+    assert result.decay_bps == pytest.approx(1.5, rel=0.15)
+    flat = fit(_synthetic_volatility(0.0, 40_000), with_volatility=True)
+    assert abs(flat.volatility_exponent) < 0.12
+    assert fit(_synthetic_volatility(0.8, 2_000)).volatility_exponent is None  # base form
+
+
+def _swinging(amplitude_bps: float) -> list[OrderBookSnapshot]:
+    """Snapshots 2 s apart whose mid swings by +/- amplitude around 100,000."""
+    snaps = []
+    for i in range(20):
+        mid = 100_000 * (1 + (amplitude_bps if i % 2 else -amplitude_bps) / 10_000)
+        snaps.append(_snapshot(mid - 5, mid + 5, T0 + timedelta(seconds=2 * (i + 1))))
+    return snaps
+
+
+def test_shadow_fills_more_when_the_market_moves() -> None:
+    # No distance term, so only the measured volatility differs between the two runs.
+    cal = FillCalibration(0.01, None, volatility_exponent=1.0, volatility_reference=1.0)
+
+    def filled(amplitude_bps: float) -> int:
+        count = 0
+        for seed in range(150):
+            book = ShadowBook(
+                CALIBRATED_MODEL,
+                maker_fee_bps=0,
+                fill_latency_ticks=1,
+                fill_probability=1,
+                calibration=cal,
+            )
+            order = TestnetOrder(
+                client_order_id=f"o{seed}",
+                session_id="s",
+                side="bid",
+                price=99_880.0 - seed * 0.01,  # below the low swing: never crossed
+                size=0.001,
+                placed_at=T0,
+                acked_at=T0,
+            )
+            for n, snap in enumerate(_swinging(amplitude_bps)):
+                if book.evaluate(snap, [order], tick_seq=n, session_id="s"):
+                    count += 1
+                    break
+        return count
+
+    calm, busy = filled(0.5), filled(8.0)
+    assert busy > calm
+    assert filled(8.0) == busy  # FR-011: same inputs, same fills
+
+
+def test_paper_broker_fills_more_when_the_market_moves() -> None:
+    # The broker behind the main loop, backtests and sweeps keeps its own tracker (FR-002).
+    cal = FillCalibration(0.01, None, volatility_exponent=1.0, volatility_reference=1.0)
+
+    def filled(amplitude_bps: float) -> int:
+        count = 0
+        for seed in range(150):
+            broker = PaperBroker(
+                "BTC/USDT", 1e9, 0.0, fill_mode=FILL_MODE_CALIBRATED, calibration=cal
+            )
+            broker.submit_quotes(
+                [Quote("BTC/USDT", QuoteSide.BID, 99_880.0 - seed * 0.01, 0.001, T0)]
+            )
+            if any(broker.apply_fills(snap) for snap in _swinging(amplitude_bps)):
+                count += 1
+        return count
+
+    assert filled(8.0) > filled(0.5)

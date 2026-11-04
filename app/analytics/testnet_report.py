@@ -293,9 +293,10 @@ CALIBRATION_EXPLANATIONS: dict[str, str] = {
         "quote's distance from the other side of the book."
     ),
     "D2": (
-        "Its two numbers, the fill rate at the touch and how fast it falls with distance, "
-        "are fitted by maximum likelihood: the values under which the real fills recorded "
-        "on the testnet were most likely. The fit runs offline from the shipped recordings "
+        "Its numbers, the fill rate at the touch, how fast it falls with distance and, in "
+        "the volatility form, how it scales with recent price movement, are fitted by maximum "
+        "likelihood: the values under which the real fills recorded on the testnet were most "
+        "likely. The fit runs offline from the shipped recordings "
         "and is stored in the repository with its sources; the lab never fits while running."
     ),
     "D3": (
@@ -326,20 +327,61 @@ CALIBRATION_EXPLANATIONS: dict[str, str] = {
         "not chosen, because backtests replay snapshots only, and the lab's own order absorbs "
         "the incoming trade exactly when the snapshots miss it."
     ),
+    # specs/007 D1 to D6
+    "volatility": (
+        "Tested, not adopted. In the first four sessions the fills the snapshots miss rose "
+        "with each session's price movement, so a second form scales the fill rate with "
+        "recent volatility (a spread term would have fitted the order those sessions were "
+        "recorded in). Four more sessions, alternating spreads in one morning, did not "
+        "confirm it: the volatility form predicted 4 of 8 held-out sessions better, short "
+        "of the 6 it needed, so the base form stays. The morning sessions had about twice "
+        "the fills either form expected, a session-level difference that volatility does "
+        "not explain."
+    ),
+    "volatility_measure": (
+        "Volatility is the mid's realized movement over the last 60 seconds of snapshots, in "
+        "bps per square root of a second. Per square-root second makes it the same whether "
+        "the book is read every 2 seconds or every 10, so backtests and the testnet measure "
+        "it alike. It needs no trade feed. The rate scales as (volatility / median)^k, so at "
+        "typical volatility the fill rate at the touch keeps its meaning."
+    ),
+    "volatility_gate": (
+        "The volatility form ships only if it predicts held-out sessions better than the "
+        "base form: a higher log-likelihood of every look at every order, in at least three "
+        "quarters of the sessions (6 of 8), with k above zero. The score covers each "
+        "decision, not one count per session, so errors cannot cancel out. If it fails, "
+        "the base form stays and the result is reported anyway."
+    ),
+    "volatility_sessions": (
+        "The newer sessions alternate 6 and 2 bps back to back, so neighbouring sessions "
+        "share market conditions and differ mainly in spread. Each recording now stores the "
+        "calibration its calibrated_fill shadow used, so replay checks every stored model "
+        "exactly, the calibrated one included."
+    ),
 }
 
 HOW_TO_CALIBRATE = "py -3.12 scripts/calibrate_fill_model.py"
 RATE_CURVE_DISTANCES_BPS: tuple[float, ...] = (0.5, 1, 1.5, 2, 3, 4, 5, 7.5, 10, 15)
 RATE_CURVE_INTERVAL_SEC = 2.0
+RATE_CURVE_CALM = 0.5
+RATE_CURVE_BUSY = 2.0
 
 
 def rate_curve(calibration: FillCalibration | None) -> list[dict]:
     if calibration is None:
         return []
+    ref = calibration.volatility_reference if calibration.uses_volatility else None
+
+    def chance(d: float, volatility: float | None) -> float:
+        return round(calibration.fill_chance(d, RATE_CURVE_INTERVAL_SEC, volatility), 6)
+
     return [
         {
             "distance_bps": d,
-            "fill_chance_per_tick": round(calibration.fill_chance(d, RATE_CURVE_INTERVAL_SEC), 6),
+            "fill_chance_per_tick": chance(d, None),
+            # specs/007: at half and twice the typical volatility, when the term is in use.
+            "fill_chance_calm": chance(d, ref * RATE_CURVE_CALM) if ref else None,
+            "fill_chance_busy": chance(d, ref * RATE_CURVE_BUSY) if ref else None,
             "extended": calibration.extended(d),
         }
         for d in RATE_CURVE_DISTANCES_BPS
@@ -352,6 +394,9 @@ def calibration_payload(data: dict | None, calibration: FillCalibration | None) 
         "testnet_only": True,
         "available": data is not None,
         "calibration": data,
+        "form_in_use": (
+            None if calibration is None else "volatility" if calibration.uses_volatility else "base"
+        ),
         "rate_curve": rate_curve(calibration),
         "rate_curve_interval_sec": RATE_CURVE_INTERVAL_SEC,
         "explanations": CALIBRATION_EXPLANATIONS,

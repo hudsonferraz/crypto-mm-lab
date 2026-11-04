@@ -1,17 +1,44 @@
 {
-  "format": 1,
+  "format": 2,
   "model": "calibrated_fill",
-  "touch_rate_per_sec": 0.00924108,
-  "decay_bps": 4.095022,
-  "fitted_at": "2026-11-04T01:14:34.976828+00:00",
-  "intervals": 3967,
-  "events": 66,
-  "log_likelihood": -331.128379,
+  "form": "base",
+  "touch_rate_per_sec": 0.0236166,
+  "decay_bps": 2.22609,
+  "volatility_exponent": null,
+  "volatility_reference": null,
+  "fitted_at": "2026-11-04T13:54:23.259394+00:00",
+  "intervals": 8067,
+  "events": 237,
+  "log_likelihood": -1030.867418,
   "distance_range_bps": [
     0.0052,
-    17.2815
+    55.5765
   ],
   "max_interval_sec": 60.0,
+  "forms": {
+    "base": {
+      "touch_rate_per_sec": 0.0236166,
+      "decay_bps": 2.22609,
+      "volatility_exponent": null,
+      "volatility_reference": null,
+      "log_likelihood": -1030.867418
+    },
+    "volatility": {
+      "touch_rate_per_sec": 0.0251113,
+      "decay_bps": 2.137444,
+      "volatility_exponent": 0.264582,
+      "volatility_reference": 0.584246,
+      "log_likelihood": -1024.298767
+    }
+  },
+  "gate": {
+    "measure": "held-out log-likelihood of the looks",
+    "held_out_wins": 4,
+    "sessions": 8,
+    "needed": 6,
+    "k_positive": true,
+    "passed": false
+  },
   "sources": [
     {
       "session_id": "6a1aca",
@@ -20,7 +47,8 @@
       "minutes": 30.0,
       "orders": 52,
       "intervals": 1090,
-      "events": 9
+      "events": 9,
+      "volatility_bps_sqrt_s": 0.2483
     },
     {
       "session_id": "5117df",
@@ -29,7 +57,8 @@
       "minutes": 30.0,
       "orders": 77,
       "intervals": 989,
-      "events": 11
+      "events": 11,
+      "volatility_bps_sqrt_s": 0.4047
     },
     {
       "session_id": "b2127d",
@@ -38,7 +67,8 @@
       "minutes": 30.0,
       "orders": 105,
       "intervals": 873,
-      "events": 26
+      "events": 26,
+      "volatility_bps_sqrt_s": 1.0711
     },
     {
       "session_id": "ce7562",
@@ -47,11 +77,53 @@
       "minutes": 30.0,
       "orders": 92,
       "intervals": 1015,
-      "events": 20
+      "events": 20,
+      "volatility_bps_sqrt_s": 0.8391
+    },
+    {
+      "session_id": "426494",
+      "file": "session-20261104-1-6bps.json.gz",
+      "spread_bps": 6.0,
+      "minutes": 29.9,
+      "orders": 55,
+      "intervals": 943,
+      "events": 20,
+      "volatility_bps_sqrt_s": 0.4519
+    },
+    {
+      "session_id": "eca4c8",
+      "file": "session-20261104-2-2bps.json.gz",
+      "spread_bps": 2.0,
+      "minutes": 30.0,
+      "orders": 101,
+      "intervals": 1051,
+      "events": 55,
+      "volatility_bps_sqrt_s": 0.5302
+    },
+    {
+      "session_id": "f0af28",
+      "file": "session-20261104-3-6bps.json.gz",
+      "spread_bps": 6.0,
+      "minutes": 29.9,
+      "orders": 95,
+      "intervals": 1010,
+      "events": 40,
+      "volatility_bps_sqrt_s": 0.7013
+    },
+    {
+      "session_id": "ef78ea",
+      "file": "session-20261104-4-2bps.json.gz",
+      "spread_bps": 2.0,
+      "minutes": 30.0,
+      "orders": 104,
+      "intervals": 1096,
+      "events": 56,
+      "volatility_bps_sqrt_s": 0.5825
     }
   ],
   "validation": {
     "method": "leave_one_session_out",
+    "form": "base",
     "held_out": [
       {
         "session_id": "6a1aca",
@@ -62,12 +134,28 @@
           "full_cross_fill": 26,
           "partial_fill": 26,
           "latency_prob_fill": 0,
-          "calibrated_fill": 35
+          "calibrated_fill": 37
         },
-        "calibrated_expected": 34.599,
+        "calibrated_expected": 37.671,
         "params": {
-          "touch_rate_per_sec": 0.01272817,
-          "decay_bps": 3.367139
+          "touch_rate_per_sec": 0.02890287,
+          "decay_bps": 2.051442,
+          "volatility_exponent": null,
+          "volatility_reference": null
+        },
+        "volatility_bps_sqrt_s": 0.2483,
+        "unseen_fills": 9,
+        "forms": {
+          "base": {
+            "expected": 37.671,
+            "drawn": 37,
+            "log_likelihood": -73.365
+          },
+          "volatility": {
+            "expected": 37.22,
+            "drawn": 35,
+            "log_likelihood": -69.4969
+          }
         }
       },
       {
@@ -79,12 +167,28 @@
           "full_cross_fill": 33,
           "partial_fill": 33,
           "latency_prob_fill": 0,
-          "calibrated_fill": 41
+          "calibrated_fill": 44
         },
-        "calibrated_expected": 43.329,
+        "calibrated_expected": 49.291,
         "params": {
-          "touch_rate_per_sec": 0.01045945,
-          "decay_bps": 4.317185
+          "touch_rate_per_sec": 0.02738769,
+          "decay_bps": 2.136011,
+          "volatility_exponent": null,
+          "volatility_reference": null
+        },
+        "volatility_bps_sqrt_s": 0.4047,
+        "unseen_fills": 11,
+        "forms": {
+          "base": {
+            "expected": 49.291,
+            "drawn": 44,
+            "log_likelihood": -73.2393
+          },
+          "volatility": {
+            "expected": 49.123,
+            "drawn": 41,
+            "log_likelihood": -71.5413
+          }
         }
       },
       {
@@ -96,12 +200,28 @@
           "full_cross_fill": 32,
           "partial_fill": 32,
           "latency_prob_fill": 0,
-          "calibrated_fill": 39
+          "calibrated_fill": 47
         },
-        "calibrated_expected": 38.929,
+        "calibrated_expected": 45.67,
         "params": {
-          "touch_rate_per_sec": 0.00677055,
-          "decay_bps": 4.541688
+          "touch_rate_per_sec": 0.02377558,
+          "decay_bps": 2.173283,
+          "volatility_exponent": null,
+          "volatility_reference": null
+        },
+        "volatility_bps_sqrt_s": 1.0711,
+        "unseen_fills": 26,
+        "forms": {
+          "base": {
+            "expected": 45.67,
+            "drawn": 47,
+            "log_likelihood": -114.0158
+          },
+          "volatility": {
+            "expected": 48.494,
+            "drawn": 50,
+            "log_likelihood": -115.3187
+          }
         }
       },
       {
@@ -113,22 +233,170 @@
           "full_cross_fill": 25,
           "partial_fill": 25,
           "latency_prob_fill": 0,
-          "calibrated_fill": 35
+          "calibrated_fill": 44
         },
-        "calibrated_expected": 32.281,
+        "calibrated_expected": 37.013,
         "params": {
-          "touch_rate_per_sec": 0.00878233,
-          "decay_bps": 3.376714
+          "touch_rate_per_sec": 0.02422803,
+          "decay_bps": 2.159571,
+          "volatility_exponent": null,
+          "volatility_reference": null
+        },
+        "volatility_bps_sqrt_s": 0.8391,
+        "unseen_fills": 20,
+        "forms": {
+          "base": {
+            "expected": 37.013,
+            "drawn": 44,
+            "log_likelihood": -95.4286
+          },
+          "volatility": {
+            "expected": 38.277,
+            "drawn": 44,
+            "log_likelihood": -95.8994
+          }
+        }
+      },
+      {
+        "session_id": "426494",
+        "spread_bps": 6.0,
+        "orders": 55,
+        "real_fills": 24,
+        "models": {
+          "full_cross_fill": 3,
+          "partial_fill": 3,
+          "latency_prob_fill": 0,
+          "calibrated_fill": 12
+        },
+        "calibrated_expected": 16.84,
+        "params": {
+          "touch_rate_per_sec": 0.02263122,
+          "decay_bps": 2.375277,
+          "volatility_exponent": null,
+          "volatility_reference": null
+        },
+        "volatility_bps_sqrt_s": 0.4519,
+        "unseen_fills": 20,
+        "forms": {
+          "base": {
+            "expected": 16.84,
+            "drawn": 12,
+            "log_likelihood": -90.3755
+          },
+          "volatility": {
+            "expected": 16.869,
+            "drawn": 14,
+            "log_likelihood": -90.4052
+          }
+        }
+      },
+      {
+        "session_id": "eca4c8",
+        "spread_bps": 2.0,
+        "orders": 101,
+        "real_fills": 60,
+        "models": {
+          "full_cross_fill": 5,
+          "partial_fill": 5,
+          "latency_prob_fill": 0,
+          "calibrated_fill": 27
+        },
+        "calibrated_expected": 28.542,
+        "params": {
+          "touch_rate_per_sec": 0.01852158,
+          "decay_bps": 2.778496,
+          "volatility_exponent": null,
+          "volatility_reference": null
+        },
+        "volatility_bps_sqrt_s": 0.5302,
+        "unseen_fills": 55,
+        "forms": {
+          "base": {
+            "expected": 28.542,
+            "drawn": 27,
+            "log_likelihood": -211.8884
+          },
+          "volatility": {
+            "expected": 30.173,
+            "drawn": 29,
+            "log_likelihood": -211.3603
+          }
+        }
+      },
+      {
+        "session_id": "f0af28",
+        "spread_bps": 6.0,
+        "orders": 95,
+        "real_fills": 52,
+        "models": {
+          "full_cross_fill": 0,
+          "partial_fill": 0,
+          "latency_prob_fill": 0,
+          "calibrated_fill": 11
+        },
+        "calibrated_expected": 14.797,
+        "params": {
+          "touch_rate_per_sec": 0.02570348,
+          "decay_bps": 1.749635,
+          "volatility_exponent": null,
+          "volatility_reference": null
+        },
+        "volatility_bps_sqrt_s": 0.7013,
+        "unseen_fills": 40,
+        "forms": {
+          "base": {
+            "expected": 14.797,
+            "drawn": 11,
+            "log_likelihood": -176.5781
+          },
+          "volatility": {
+            "expected": 15.669,
+            "drawn": 11,
+            "log_likelihood": -175.128
+          }
+        }
+      },
+      {
+        "session_id": "ef78ea",
+        "spread_bps": 2.0,
+        "orders": 104,
+        "real_fills": 65,
+        "models": {
+          "full_cross_fill": 2,
+          "partial_fill": 2,
+          "latency_prob_fill": 0,
+          "calibrated_fill": 31
+        },
+        "calibrated_expected": 28.827,
+        "params": {
+          "touch_rate_per_sec": 0.01930747,
+          "decay_bps": 2.606457,
+          "volatility_exponent": null,
+          "volatility_reference": null
+        },
+        "volatility_bps_sqrt_s": 0.5825,
+        "unseen_fills": 56,
+        "forms": {
+          "base": {
+            "expected": 28.827,
+            "drawn": 31,
+            "log_likelihood": -217.1988
+          },
+          "volatility": {
+            "expected": 30.506,
+            "drawn": 33,
+            "log_likelihood": -218.4618
+          }
         }
       }
     ],
     "mean_abs_error": {
-      "full_cross_fill": 16.5,
-      "partial_fill": 16.5,
-      "latency_prob_fill": 45.5,
-      "calibrated_fill": 8.215
+      "full_cross_fill": 32.125,
+      "partial_fill": 32.125,
+      "latency_prob_fill": 47.875,
+      "calibrated_fill": 17.534
     },
-    "calibrated_closest_in": 4,
+    "calibrated_closest_in": 8,
     "goal_met": true
   }
 }

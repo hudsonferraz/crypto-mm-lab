@@ -300,6 +300,28 @@ Recordings exist at the main loop's distances, or the market-data feed carries t
 
 ---
 
+## Volatility term for the calibrated fill: gated on held-out sessions, not adopted
+
+**Context**
+In the first four testnet sessions, the fills the snapshots missed rose with how much the market moved, not with the spread. Those sessions were recorded in spread order during one evening, so spread and volatility were confounded.
+
+**Decision**
+- Four more sessions alternate 6 and 2 bps back to back, so neighbouring sessions share market conditions and differ mainly in spread.
+- A second form multiplies the rate by `(volatility / reference)^k`. Volatility is the mid's realized movement over the last 60 s of snapshots, in bps/√s, so it does not depend on the snapshot rate. The same tracker runs in backtests, the paper loop, the testnet shadows and replay.
+- The gate was fixed before the new data arrived: the form ships only if its held-out log-likelihood is higher in at least three quarters of the sessions and k is above zero. Otherwise the base form ships and the result is still reported.
+- Each recording now stores the calibration its `calibrated_fill` shadow used, and older recordings are mapped in a committed file, so replay checks every stored model exactly.
+
+**Result**
+4 of 8 sessions, short of the 6 needed: the base form ships, refitted on all eight sessions. In the morning, volatility stayed in a narrow band while missed fills varied widely, and the whole morning filled about twice as often as the evening. That session-level difference is not explained by either form.
+
+**Trade-off**
+The code for the volatility form stays, unused by the shipped file, so a future fit can adopt it without code changes. The cost is a small tracker per book (about 11 µs per tick in total for the calibrated model).
+
+**Revisit when**
+More sessions span different times of day, or a session-level measure (trade rate, time of day) is available in both backtests and the testnet.
+
+---
+
 ## Testnet trader: reconcile, never assume
 
 **Context**
