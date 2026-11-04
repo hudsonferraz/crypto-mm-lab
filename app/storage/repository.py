@@ -740,18 +740,13 @@ class Repository:
     def get_latest_opportunities(self, limit: int = 10) -> list[Opportunity]:
         with self._session() as session:
             rows = (
-                session.query(OpportunityRow)
-                .order_by(OpportunityRow.id.desc())
-                .limit(limit)
-                .all()
+                session.query(OpportunityRow).order_by(OpportunityRow.id.desc()).limit(limit).all()
             )
             return [_opportunity_from_row(row) for row in rows]
 
     def get_latest_fills(self, limit: int = 20) -> list[Fill]:
         with self._session() as session:
-            rows = (
-                session.query(FillRow).order_by(FillRow.id.desc()).limit(limit).all()
-            )
+            rows = session.query(FillRow).order_by(FillRow.id.desc()).limit(limit).all()
         return [
             Fill(
                 symbol=row.symbol,
@@ -769,10 +764,7 @@ class Repository:
     def get_pnl_history(self, limit: int = 200) -> list[PnLSnapshot]:
         with self._session() as session:
             rows = (
-                session.query(PnLSnapshotRow)
-                .order_by(PnLSnapshotRow.id.desc())
-                .limit(limit)
-                .all()
+                session.query(PnLSnapshotRow).order_by(PnLSnapshotRow.id.desc()).limit(limit).all()
             )
         return [
             PnLSnapshot(
@@ -796,18 +788,10 @@ class Repository:
             )
             quote_rows = session.query(QuoteRow).filter(QuoteRow.tick_id == tick_id).all()
             fill_rows = session.query(FillRow).filter(FillRow.tick_id == tick_id).all()
-            position_rows = (
-                session.query(PositionRow).filter(PositionRow.tick_id == tick_id).all()
-            )
-            pnl_rows = (
-                session.query(PnLSnapshotRow)
-                .filter(PnLSnapshotRow.tick_id == tick_id)
-                .all()
-            )
+            position_rows = session.query(PositionRow).filter(PositionRow.tick_id == tick_id).all()
+            pnl_rows = session.query(PnLSnapshotRow).filter(PnLSnapshotRow.tick_id == tick_id).all()
             opportunity_rows = (
-                session.query(OpportunityRow)
-                .filter(OpportunityRow.tick_id == tick_id)
-                .all()
+                session.query(OpportunityRow).filter(OpportunityRow.tick_id == tick_id).all()
             )
             v3_rows = (
                 session.query(V3PoolSnapshotRow).filter(V3PoolSnapshotRow.tick_id == tick_id).all()
@@ -1048,9 +1032,7 @@ class Repository:
     ) -> list[dict]:
         """Persisted live V3 snapshots as observation rows (same shape as the CSV fixture)."""
         with self._session() as session:
-            query = session.query(V3PoolSnapshotRow).filter(
-                V3PoolSnapshotRow.data_source == "live"
-            )
+            query = session.query(V3PoolSnapshotRow).filter(V3PoolSnapshotRow.data_source == "live")
             if pool_address is not None:
                 query = query.filter(V3PoolSnapshotRow.pool_address == pool_address)
             if from_timestamp is not None:

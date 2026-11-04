@@ -131,8 +131,7 @@ class FallbackMarketDataSource:
 
         self._using_fallback = True
         self._last_error = (
-            "live CEX book empty/stale; replaying paper fixture "
-            f"{self._fallback.fixture_path}"
+            f"live CEX book empty/stale; replaying paper fixture {self._fallback.fixture_path}"
         )
         return await self._fallback.fetch_orderbook()
 

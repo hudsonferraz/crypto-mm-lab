@@ -46,15 +46,9 @@ def test_repository_loads_pnl_history_chronologically(tmp_path) -> None:
     repo.initialize()
     base_time = datetime(2026, 1, 1, tzinfo=UTC)
 
-    repo.save_pnl_snapshot(
-        PnLSnapshot("BTC/USDT", 0.0, 0.0, 0.0, 0.0, base_time)
-    )
-    repo.save_pnl_snapshot(
-        PnLSnapshot("BTC/USDT", 1.0, 0.5, 0.1, 1.4, base_time.replace(second=1))
-    )
-    repo.save_pnl_snapshot(
-        PnLSnapshot("BTC/USDT", 2.0, 0.0, 0.2, 1.8, base_time.replace(second=2))
-    )
+    repo.save_pnl_snapshot(PnLSnapshot("BTC/USDT", 0.0, 0.0, 0.0, 0.0, base_time))
+    repo.save_pnl_snapshot(PnLSnapshot("BTC/USDT", 1.0, 0.5, 0.1, 1.4, base_time.replace(second=1)))
+    repo.save_pnl_snapshot(PnLSnapshot("BTC/USDT", 2.0, 0.0, 0.2, 1.8, base_time.replace(second=2)))
 
     loaded = repo.get_pnl_history(limit=10)
     assert len(loaded) == 3

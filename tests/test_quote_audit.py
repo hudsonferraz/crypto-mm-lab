@@ -26,9 +26,7 @@ def test_fill_quote_id_joins_to_persisted_quote(tmp_path) -> None:
     repo.initialize()
     now = datetime.now(UTC)
 
-    submitted = broker.submit_quotes(
-        [Quote("BTC/USDT", QuoteSide.BID, 100.0, 0.001, now)]
-    )
+    submitted = broker.submit_quotes([Quote("BTC/USDT", QuoteSide.BID, 100.0, 0.001, now)])
     snapshot = OrderBookSnapshot(
         symbol="BTC/USDT",
         bids=(OrderBookLevel(99.0, 1.0),),

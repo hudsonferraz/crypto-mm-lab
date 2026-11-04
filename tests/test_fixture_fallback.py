@@ -21,8 +21,7 @@ async def test_fixture_replay_cycles_usable_books() -> None:
     assert first.symbol == "BTC/USDT"
     assert first.is_stale is False
     moved = (
-        first.bids[0].price != second.bids[0].price
-        or first.asks[0].price != second.asks[0].price
+        first.bids[0].price != second.bids[0].price or first.asks[0].price != second.asks[0].price
     )
     assert moved is True
 

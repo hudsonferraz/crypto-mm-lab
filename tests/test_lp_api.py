@@ -155,9 +155,7 @@ def test_research_lp_backtest_endpoint(client, tmp_path) -> None:
     payload = response.json()
     assert payload["count"] == 2 and payload["rows"][0]["observation_count"] == 40
     assert client.get("/research/lp-backtest", params={"fixture": "nope.csv"}).status_code == 404
-    bad = client.get(
-        "/research/lp-backtest", params={"fixture": str(path), "widths_bps": "abc"}
-    )
+    bad = client.get("/research/lp-backtest", params={"fixture": str(path), "widths_bps": "abc"})
     assert bad.status_code == 422
     negative = client.get(
         "/research/lp-backtest", params={"fixture": str(path), "widths_bps": "-5"}

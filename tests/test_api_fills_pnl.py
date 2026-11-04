@@ -55,12 +55,8 @@ def test_fills_and_pnl_history_routes(api_client) -> None:
             )
         ]
     )
-    loop.repository.save_pnl_snapshot(
-        PnLSnapshot("BTC/USDT", 0.0, 0.0, 0.0, 0.0, now)
-    )
-    loop.repository.save_pnl_snapshot(
-        PnLSnapshot("BTC/USDT", 1.0, 0.0, 0.1, 0.9, now)
-    )
+    loop.repository.save_pnl_snapshot(PnLSnapshot("BTC/USDT", 0.0, 0.0, 0.0, 0.0, now))
+    loop.repository.save_pnl_snapshot(PnLSnapshot("BTC/USDT", 1.0, 0.0, 0.1, 0.9, now))
 
     fills_response = client.get("/fills?limit=5")
     history_response = client.get("/pnl/history?limit=5")

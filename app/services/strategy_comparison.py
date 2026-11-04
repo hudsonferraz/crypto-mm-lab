@@ -76,8 +76,7 @@ def compare_strategies_from_repository(
 
 def strategy_comparison_to_dicts(comparison: StrategyComparison) -> list[dict]:
     return [
-        {"strategy": row.strategy, **backtest_metrics_dict(row.metrics)}
-        for row in comparison.rows
+        {"strategy": row.strategy, **backtest_metrics_dict(row.metrics)} for row in comparison.rows
     ]
 
 
@@ -109,8 +108,7 @@ def format_strategy_comparison_table(comparison: StrategyComparison) -> str:
         )
 
     widths = [
-        max(len(row[column_index]) for row in table_rows)
-        for column_index in range(len(headers))
+        max(len(row[column_index]) for row in table_rows) for column_index in range(len(headers))
     ]
 
     def format_row(values: tuple[str, ...]) -> str:
@@ -129,9 +127,7 @@ def format_strategy_comparison_table(comparison: StrategyComparison) -> str:
         best_pnl = max(comparison.rows, key=lambda row: row.metrics.total_pnl)
         best_sharpe = max(comparison.rows, key=lambda row: row.metrics.sharpe_ratio)
         lines.append("")
-        lines.append(
-            f"Best total PnL: {best_pnl.strategy} ({best_pnl.metrics.total_pnl:.4f})"
-        )
+        lines.append(f"Best total PnL: {best_pnl.strategy} ({best_pnl.metrics.total_pnl:.4f})")
         lines.append(
             f"Best Sharpe: {best_sharpe.strategy} ({best_sharpe.metrics.sharpe_ratio:.4f})"
         )

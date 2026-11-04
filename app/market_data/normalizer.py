@@ -10,12 +10,10 @@ def normalize_ccxt_orderbook(
     is_stale: bool = False,
 ) -> OrderBookSnapshot:
     bids = tuple(
-        OrderBookLevel(price=float(price), size=float(size))
-        for price, size in raw.get("bids", [])
+        OrderBookLevel(price=float(price), size=float(size)) for price, size in raw.get("bids", [])
     )
     asks = tuple(
-        OrderBookLevel(price=float(price), size=float(size))
-        for price, size in raw.get("asks", [])
+        OrderBookLevel(price=float(price), size=float(size)) for price, size in raw.get("asks", [])
     )
     timestamp_ms = raw.get("timestamp")
     if timestamp_ms is not None:

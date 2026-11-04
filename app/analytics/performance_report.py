@@ -46,9 +46,7 @@ def format_performance_report(
 
     if opportunities:
         latest = opportunities[0]
-        lines.append(
-            f"Opportunity: {latest.direction.value} net_edge={latest.net_edge_bps:.2f}bps"
-        )
+        lines.append(f"Opportunity: {latest.direction.value} net_edge={latest.net_edge_bps:.2f}bps")
 
     if position is not None:
         lines.append(
