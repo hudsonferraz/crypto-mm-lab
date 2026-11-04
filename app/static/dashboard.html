@@ -184,7 +184,7 @@
       <div class="card"><div class="label">Base position</div><div class="value" id="base">-</div></div>
       <div class="card"><div class="label">Quote balance</div><div class="value" id="quote">-</div></div>
       <div class="card"><div class="label">Total PnL</div><div class="value" id="total-pnl">-</div></div>
-      <div class="card"><div class="label">Realized / Unrealized</div><div class="value" id="pnl-breakdown">-</div></div>
+      <div class="card"><div class="label">Realized / Unrealized / Fees</div><div class="value" id="pnl-breakdown">-</div></div>
     </div>
 
     <h2>Equity curve</h2>
@@ -784,7 +784,7 @@
         document.getElementById("quote").textContent = fmt(position.quote_amount, 2);
         document.getElementById("total-pnl").textContent = fmt(pnl.total_pnl, 4);
         document.getElementById("pnl-breakdown").textContent =
-          `${fmt(pnl.realized_pnl, 4)} / ${fmt(pnl.unrealized_pnl, 4)}`;
+          `${fmt(pnl.realized_pnl, 4)} / ${fmt(pnl.unrealized_pnl, 4)} / −${fmt(pnl.total_fees, 4)}`;
 
         renderEquityCurve(pnlHistory.points);
         renderFills(fills.fills);
