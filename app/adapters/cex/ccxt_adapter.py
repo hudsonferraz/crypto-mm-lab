@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 from datetime import UTC, datetime
 
@@ -18,6 +19,19 @@ SPOT_ONLY_OPTIONS = {"binance": {"fetchMarkets": ["spot"]}}
 
 _URL = re.compile(r"https?://\S+")
 _MAX_ERROR_CHARS = 160
+
+
+def load_markets_for(client, exchange_id: str, symbols: list[str]) -> dict:
+    """Load only the markets the caller needs where the exchange allows it.
+
+    Binance lists about 3,700 spot markets; ccxt keeps them all, about 150 MB per
+    client. Its exchangeInfo endpoint takes a `symbols` filter, so a client that
+    reads a few pairs loads only those (specs/009, found after deploy).
+    """
+    if exchange_id == "binance":
+        ids = [symbol.replace("/", "") for symbol in symbols]
+        return client.load_markets(False, {"symbols": json.dumps(ids, separators=(",", ":"))})
+    return client.load_markets()
 
 
 def short_error(error: Exception) -> str:
@@ -44,6 +58,7 @@ class CcxtAdapter:
         self._exchange = exchange_class(config)
         if exchange_id in PUBLIC_MARKET_DATA_HOSTS:
             self._exchange.urls["api"]["public"] = PUBLIC_MARKET_DATA_HOSTS[exchange_id]
+        self._exchange_id = exchange_id
         self._symbol = symbol
         self._orderbook_limit = orderbook_limit
         self._max_retries = max_retries
@@ -59,6 +74,10 @@ class CcxtAdapter:
     async def fetch_orderbook(self) -> OrderBookSnapshot:
         for attempt in range(1, self._max_retries + 1):
             try:
+                if not self._exchange.markets:
+                    await asyncio.to_thread(
+                        load_markets_for, self._exchange, self._exchange_id, [self._symbol]
+                    )
                 raw = await asyncio.to_thread(
                     self._exchange.fetch_order_book,
                     self._symbol,

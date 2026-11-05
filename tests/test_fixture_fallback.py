@@ -113,6 +113,7 @@ async def test_a_failure_reaches_last_error_without_urls() -> None:
         raise ccxt.ExchangeNotAvailable(RESTRICTED)
 
     adapter._exchange.fetch_order_book = blocked
+    adapter._exchange.markets = {"BTC/USDT": {}}  # offline: markets already loaded
     fallback = FixtureReplayAdapter("BTC/USDT", Path("tests/fixtures/orderbook_snapshots.csv"))
     source = FallbackMarketDataSource(adapter, fallback)
     snapshot = await source.fetch_orderbook()
@@ -141,7 +142,51 @@ async def test_a_later_success_clears_the_error() -> None:
         return answer
 
     adapter._exchange.fetch_order_book = flaky
+    adapter._exchange.markets = {"BTC/USDT": {}}  # offline: markets already loaded
     await adapter.fetch_orderbook()
     assert adapter.last_error is not None
     snapshot = await adapter.fetch_orderbook()
     assert snapshot_is_usable(snapshot) and adapter.last_error is None
+
+
+class _MarketsClient:
+    def __init__(self) -> None:
+        self.markets = None
+        self.calls = []
+
+    def load_markets(self, reload=False, params=None):
+        self.calls.append(params)
+        self.markets = {"BTC/USDT": {}}
+        return self.markets
+
+
+def test_binance_loads_only_the_markets_it_reads() -> None:
+    # specs/009, found after deploy: all Binance markets cost about 150 MB per client.
+    from app.adapters.cex.ccxt_adapter import load_markets_for
+
+    client = _MarketsClient()
+    load_markets_for(client, "binance", ["BTC/USDT", "ETH/USDT"])
+    assert client.calls == [{"symbols": '["BTCUSDT","ETHUSDT"]'}]
+    other = _MarketsClient()
+    load_markets_for(other, "kraken", ["BTC/USD"])
+    assert other.calls == [None]
+
+
+@pytest.mark.asyncio
+async def test_the_live_adapter_loads_only_its_own_pair() -> None:
+    from app.adapters.cex.ccxt_adapter import CcxtAdapter
+
+    adapter = CcxtAdapter("binance", "ETH/USDT", max_retries=1, retry_delay_sec=0)
+    client = _MarketsClient()
+    adapter._exchange.markets = None
+    exchange = adapter._exchange
+
+    def load(reload=False, params=None):
+        exchange.markets = client.load_markets(reload, params)
+        return exchange.markets
+
+    exchange.load_markets = load
+    adapter._exchange.fetch_order_book = lambda *_a, **_k: {"bids": [[100, 1]], "asks": [[101, 1]]}
+    await adapter.fetch_orderbook()
+    await adapter.fetch_orderbook()
+    assert client.calls == [{"symbols": '["ETHUSDT"]'}]

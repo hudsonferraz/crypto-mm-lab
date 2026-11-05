@@ -73,6 +73,18 @@ product surface.
   three market lists in about 7 s; they now load in the background when the app
   starts.
 
+### Found after deploy
+
+- **The hosted service did not come back up.** After the merge, Render answered
+  `hibernate-wake-error`. Locally, loading Binance's market list costs about
+  150 MB per ccxt client, because ccxt keeps all ~3,700 spot markets. The live
+  loop already holds two Binance clients (MM pair and compare pair), and the lab
+  added a third, which goes past the free plan's 512 MB. Binance's exchangeInfo
+  takes a `symbols` filter, so every Binance client now loads only the markets
+  it reads: about 4 MB each. The whole app measured about 200 MB after warm-up
+  with the lab and the live loop running (it was well above 400 MB before). The
+  live loop benefits too; its behavior is unchanged.
+
 ## Design Decisions and Why
 
 Each decision is explained to visitors in plain language in the lab itself and
