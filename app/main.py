@@ -1,4 +1,5 @@
 import asyncio
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -24,6 +25,8 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    # specs/009 FR-025: the dashboard says when the (free, sleeping) server just started.
+    app.state.process_started = time.monotonic()
     loop = MarketMakerLoop(settings)
     loop.initialize()
     app.state.market_maker_loop = loop

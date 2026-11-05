@@ -99,6 +99,27 @@ jobs:
       - name: Committed artifact matches the build
         run: python ../scripts/export_executor_artifact.py --check
 
+  memory-budget:
+    # specs/009 FR-026: the hosted demo has 512 MB; an earlier deploy ran out of it.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Start with the hosted settings, warm up, check memory (budget 350 MB)
+        run: python scripts/check_memory_budget.py --budget-mb 350
+
   docker-build:
     runs-on: ubuntu-latest
     timeout-minutes: 20

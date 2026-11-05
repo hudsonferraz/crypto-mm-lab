@@ -21,6 +21,8 @@ This is an **education and research project**, not production trading infrastruc
 | Market making | Pure, inventory-skew and volatility-adjusted strategies, with position caps, a kill switch, backtests and strategy sweeps | [Capabilities](#capabilities) |
 | Engineering | FastAPI, web3.py with Multicall3, Solidity 0.8.28 with Foundry, SQLAlchemy, Prometheus and Grafana; 630+ tests in CI; every design choice written down with its trade-off | [Design decisions](docs/design-decisions.md) |
 
+**Hosted demo:** https://crypto-mm-lab.onrender.com/dashboard. It runs on Render's free plan, which sleeps after about 15 minutes without visitors, so the first load after a quiet spell takes about a minute while it wakes up; the page then says it just started.
+
 Start with the [Quickstart](#quickstart-local): four commands run the whole lab locally, without keys. See also the [simulation assumptions](#simulation-assumptions) and the [interview story](docs/interview-story.md).
 
 ![Demo: the overview, a simulation lab run and a comparison of three runs, then the live market maker, Uniswap V3 LP, flash arbitrage, mempool and testnet sections](docs/images/demo.gif)
@@ -141,6 +143,8 @@ docker compose up --build
 | App + dashboard | [http://localhost:8000/dashboard](http://localhost:8000/dashboard) |
 | Prometheus | [http://localhost:9090](http://localhost:9090) |
 | Grafana | [http://localhost:3000](http://localhost:3000) (admin/admin) |
+
+The app creates missing tables at start but does not migrate existing ones. A Postgres volume from an older version can lack newer columns (`/status` then shows an `UndefinedColumn` error); `docker compose down -v` deletes that volume and its paper data so the next start creates a fresh schema.
 
 ## API
 
@@ -551,12 +555,14 @@ pytest --live tests/test_flash_arb_live.py   # optional: scanner == contract sim
 cd contracts && forge test           # Solidity suite (see Flash-arbitrage executor)
 ```
 
-Coverage is measured on `app/` with **branch coverage** enabled. CI fails under **85%** (suite currently ~**89%** branch / ~**92%** line).
+Coverage is measured on `app/` with **branch coverage** enabled. CI fails under **85%** (suite currently ~**93%** branch).
 
-Regenerate portfolio screenshots and demo GIF (requires a running app for live dashboard captures):
+Regenerate the README images and demo GIF from a running app (headless Chrome or Edge, and Pillow):
 
 ```bash
-python scripts/build_portfolio_assets.py
+python scripts/build_portfolio_assets.py --base http://localhost:8000
+# the replay view needs a second app started with MEMPOOL_MODE=replay
+python scripts/build_portfolio_assets.py --base http://localhost:8001 --mempool-replay
 ```
 
 ## Design decisions
