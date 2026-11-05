@@ -63,7 +63,8 @@ class FakeClient:
         self.trade_id = 0
         self.now_ms = int(T0.timestamp() * 1000)
 
-    def load_markets(self):
+    def load_markets(self, reload=False, params=None):
+        self.load_params = params
         if isinstance(self.markets, Exception):
             raise self.markets
         return self.markets

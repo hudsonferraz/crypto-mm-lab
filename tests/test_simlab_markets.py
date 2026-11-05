@@ -1,3 +1,5 @@
+import json
+
 from app.models.domain import QuoteSide
 from app.simlab.markets import (
     MarketCatalog,
@@ -45,6 +47,13 @@ def test_catalog_keeps_allowlisted_active_spot_pairs() -> None:
     rules = catalog.rules("binance", "BTC/USDT")
     assert rules is not None and rules.price_step == 0.01 and rules.min_cost == 5.0
     assert catalog.rules("binance", "PEPE/USDT") is None
+
+
+def test_catalog_asks_binance_for_the_allowlist_only() -> None:
+    client = FakeClient()
+    MarketCatalog(fake_clients(client)).pairs("binance")
+    ids = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "ADAUSDT", "LTCUSDT", "LINKUSDT"]
+    assert client.load_params == {"symbols": json.dumps(ids, separators=(",", ":"))}
 
 
 def test_catalog_falls_back_to_unverified_allowlist_and_retries() -> None:

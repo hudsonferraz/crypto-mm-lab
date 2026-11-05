@@ -63,3 +63,7 @@ independent of the lab. Phase 6 needs the routes from T010. T026 after T022.
 
 MVP = Phases 1 to 4 (API-complete lab, isolated and bounded), then the operator
 switch, then the dashboard, then polish.
+
+## Phase 8: After deploy
+
+- [X] T028 Load only the needed Binance markets in app/adapters/cex/ccxt_adapter.py (live adapter) and app/simlab/markets.py (catalog); tests in tests/test_fixture_fallback.py and tests/test_simlab_markets.py; measure app memory (spec: Found after deploy)

@@ -12,7 +12,11 @@ from dataclasses import asdict, dataclass
 
 import ccxt
 
-from app.adapters.cex.ccxt_adapter import PUBLIC_MARKET_DATA_HOSTS, SPOT_ONLY_OPTIONS
+from app.adapters.cex.ccxt_adapter import (
+    PUBLIC_MARKET_DATA_HOSTS,
+    SPOT_ONLY_OPTIONS,
+    load_markets_for,
+)
 from app.models.domain import QuoteSide
 
 ALLOWED_BASES = ("BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "LTC", "LINK")
@@ -182,7 +186,7 @@ class MarketCatalog:
         try:
             client, lock = self._clients.get(exchange_id)
             with lock:
-                markets = client.load_markets()
+                markets = load_markets_for(client, exchange_id, allowed)
         except Exception:
             # The edge case in the spec: the list is unknown, so pairs are shown as
             # "not verified"; a recording of a missing pair still fails cleanly.
