@@ -203,6 +203,20 @@ Gas models, MEV, or multi-hop routing require a richer cost stack.
 
 ---
 
+## Simulation lab: per-visitor runs beside a shared live loop
+
+**Decision**: any visitor can run their own paper simulation. The browser holds a random id; runs belong to it and are invisible to other ids. The live loop keeps one pair for everyone; only the operator token can switch it (`POST /live/pair`).
+
+**Why**: a shared loop that visitors could re-point would let one visitor break the demo for everyone. An anonymous id is enough to keep runs apart without logins or personal data.
+
+**Data**: no exchange publishes free history of full order books, so a run either records the live book and public trades for 30 to 120 seconds or replays a bundled real recording (5 minutes each, recorded with the same recorder). Pairs come from an allowlist intersected with the exchange's live market list, and quotes follow the market's price and size steps.
+
+**Fills**: a trade-driven model fills a resting quote when a public trade printed at or through its price, up to that trade's size. It assumes first place in the queue, so it is optimistic; the snapshot models stay available beside it.
+
+**Limits**: the free host gets a bounded queue (2 recordings at once, 10 waiting), one active run per browser, hourly limits per browser and per network address (live recordings and bundled runs counted separately), and a 2-hour in-memory keep time. Recording and simulation run on the lab's own thread pool and clients; two recordings moved the live tick's p95 by +3.6%.
+
+**Trade-off**: runs vanish on restart, and the id is not a security boundary (paper data only). Long-horizon tests from historical candles are left for later.
+
 ## Mempool watcher: pool state rolled forward from events
 
 **Context**

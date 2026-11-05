@@ -12,6 +12,7 @@ from app.execution.fill_model import (
     snapshot_mid,
 )
 from app.execution.quote_ids import assign_quote_id
+from app.execution.trade_fill import detect_trade_fills
 from app.models.domain import Fill, OrderBookSnapshot, Quote
 
 
@@ -112,10 +113,18 @@ class PaperBroker:
             calibration=self._calibration,
             volatility=volatility,
         )
+        return self._book_fills(fills, snapshot.timestamp)
+
+    def apply_trade_fills(self, trades, at: datetime) -> list[Fill]:
+        """Fill resting quotes from real public trades (specs/009 D4, FR-005)."""
+        self._tick_index += 1
+        fills = detect_trade_fills(self._open_quotes, trades, self._maker_fee_bps, at=at)
+        return self._book_fills(fills, at)
+
+    def _book_fills(self, fills: list[Fill], fill_timestamp: datetime) -> list[Fill]:
         if not fills:
             return []
 
-        fill_timestamp = snapshot.timestamp
         fills_by_quote_id = {fill.quote_id: fill for fill in fills}
         updated_open_quotes: list[OpenQuote] = []
         accepted_fills: list[Fill] = []
@@ -158,7 +167,8 @@ class PaperBroker:
         for quote in quotes:
             if quote.side in kept_sides:
                 continue
-            quoted = assign_quote_id(quote)
+            # A caller may name its quotes (the lab does, so replays repeat exactly).
+            quoted = assign_quote_id(quote, quote.quote_id)
             self._open_quotes.append(OpenQuote(quote_id=quoted.quote_id, quote=quoted))
             submitted.append(quoted)
         return submitted

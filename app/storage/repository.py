@@ -744,9 +744,12 @@ class Repository:
             )
             return [_opportunity_from_row(row) for row in rows]
 
-    def get_latest_fills(self, limit: int = 20) -> list[Fill]:
+    def get_latest_fills(self, limit: int = 20, symbol: str | None = None) -> list[Fill]:
         with self._session() as session:
-            rows = session.query(FillRow).order_by(FillRow.id.desc()).limit(limit).all()
+            query = session.query(FillRow)
+            if symbol is not None:
+                query = query.filter(FillRow.symbol == symbol)
+            rows = query.order_by(FillRow.id.desc()).limit(limit).all()
         return [
             Fill(
                 symbol=row.symbol,
@@ -761,11 +764,12 @@ class Repository:
             for row in rows
         ]
 
-    def get_pnl_history(self, limit: int = 200) -> list[PnLSnapshot]:
+    def get_pnl_history(self, limit: int = 200, symbol: str | None = None) -> list[PnLSnapshot]:
         with self._session() as session:
-            rows = (
-                session.query(PnLSnapshotRow).order_by(PnLSnapshotRow.id.desc()).limit(limit).all()
-            )
+            query = session.query(PnLSnapshotRow)
+            if symbol is not None:
+                query = query.filter(PnLSnapshotRow.symbol == symbol)
+            rows = query.order_by(PnLSnapshotRow.id.desc()).limit(limit).all()
         return [
             PnLSnapshot(
                 symbol=row.symbol,

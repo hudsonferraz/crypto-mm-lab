@@ -147,6 +147,18 @@ Started by the app lifespan when `TESTNET_ENABLED` is on and both free testnet k
 4. **Kill switch and stop.** The trader checks the switch every 0.2 s while it waits between cycles. It cancels every tagged order and confirms with the exchange that none remain, showing `cancel_pending` until it can.
 5. **Without keys**, no trader runs. The API serves the recorded session in `tests/fixtures/testnet/session.json.gz`, labeled `recorded`. Fill models newer than the recording are replayed from its stored ticks.
 
+## Simulation lab (beside the loop)
+
+`app/simlab/` (specs/009). Created by the app lifespan when `LAB_ENABLED` is on. It holds no reference to the loop: its own ccxt clients (one per exchange, calls serialized, rate-limited), its own thread pool, and in-memory runs.
+
+1. **Options.** `MarketCatalog` loads each exchange's market list (Binance through `data-api.binance.vision`, Kraken, Coinbase), keeps the allowlisted active spot pairs with their price step, size step and minimums, and caches them for an hour. It is warmed at startup.
+2. **Submit.** `POST /lab/runs` carries the browser's `X-Visitor-Id`. `SimLab` validates the request against the catalog and the bundle index, applies the limits (one active run per visitor; hourly limits per visitor and per network address; a bounded queue), and creates the run.
+3. **Record.** Live runs wait in the queue; a fixed number of workers take them. `record_live` polls the book (10 levels kept) and the public trades every 1 s (Kraken 2 s), dedupes trades by id, and shifts local time onto the exchange clock so books and trades line up.
+4. **Simulate.** `simulate` replays the recording through the chosen strategy, the paper broker and the cash-account risk filter, from a half-base, half-quote start. Quotes are rounded to the market's steps. The trade-driven model fills from the trades between two snapshots (`app/execution/trade_fill.py`); the other models use the broker's snapshot rules. Bundled results are cached by their settings.
+5. **Read.** `GET /lab/runs` and `GET /lab/runs/{id}` return only the visitor's own runs. Runs expire after the keep time; the oldest go first beyond the per-visitor cap.
+
+Bundled recordings live in `app/simlab/recordings/` (gzip JSON plus `index.json`), recorded with `scripts/record_lab_bundle.py`.
+
 ## Fill-model calibration (offline)
 
 `scripts/calibrate_fill_model.py` fits `calibrated_fill` from the recorded sessions in `tests/fixtures/testnet/` (specs/006, specs/007). It needs no keys and no network.

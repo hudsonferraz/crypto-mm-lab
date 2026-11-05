@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 import structlog
 
+from app.adapters.cex.fixture_replay import DEFAULT_FIXTURE_BY_SYMBOL
 from app.adapters.cex.market_data_factory import build_market_data_source
 from app.adapters.dex.multicall import Web3Transport
 from app.adapters.dex.v3_fixture_replay import V3FixtureReplay
@@ -272,7 +273,7 @@ class MarketMakerLoop:
         self._running = True
         self._task = asyncio.create_task(self._run())
 
-    async def stop(self) -> None:
+    async def _stop_task(self) -> None:
         self._running = False
         if self._task is not None:
             self._task.cancel()
@@ -281,9 +282,68 @@ class MarketMakerLoop:
             except asyncio.CancelledError:
                 pass
             self._task = None
+
+    async def stop(self) -> None:
+        await self._stop_task()
         self._data_source.close()
         self._compare_source.close()
         self._repository.close()
+
+    async def switch_symbol(self, symbol: str) -> None:
+        """Operator only: trade another pair from a fresh paper position (specs/009 US4, R10).
+
+        Quote size and the base position limit scale by the price ratio, so the quotes
+        keep about the same value. The switch lasts until restart; SYMBOL wins then.
+        """
+        if symbol == self._settings.symbol:
+            return
+        was_running = self._running
+        await self._stop_task()
+        settings = self._settings
+        new_source = build_market_data_source(
+            settings.exchange,
+            symbol,
+            settings.market_data_mode,
+            # The bundled fixtures belong to their own pairs; another pair gets none.
+            fixture_fallback_enabled=(
+                settings.fixture_fallback_enabled and symbol in DEFAULT_FIXTURE_BY_SYMBOL
+            ),
+        )
+        old_mid = mid_price(self._last_snapshot) if self._last_snapshot is not None else None
+        new_mid = None
+        try:
+            new_mid = mid_price(await new_source.fetch_orderbook())
+        except Exception as error:
+            logger.warning("pair_switch_probe_failed", symbol=symbol, error=str(error))
+        scale = old_mid / new_mid if old_mid and new_mid else 1.0
+        self._settings = settings.model_copy(
+            update={
+                "symbol": symbol,
+                "quote_size": settings.quote_size * scale,
+                "max_position_base": settings.max_position_base * scale,
+                "market_data_fixture_path": None,
+            }
+        )
+        self._data_source.close()
+        self._data_source = new_source
+        self._strategy = build_strategy(self._settings)
+        self._broker = PaperBroker(
+            symbol=symbol,
+            initial_quote_balance=self._settings.initial_quote_balance,
+            maker_fee_bps=self._settings.maker_fee_bps,
+            fill_mode=self._settings.fill_mode,
+            fill_latency_ticks=self._settings.fill_latency_ticks,
+            fill_probability=self._settings.fill_probability,
+            calibration=load_fill_calibration(self._settings.fill_calibration_path),
+        )
+        self._last_snapshot = None
+        self._last_position = None
+        self._last_pnl = None
+        self._last_tick_id = None
+        self._last_error = None
+        logger.info("pair_switched", previous=settings.symbol, symbol=symbol, scale=scale)
+        if was_running:
+            await self.start()
 
     async def run_once(self) -> None:
         await self._tick_once()

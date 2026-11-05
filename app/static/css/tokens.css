@@ -1,0 +1,169 @@
+/* crypto-mm-lab visual system (specs/009 D7, FR-016, FR-017).
+   Roles, not raw colors: components use these names, themes swap the values.
+   Chart colors follow the validated reference palette (dataviz skill). */
+
+:root {
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  --nav-width: 232px;
+  --content-max: 1240px;
+
+  /* Status colors are fixed across themes and always come with a label. */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+}
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --page: #f4f4f1;
+  --surface-1: #fcfcfb;
+  --surface-2: #f1f0ec;
+  --surface-3: #e7e6e0;
+  --border: rgba(11, 11, 11, 0.1);
+  --border-strong: rgba(11, 11, 11, 0.18);
+  --ink-1: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-3: #6b6a65;
+  --accent: #2a78d6;
+  --accent-ink: #ffffff;
+  --accent-text: #1c5cab;
+  --button-bg: #256abf;
+  --replay-text: #a83f16;
+  --accent-wash: rgba(42, 120, 214, 0.1);
+  --focus: #2a78d6;
+  --positive: #006300;
+  --negative: #b42323;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  --series-2-wash: rgba(235, 104, 52, 0.16);
+  --paper-bg: #fff6e0;
+  --paper-border: #d99a00;
+  --paper-ink: #6b4a00;
+  --info-bg: #e8f1fc;
+  --info-border: #2a78d6;
+  --info-ink: #184f95;
+  --error-bg: #fdecec;
+  --error-border: #d03b3b;
+  --error-ink: #8a1f1f;
+  --shadow: 0 1px 2px rgba(11, 11, 11, 0.06), 0 4px 16px rgba(11, 11, 11, 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --surface-2: #222220;
+    --surface-3: #2c2c2a;
+    --border: rgba(255, 255, 255, 0.1);
+    --border-strong: rgba(255, 255, 255, 0.18);
+    --ink-1: #f0efec;
+    --ink-2: #c3c2b7;
+    --ink-3: #9d9c95;
+    --accent: #3987e5;
+    --accent-ink: #ffffff;
+    --accent-text: #6da7ec;
+    --button-bg: #256abf;
+    --replay-text: #ec835a;
+    --accent-wash: rgba(57, 135, 229, 0.16);
+    --focus: #6da7ec;
+    --positive: #3fc23f;
+    --negative: #f08080;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+    --series-2-wash: rgba(217, 89, 38, 0.2);
+    --paper-bg: #2e2510;
+    --paper-border: #b47f00;
+    --paper-ink: #f6d68a;
+    --info-bg: #13243b;
+    --info-border: #3987e5;
+    --info-ink: #b7d3f6;
+    --error-bg: #3a1717;
+    --error-border: #d03b3b;
+    --error-ink: #f6c3c3;
+    --shadow: none;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --surface-2: #222220;
+  --surface-3: #2c2c2a;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --ink-1: #f0efec;
+  --ink-2: #c3c2b7;
+  --ink-3: #9d9c95;
+  --accent: #3987e5;
+  --accent-ink: #ffffff;
+  --accent-text: #6da7ec;
+  --button-bg: #256abf;
+  --replay-text: #ec835a;
+  --accent-wash: rgba(57, 135, 229, 0.16);
+  --focus: #6da7ec;
+  --positive: #3fc23f;
+  --negative: #f08080;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --series-2-wash: rgba(217, 89, 38, 0.2);
+  --paper-bg: #2e2510;
+  --paper-border: #b47f00;
+  --paper-ink: #f6d68a;
+  --info-bg: #13243b;
+  --info-border: #3987e5;
+  --info-ink: #b7d3f6;
+  --error-bg: #3a1717;
+  --error-border: #d03b3b;
+  --error-ink: #f6c3c3;
+  --shadow: none;
+}

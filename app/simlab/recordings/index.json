@@ -1,0 +1,46 @@
+[
+  {
+    "id": "binance-btc-usdt",
+    "label": "Binance BTC/USDT, 5 min, 2026-11-05 12:28 UTC",
+    "exchange": "binance",
+    "symbol": "BTC/USDT",
+    "recorded_at": "2026-11-05T12:28:18.313531+00:00",
+    "duration_sec": 300.2,
+    "snapshot_count": 233,
+    "trade_count": 4471,
+    "file": "binance-btc-usdt.json.gz"
+  },
+  {
+    "id": "binance-eth-usdt",
+    "label": "Binance ETH/USDT, 5 min, 2026-11-05 12:28 UTC",
+    "exchange": "binance",
+    "symbol": "ETH/USDT",
+    "recorded_at": "2026-11-05T12:28:18.619089+00:00",
+    "duration_sec": 300.5,
+    "snapshot_count": 234,
+    "trade_count": 2267,
+    "file": "binance-eth-usdt.json.gz"
+  },
+  {
+    "id": "coinbase-sol-usd",
+    "label": "Coinbase SOL/USD, 5 min, 2026-11-05 12:28 UTC",
+    "exchange": "coinbase",
+    "symbol": "SOL/USD",
+    "recorded_at": "2026-11-05T12:28:16.156393+00:00",
+    "duration_sec": 300.4,
+    "snapshot_count": 300,
+    "trade_count": 373,
+    "file": "coinbase-sol-usd.json.gz"
+  },
+  {
+    "id": "kraken-btc-usd",
+    "label": "Kraken BTC/USD, 5 min, 2026-11-05 12:28 UTC",
+    "exchange": "kraken",
+    "symbol": "BTC/USD",
+    "recorded_at": "2026-11-05T12:28:16.442345+00:00",
+    "duration_sec": 300.3,
+    "snapshot_count": 125,
+    "trade_count": 845,
+    "file": "kraken-btc-usd.json.gz"
+  }
+]

@@ -10,4 +10,4 @@
 
 - [X] T004 Docs: docs/deploy-demo.md, README market-data assumptions, docs/design-decisions.md
 - [X] T005 Full suite, ruff, local live run; commit and push
-- [ ] T006 After deploy, check the hosted /status (SC-001)
+- [X] T006 After deploy, check the hosted /status (SC-001)

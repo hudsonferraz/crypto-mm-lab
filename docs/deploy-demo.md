@@ -6,7 +6,7 @@ Crypto MM Lab can be hosted as a **read-oriented paper demo**. It must never pla
 
 1. Single web process (`uvicorn app.main:app`) with SQLite or managed Postgres.
 2. Set `LOOP_ENABLED=true`, `DEX_ENABLED=true` (or false with UI disabled state).
-3. Set a strong `OPERATOR_API_TOKEN` so `POST /kill-switch` is not public.
+3. Set a strong `OPERATOR_API_TOKEN` so `POST /kill-switch` and `POST /live/pair` are not public.
 4. Prefer not exposing Postgres/Grafana publicly; dashboard + `/metrics` are enough for a portfolio demo.
 5. Keep `MARKET_DATA_MODE=poll` unless you have verified websocket support in the deploy environment.
 
@@ -30,6 +30,7 @@ DB_URL=sqlite:///./data/mm_lab.db
 - [ ] Kill switch confirm works in the dashboard
 - [ ] Opportunities panel shows basis note (USDT vs USDC)
 - [ ] Portfolio demo link updated only after the URL is live
+- [ ] Simulation lab: a bundled run and a short live recording complete on the hosted URL
 
 ## Platforms
 
@@ -46,5 +47,7 @@ Do **not** use Vercel — this app needs a long-running process for the paper MM
 Binance order books are read from `data-api.binance.vision`, Binance's host for public market data. `api.binance.com` answers US addresses, including Render's Oregon region, with HTTP 451 ("restricted location"); the market-data host serves the same spot books there.
 
 If live books still fail, the app **automatically replays bundled fixture order books** so Live MM still shows mids/quotes. The dashboard labels this as fixture replay, not live Binance, and `last_error` on `/status` says why live data failed (for example `ExchangeNotAvailable: ... 451 ... restricted location`).
+
+The **simulation lab** is open to every visitor and needs no setting (`LAB_ENABLED` defaults to on). It reads only public data from Binance (market-data host), Kraken and Coinbase, keeps runs in memory (a free-tier restart clears them), and limits load: 2 recordings at once, 10 waiting, one run at a time per browser, and hourly limits per browser and per network address. The network address is the last `X-Forwarded-For` hop, which Render's proxy adds.
 
 Any other container host that can run the Dockerfile also works (Fly, Railway, etc.). Plug the resulting URL into the portfolio case study when ready.
