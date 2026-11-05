@@ -52,7 +52,7 @@ ccxt clients.
 - [X] T024 Docs: README (lab section, decisions D1 to D6, known limits), docs/design-decisions.md, docs/deploy-demo.md, docs/architecture.md if it lists components (FR-022)
 - [X] T025 Full suite, ruff check and format, coverage gate; local live run on each exchange; two-visitor check; screenshots 1280 px and 375 px in both themes; panel checklist ticked (SC-001, SC-002, SC-003, SC-006)
 - [X] T026 Refresh docs/images (dashboard.png, demo.gif) from the redesigned dashboard
-- [X] T027 Commit, push, give the PR compare URL; after deploy, check SC-005 on the hosted demo
+- [ ] T027 Commit, push, give the PR compare URL; after deploy, check SC-005 on the hosted demo
 
 ## Dependencies
 
