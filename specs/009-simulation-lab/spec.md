@@ -82,8 +82,11 @@ product surface.
   added a third, which goes past the free plan's 512 MB. Binance's exchangeInfo
   takes a `symbols` filter, so every Binance client now loads only the markets
   it reads: about 4 MB each. The whole app measured about 200 MB after warm-up
-  with the lab and the live loop running (it was well above 400 MB before). The
-  live loop benefits too; its behavior is unchanged.
+  with the lab and the live loop running. The live loop benefits too; its
+  behavior is unchanged.
+- **The memory check confirms the cause.** `scripts/check_memory_budget.py`
+  (FR-026) starts the app with the hosted settings: 215 MB peak with the fix,
+  570 MB with the old full market load put back, over the 512 MB plan.
 
 ## Design Decisions and Why
 
@@ -420,6 +423,17 @@ the page works at 375 px wide and in both themes.
   pair from the allowed list; no URLs, keys or internal errors with URLs are
   shown to visitors.
 
+**Hosting follow-up** (added after deploy, see "Found after deploy")
+
+- **FR-025**: The dashboard MUST say when the server has just started, so a
+  visitor who woke the free server does not read empty panels as broken: while
+  the process is younger than 3 minutes, a note says the free plan sleeps when
+  idle, that live numbers fill in within about a minute, and that lab runs from
+  before the restart are gone. The README's hosted-demo link MUST say the first
+  load after idle takes about a minute.
+- **FR-026**: CI MUST start the app with the hosted settings, warm it up (live
+  ticks and the lab's market lists) and fail if its memory goes over 350 MB.
+
 ### Key Entities
 
 - **Visitor**: an anonymous random id held by the browser. Owns runs. No
@@ -453,6 +467,8 @@ the page works at 375 px wide and in both themes.
 - **SC-006**: Every section and explanation of the current dashboard is present
   after the redesign (checked against a list of today's panels), and the page
   passes keyboard, 375 px and contrast checks in both themes.
+- **SC-007**: After warm-up with the hosted settings, the app uses at most
+  350 MB, leaving room under the free plan's 512 MB (checked in CI, FR-026).
 
 ## Assumptions
 

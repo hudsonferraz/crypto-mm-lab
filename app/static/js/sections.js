@@ -59,7 +59,16 @@ function renderChips(config, status) {
   }
 }
 
+// specs/009 FR-025: a free server that just woke up is not broken, it is starting.
+const STARTUP_NOTE_SEC = 180;
+
+function renderStartupNote(status) {
+  const banner = document.getElementById("startup-banner");
+  if (banner) banner.hidden = !(status.uptime_sec !== null && status.uptime_sec < STARTUP_NOTE_SEC);
+}
+
 function renderHeaderStatus(status, market, config) {
+  renderStartupNote(status);
   const pill = document.getElementById("live-pill");
   if (!pill) return;
   const fallback = status.market_data_source === "fixture";

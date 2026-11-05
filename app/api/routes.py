@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -33,6 +35,11 @@ def loop_is_operational(loop: MarketMakerLoop, *, loop_enabled: bool) -> bool:
     if not loop_enabled:
         return True
     return loop.running and loop.task_alive
+
+
+def _uptime_sec(request: Request) -> float | None:
+    started = getattr(request.app.state, "process_started", None)
+    return None if started is None else round(time.monotonic() - started, 1)
 
 
 def _readiness_payload(loop: MarketMakerLoop, *, loop_enabled: bool) -> dict:
@@ -105,6 +112,7 @@ async def status(request: Request) -> dict:
         "market_data_source": market_data_source,
         "fixture_fallback_enabled": settings.fixture_fallback_enabled,
         "operator_auth_required": bool((settings.operator_api_token or "").strip()),
+        "uptime_sec": _uptime_sec(request),
     }
 
 

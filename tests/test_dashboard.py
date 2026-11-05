@@ -68,3 +68,13 @@ def test_paper_warning_stays_on_every_page() -> None:
     html = (STATIC / "dashboard.html").read_text(encoding="utf-8")
     assert "PAPER SIMULATION" in html
     assert "no wallet keys" in html
+
+
+def test_status_reports_uptime_for_the_startup_note(client) -> None:
+    # specs/009 FR-025: the page says when a sleeping free server just woke up.
+    uptime = client.get("/status").json()["uptime_sec"]
+    assert isinstance(uptime, float) and 0 <= uptime < 60
+    html = (STATIC / "dashboard.html").read_text(encoding="utf-8")
+    assert 'id="startup-banner"' in html and "free plan" in html
+    sections = (STATIC / "js/sections.js").read_text(encoding="utf-8")
+    assert "STARTUP_NOTE_SEC = 180" in sections

@@ -52,7 +52,7 @@ ccxt clients.
 - [X] T024 Docs: README (lab section, decisions D1 to D6, known limits), docs/design-decisions.md, docs/deploy-demo.md, docs/architecture.md if it lists components (FR-022)
 - [X] T025 Full suite, ruff check and format, coverage gate; local live run on each exchange; two-visitor check; screenshots 1280 px and 375 px in both themes; panel checklist ticked (SC-001, SC-002, SC-003, SC-006)
 - [X] T026 Refresh docs/images (dashboard.png, demo.gif) from the redesigned dashboard
-- [ ] T027 Commit, push, give the PR compare URL; after deploy, check SC-005 on the hosted demo
+- [X] T027 Commit, push, give the PR compare URL; after deploy, check SC-005 on the hosted demo
 
 ## Dependencies
 
@@ -67,3 +67,11 @@ switch, then the dashboard, then polish.
 ## Phase 8: After deploy
 
 - [X] T028 Load only the needed Binance markets in app/adapters/cex/ccxt_adapter.py (live adapter) and app/simlab/markets.py (catalog); tests in tests/test_fixture_fallback.py and tests/test_simlab_markets.py; measure app memory (spec: Found after deploy)
+
+## Phase 9: Cleanup and hosting follow-up
+
+- [X] T029 Server start time on /status (`uptime_sec`) and a "just started" note on the dashboard in app/api/routes.py, app/main.py, app/static/js/sections.js, app/static/dashboard.html; README hosted-demo note (FR-025)
+- [X] T030 Memory budget script scripts/check_memory_budget.py and a CI job in .github/workflows/ci.yml (FR-026, SC-007)
+- [X] T031 Replace the stale scripts/build_portfolio_assets.py with a headless-Chrome capture of every README image and the demo GIF from a running app
+- [X] T032 Re-shoot every dashboard image in docs/images, including the mempool replay and Docker stack views, in the new design
+- [X] T033 Bare Postgres URLs name the installed psycopg2 driver in app/storage/database.py (SQLAlchemy 2.1 reads them as psycopg 3, so the Docker stack failed at start); test in tests/test_database.py; README note on old volumes
