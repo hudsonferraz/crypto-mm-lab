@@ -122,6 +122,16 @@ class Settings(BaseSettings):
     testnet_timeout_sec: float = Field(default=10.0, gt=0)
     testnet_recorded_path: str | None = "tests/fixtures/testnet/session.json.gz"
 
+    # Simulation lab (specs/009-simulation-lab). Public data only; runs kept in memory.
+    lab_enabled: bool = True
+    lab_concurrent_recordings: int = Field(default=2, ge=1, le=8)
+    lab_queue_size: int = Field(default=10, ge=1, le=100)
+    lab_runs_per_hour: int = Field(default=10, ge=1, le=1000)
+    lab_bundled_runs_per_hour: int = Field(default=60, ge=1, le=10000)
+    lab_keep_hours: float = Field(default=2.0, gt=0)
+    lab_runs_kept: int = Field(default=10, ge=1, le=100)
+    lab_market_cache_sec: float = Field(default=3600.0, gt=0)
+
     @property
     def v3_active(self) -> bool:
         return self.dex_enabled and self.v3_enabled

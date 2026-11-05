@@ -16,6 +16,7 @@ def offline_test_defaults(monkeypatch):
     monkeypatch.setenv("BINANCE_TESTNET_API_KEY", "")
     monkeypatch.setenv("BINANCE_TESTNET_API_SECRET", "")
     monkeypatch.setenv("LOOP_ENABLED", "false")
+    monkeypatch.setenv("LAB_ENABLED", "false")
     monkeypatch.setenv("ETH_RPC_URL", "http://127.0.0.1:0")
     get_settings.cache_clear()
     yield

@@ -3,166 +3,158 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>crypto-mm-lab dashboard</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      font-family: system-ui, sans-serif;
-      background: #0f1115;
-      color: #e8eaed;
-    }
-    body { margin: 0; padding: 1.5rem; }
-    h1, h2 { margin-top: 0; }
-    h2 { margin-top: 1.5rem; font-size: 1.05rem; }
-    .banner {
-      background: #3b2f14;
-      border: 1px solid #b45309;
-      color: #fde68a;
-      padding: 0.75rem 1rem;
-      border-radius: 8px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      margin-bottom: 1rem;
-    }
-    .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
-    .chip {
-      background: #1a1d24;
-      border: 1px solid #2a2f3a;
-      border-radius: 999px;
-      padding: 0.35rem 0.75rem;
-      font-size: 0.85rem;
-      color: #cbd5e1;
-    }
-    .error-banner {
-      display: none;
-      background: #3f1d1d;
-      border: 1px solid #7f1d1d;
-      color: #fecaca;
-      padding: 0.75rem 1rem;
-      border-radius: 8px;
-      margin-bottom: 1rem;
-    }
-    .tabs { display: flex; gap: 0.5rem; margin: 1rem 0; }
-    .tab {
-      border: 1px solid #3c4043;
-      background: #1a1d24;
-      color: #e8eaed;
-      border-radius: 6px;
-      padding: 0.45rem 0.9rem;
-      cursor: pointer;
-    }
-    .tab.active { background: #2563eb; border-color: #2563eb; }
-    .panel { display: none; }
-    .panel.active { display: block; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
-    .card {
-      background: #1a1d24;
-      border: 1px solid #2a2f3a;
-      border-radius: 8px;
-      padding: 1rem;
-    }
-    .label { color: #9aa0a6; font-size: 0.85rem; }
-    .value { font-size: 1.2rem; font-weight: 600; margin-top: 0.25rem; }
-    button {
-      margin-top: 1rem;
-      padding: 0.5rem 1rem;
-      border-radius: 6px;
-      border: 1px solid #3c4043;
-      background: #2a2f3a;
-      color: #e8eaed;
-      cursor: pointer;
-    }
-    button:hover { background: #3c4043; }
-    #status-line { margin-bottom: 0.75rem; color: #9aa0a6; }
-    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #2a2f3a; }
-    th { color: #9aa0a6; font-weight: 500; }
-    td.numeric { font-variant-numeric: tabular-nums; }
-    .side-bid { color: #34d399; }
-    .side-ask { color: #f87171; }
-    #equity-curve { display: block; width: 100%; height: 180px; }
-    .chart-empty { display: none; margin-top: 0.5rem; text-align: center; }
-    .chart-meta { display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.85rem; color: #9aa0a6; }
-    .mono { font-family: ui-monospace, monospace; font-size: 0.85rem; }
-    .muted { color: #9aa0a6; font-size: 0.9rem; }
-    .links a { color: #93c5fd; }
-    .chart-wrap { position: relative; }
-    #liquidity-chart { display: block; width: 100%; height: 200px; }
-    .chart-tooltip {
-      display: none; position: absolute; pointer-events: none; z-index: 2;
-      background: #0f1115; border: 1px solid #3c4043; border-radius: 6px;
-      padding: 0.4rem 0.6rem; font-size: 0.8rem; color: #e8eaed; min-width: 170px;
-    }
-    .chart-legend { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.5rem; font-size: 0.85rem; }
-    .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.35rem; vertical-align: middle; }
-    .swatch-line { border-left: 2px dashed #e8eaed; width: 0; height: 12px; border-radius: 0; }
-    .range-track { display: none; position: relative; height: 18px; margin: 0.75rem 0 0.25rem; background: #0f1115; border-radius: 4px; }
-    .range-band { position: absolute; top: 0; bottom: 0; background: rgba(217, 119, 6, 0.35); border: 2px solid #d97706; border-radius: 4px; }
-    .range-marker { position: absolute; top: -4px; bottom: -4px; width: 2px; background: #e8eaed; }
-    .quote-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-    .quote-form select, .quote-form input {
-      background: #1a1d24; color: #e8eaed; border: 1px solid #3c4043; border-radius: 6px; padding: 0.45rem 0.6rem;
-    }
-    .quote-form button { margin-top: 0; }
-    details summary { cursor: pointer; margin-top: 0.5rem; }
-    .note, .muted, #lp-status, #arb-outcome-note { overflow-wrap: anywhere; }
-    #gap-chart { display: block; width: 100%; height: 200px; }
-    .badge { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; border: 1px solid #3c4043; }
-    .badge-profitable { background: #0f2e1f; border-color: #15803d; color: #86efac; }
-    .badge-unprofitable { background: #1a1d24; border-color: #3c4043; color: #cbd5e1; }
-    .badge-reverted { background: #3f1d1d; border-color: #7f1d1d; color: #fecaca; }
-    .explain p { margin: 0.4rem 0; }
-    #visibility-chart { display: block; width: 100%; height: 200px; }
-    .badge-live { background: #0f2340; border-color: #3987e5; color: #bfdbfe; }
-    .badge-replay { background: #2e1a0f; border-color: #d95926; color: #fed7aa; }
-    .badge-ok { background: #0f2e1f; border-color: #15803d; color: #86efac; }
-    .badge-warn { background: #3b2f14; border-color: #b45309; color: #fde68a; }
-    .sub { display: block; color: #9aa0a6; font-size: 0.8rem; font-weight: 400; margin-top: 0.2rem; }
-    @media (max-width: 640px) {
-      body { padding: 0.75rem; }
-      .grid { grid-template-columns: 1fr 1fr; }
-      .chips { font-size: 0.8rem; }
-      .tabs { flex-wrap: wrap; }
-      table { display: block; overflow-x: auto; }
-    }
-    .note {
-      background: #111827;
-      border-left: 3px solid #6384ff;
-      padding: 0.75rem 1rem;
-      margin: 0.75rem 0 1rem;
-      color: #cbd5e1;
-      font-size: 0.9rem;
-    }
-  </style>
+  <meta name="color-scheme" content="light dark" />
+  <title>crypto-mm-lab</title>
+  <link rel="stylesheet" href="/static/css/tokens.css" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+  <script src="/static/js/core.js"></script>
+  <script src="/static/js/sections.js" defer></script>
+  <script src="/static/js/charts.js" defer></script>
+  <script src="/static/js/lab.js" defer></script>
 </head>
 <body>
-  <div class="banner">PAPER SIMULATION — no real-money orders, no wallet keys (testnet orders use fake money)</div>
-  <div id="fallback-banner" class="banner" style="display:none;background:#1e3a5f;border-color:#3b82f6;color:#bfdbfe;">
-    Live CEX unavailable from this host — replaying bundled paper order books so the demo keeps moving.
-  </div>
-  <h1>crypto-mm-lab</h1>
-  <div id="status-line">Loading...</div>
-  <div id="error-banner" class="error-banner"></div>
-  <div id="config-chips" class="chips"></div>
-  <div class="links muted">
-    <a href="https://github.com/hudsonferraz/crypto-mm-lab/blob/main/README.md#simulation-assumptions" target="_blank" rel="noreferrer">Simulation assumptions</a>
-    ·
-    <a href="https://github.com/hudsonferraz/crypto-mm-lab/blob/main/docs/design-decisions.md" target="_blank" rel="noreferrer">Design decisions</a>
-    ·
-    <a id="audit-link" href="#" class="mono">Tick audit</a>
-  </div>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="app">
+    <aside class="sidebar" aria-label="Sections">
+      <a class="brand" href="#overview"><span class="brand-mark" aria-hidden="true">mm</span>crypto-mm-lab</a>
+      <nav class="nav">
+        <div class="nav-group">Lab</div>
+        <a href="#overview" data-section="overview">Overview</a>
+        <a href="#live" data-section="live">Live market making</a>
+        <a href="#lab" data-section="lab">Simulation lab<span class="nav-new">new</span></a>
+        <div class="nav-group">Markets</div>
+        <a href="#opportunities" data-section="opportunities">DEX vs CEX</a>
+        <a href="#lp" data-section="lp">Uniswap V3 and LP</a>
+        <a href="#arb" data-section="arb">Flash arbitrage</a>
+        <a href="#mempool" data-section="mempool">Mempool</a>
+        <div class="nav-group">Evidence</div>
+        <a href="#testnet" data-section="testnet">Testnet</a>
+        <a href="#research" data-section="research">Research</a>
+      </nav>
+      <div class="sidebar-foot">
+        <span>Paper only · public data · no keys</span>
+        <a href="https://github.com/hudsonferraz/crypto-mm-lab" target="_blank" rel="noreferrer">Source on GitHub</a>
+      </div>
+    </aside>
+    <div class="scrim" aria-hidden="true"></div>
 
-  <div class="tabs">
-    <button class="tab active" data-tab="live" type="button">Live MM</button>
-    <button class="tab" data-tab="opportunities" type="button">Opportunities</button>
-    <button class="tab" data-tab="research" type="button">Research</button>
-    <button class="tab" data-tab="lp" type="button">On-chain LP</button>
-    <button class="tab" data-tab="arb" type="button">Flash arb</button>
-    <button class="tab" data-tab="mempool" type="button">Mempool</button>
-    <button class="tab" data-tab="testnet" type="button">Testnet</button>
-  </div>
+    <div class="main">
+      <header class="topbar">
+        <button id="menu-toggle" class="icon-button menu-button" type="button" aria-label="Open sections" aria-expanded="false">☰</button>
+        <p class="topbar-title" id="topbar-title">Overview</p>
+        <span class="topbar-spacer"></span>
+        <span class="pill hide-narrow" id="live-pill" aria-live="polite"><span class="dot"></span>Connecting…</span>
+        <span class="pill pill-paper" title="No real-money orders, no wallet keys. Testnet orders use fake money.">Paper</span>
+        <button id="theme-toggle" class="icon-button" type="button" aria-label="Switch theme">☾</button>
+      </header>
 
-  <section id="panel-live" class="panel active">
+      <main class="content" id="content">
+        <div class="banners">
+          <div class="banner pill-paper">PAPER SIMULATION — no real-money orders, no wallet keys (testnet orders use fake money)</div>
+          <div id="fallback-banner" class="banner banner-info" style="display:none">
+            Live CEX unavailable from this host — replaying bundled paper order books so the demo keeps moving.
+          </div>
+          <div id="error-banner" class="error-banner" role="status"></div>
+        </div>
+
+  <section id="panel-overview" class="panel" aria-labelledby="h-overview">
+    <div class="hero">
+      <div class="card hero-card">
+        <h1 id="h-overview">A market-making lab on real crypto markets</h1>
+        <p>A paper market maker runs on live exchange books, beside read-only tools for Uniswap pools, flash arbitrage and the public mempool. In the simulation lab you can run your own strategy on real data: your runs are yours and change nothing for anyone else.</p>
+        <div class="actions">
+          <a class="button button-primary" href="#lab">Open the simulation lab</a>
+          <a class="button" href="#live">Watch the live market maker</a>
+        </div>
+        <p class="muted">Everything is paper or read-only: no real money, no wallet keys, nothing signed or sent.</p>
+      </div>
+      <div class="card hero-card">
+        <div class="label">Live pair</div>
+        <div class="value" id="ov-pair">-</div>
+        <div class="label" style="margin-top:var(--space-3)">Mid price</div>
+        <div class="hero-number" id="ov-mid">-</div>
+        <div class="grid" style="grid-template-columns:1fr 1fr">
+          <div><div class="label">Spread</div><div class="value" id="ov-spread">-</div></div>
+          <div><div class="label">Paper PnL</div><div class="value" id="ov-pnl">-</div></div>
+          <div><div class="label">Tick</div><div class="value" id="ov-tick">-</div></div>
+          <div><div class="label">Strategy</div><div class="value" id="ov-strategy">-</div></div>
+        </div>
+      </div>
+    </div>
+    <h2>Explore</h2>
+    <div class="tiles">
+      <a class="card tile" href="#lab"><span class="tile-title">Simulation lab</span><p>Pick an exchange, a pair and a strategy, record the live book or use a real recording, and see how it would have done.</p></a>
+      <a class="card tile" href="#live"><span class="tile-title">Live market making</span><p>The paper market maker quoting the live Binance book right now: quotes, fills, position and PnL.</p></a>
+      <a class="card tile" href="#opportunities"><span class="tile-title">DEX vs CEX</span><p>The exchange price against the Uniswap V2 pool, with the edge left after fees and gas.</p></a>
+      <a class="card tile" href="#lp"><span class="tile-title">Uniswap V3 and LP</span><p>The live V3 pool, its liquidity around the price, and a paper LP position managed against it.</p></a>
+      <a class="card tile" href="#arb"><span class="tile-title">Flash arbitrage</span><p>A flash-arbitrage contract simulated against live mainnet state each tick, never sent.</p></a>
+      <a class="card tile" href="#mempool"><span class="tile-title">Mempool</span><p>Pending swaps on the two pools, predicted with exact math and checked block by block.</p></a>
+      <a class="card tile" href="#testnet"><span class="tile-title">Testnet</span><p>Real orders on the Binance testnet with fake money, against what each paper fill model expected.</p></a>
+      <a class="card tile" href="#research"><span class="tile-title">Research</span><p>Strategy comparison and parameter sweeps on the bundled test books.</p></a>
+    </div>
+  </section>
+
+  <section id="panel-lab" class="panel" aria-labelledby="h-lab">
+    <header class="section-head"><h1 id="h-lab">Simulation lab</h1>
+      <p>Run your own paper market maker on real market data. Choose a bundled recording for an instant result, or record a pair's live book for up to two minutes. Your runs belong to this browser; nobody else sees them, and nothing here changes the live market maker.</p></header>
+    <div class="lab-layout">
+      <div class="card" id="lab-form-card">
+        <form id="lab-form" class="lab-form" novalidate>
+          <div class="field">
+            <span class="field-label" id="lab-source-label">Market data</span>
+            <div class="segmented" id="lab-source" role="group" aria-labelledby="lab-source-label">
+              <button type="button" data-source="bundled" aria-pressed="true">Bundled recording</button>
+              <button type="button" data-source="live" aria-pressed="false">Record live</button>
+            </div>
+          </div>
+          <div id="lab-bundled-fields" class="lab-form">
+            <div class="field"><label for="lab-bundle">Recording</label><select id="lab-bundle"></select>
+              <span class="hint" id="lab-bundle-hint"></span></div>
+          </div>
+          <div id="lab-live-fields" class="lab-form" hidden>
+            <div class="field"><label for="lab-exchange">Exchange</label><select id="lab-exchange"></select></div>
+            <div class="field"><label for="lab-pair">Pair</label><select id="lab-pair"></select>
+              <span class="hint" id="lab-pair-hint"></span><span class="hint" id="lab-pair-rules"></span></div>
+            <div class="field"><label for="lab-duration">Recording length</label>
+              <div class="range-row"><input type="range" id="lab-duration" min="30" max="120" step="10" value="60" />
+                <output id="lab-duration-out" for="lab-duration">60 s</output></div></div>
+          </div>
+          <div class="field"><label for="lab-strategy">Strategy</label><select id="lab-strategy"></select></div>
+          <div class="field"><label for="lab-spread">Spread (bps)</label>
+            <input type="number" id="lab-spread" min="1" max="200" step="0.5" value="5" inputmode="decimal" />
+            <span class="hint">Distance between the bid and the ask. 1 bps is 0.01%. The maker fee is 2 bps per fill.</span></div>
+          <div class="field"><label for="lab-fill">Fill model</label><select id="lab-fill"></select>
+            <span class="hint" id="lab-fill-hint"></span></div>
+          <button id="lab-run" class="button-primary" type="submit">Run simulation</button>
+          <div id="lab-message" class="lab-message" role="alert"></div>
+          <p class="muted" id="lab-limits" style="margin:0"></p>
+        </form>
+      </div>
+      <div class="card" id="lab-result" aria-live="polite">
+        <div class="empty-state"><strong>No run open</strong>Pick your settings and run a simulation. The result shows up here.</div>
+      </div>
+    </div>
+    <h2>Your runs</h2>
+    <div class="run-list" id="lab-runs"><p class="muted">Loading…</p></div>
+    <h2>Compare runs</h2>
+    <div id="lab-compare"></div>
+    <h2>How the lab works</h2>
+    <div class="decisions" id="lab-decisions"></div>
+  </section>
+
+  <section id="panel-live" class="panel" aria-labelledby="h-live">
+    <header class="section-head"><h1 id="h-live">Live market making</h1><p>A paper market maker quoting the live order book. Every fill is simulated; no order reaches an exchange.</p></header>
+    <div class="card">
+      <div id="status-line" class="muted">Loading...</div>
+      <div id="config-chips" class="chips" style="margin-top:var(--space-2)"></div>
+      <div class="links muted" style="margin-top:var(--space-2)">
+        <a href="https://github.com/hudsonferraz/crypto-mm-lab/blob/main/README.md#simulation-assumptions" target="_blank" rel="noreferrer">Simulation assumptions</a>
+        ·
+        <a href="https://github.com/hudsonferraz/crypto-mm-lab/blob/main/docs/design-decisions.md" target="_blank" rel="noreferrer">Design decisions</a>
+        ·
+        <a id="audit-link" href="#" class="mono">Tick audit</a>
+      </div>
+    </div>
     <h2>CEX (MM book)</h2>
     <div class="grid">
       <div class="card"><div class="label">Best bid</div><div class="value" id="best-bid">-</div></div>
@@ -172,12 +164,12 @@
     </div>
 
     <h2>Open quotes</h2>
-    <table>
+    <div class="table-wrap"><table>
       <thead>
         <tr><th>Side</th><th>Price</th><th>Size</th><th>Streak</th><th>Quote ID</th></tr>
       </thead>
       <tbody id="quotes-body"><tr><td colspan="5">No open quotes</td></tr></tbody>
-    </table>
+    </table></div>
 
     <h2>Position & PnL</h2>
     <div class="grid">
@@ -189,7 +181,7 @@
 
     <h2>Equity curve</h2>
     <div class="card chart-card">
-      <canvas id="equity-curve" height="180"></canvas>
+      <canvas class="chart" id="equity-curve" height="180"></canvas>
       <div class="label chart-empty" id="equity-empty">No PnL history yet</div>
       <div class="chart-meta">
         <span id="equity-start">-</span>
@@ -198,17 +190,19 @@
     </div>
 
     <h2>Recent fills</h2>
-    <table>
+    <div class="table-wrap"><table>
       <thead>
         <tr><th>Time</th><th>Side</th><th>Price</th><th>Size</th><th>Fee</th><th>Quote ID</th></tr>
       </thead>
       <tbody id="fills-body"><tr><td colspan="6">No fills yet</td></tr></tbody>
-    </table>
+    </table></div>
 
-    <button id="kill-switch-btn" type="button">Toggle kill switch</button>
+    <div class="actions"><button id="kill-switch-btn" class="button-danger" type="button">Toggle kill switch</button>
+      <span class="muted">Cancels open quotes and pauses quoting. Needs the operator token on the hosted demo.</span></div>
   </section>
 
-  <section id="panel-opportunities" class="panel">
+  <section id="panel-opportunities" class="panel" aria-labelledby="h-opportunities">
+    <header class="section-head"><h1 id="h-opportunities">DEX vs CEX</h1><p>The centralized exchange price against the Uniswap V2 pool, with the edge a trade would have after fees and gas. Observational only.</p></header>
     <h2>DEX vs CEX (observational)</h2>
     <div id="dex-note" class="note">Loading DEX status...</div>
     <div class="grid">
@@ -217,38 +211,40 @@
       <div class="card"><div class="label">CEX–DEX spread (bps)</div><div class="value" id="dex-spread">-</div></div>
     </div>
     <h2>Latest opportunities</h2>
-    <table>
+    <div class="table-wrap"><table>
       <thead>
         <tr><th>Venue</th><th>Direction</th><th>Net edge (bps)</th><th>Net edge ($)</th><th>Size</th><th>Best size → edge</th></tr>
       </thead>
       <tbody id="opportunities-body"><tr><td colspan="6">No opportunities yet</td></tr></tbody>
-    </table>
+    </table></div>
   </section>
 
-  <section id="panel-research" class="panel">
+  <section id="panel-research" class="panel" aria-labelledby="h-research">
+    <header class="section-head"><h1 id="h-research">Research</h1><p>Replay the strategies on the bundled test books and sweep their settings. For real recordings and your own settings, use the Simulation lab.</p></header>
     <h2>Strategy comparison (fixture)</h2>
     <p class="muted">Runs the three strategies on <span class="mono">tests/fixtures/orderbook_snapshots.csv</span>.</p>
-    <button id="run-compare-btn" type="button">Run compare</button>
-    <table>
+    <div class="actions"><button id="run-compare-btn" class="button-primary" type="button">Run compare</button></div>
+    <div class="table-wrap"><table>
       <thead>
         <tr><th>Strategy</th><th>Total PnL</th><th>Max DD</th><th>Sharpe</th><th>Fill rate</th><th>Fills</th></tr>
       </thead>
       <tbody id="compare-body"><tr><td colspan="6">Not run yet</td></tr></tbody>
-    </table>
+    </table></div>
 
     <h2>Scenario sweep</h2>
     <p class="muted">Default grid: three strategies × current spread × current fill mode. Export JSON after run.</p>
-    <button id="run-sweep-btn" type="button">Run sweep</button>
-    <button id="export-sweep-btn" type="button" disabled>Download JSON</button>
-    <table>
+    <div class="actions"><button id="run-sweep-btn" class="button-primary" type="button">Run sweep</button>
+    <button id="export-sweep-btn" type="button" disabled>Download JSON</button></div>
+    <div class="table-wrap"><table>
       <thead>
         <tr><th>Strategy</th><th>Spread</th><th>Fill mode</th><th>Total PnL</th><th>Sharpe</th><th>Fill rate</th></tr>
       </thead>
       <tbody id="sweep-body"><tr><td colspan="6">Not run yet</td></tr></tbody>
-    </table>
+    </table></div>
   </section>
 
-  <section id="panel-lp" class="panel">
+  <section id="panel-lp" class="panel" aria-labelledby="h-lp">
+    <header class="section-head"><h1 id="h-lp">Uniswap V3 and paper LP</h1><p>The live Uniswap V3 WETH/USDC pool read block by block, and a paper liquidity position managed against it.</p></header>
     <h2>Uniswap V3 pool (read-only, block-pinned)</h2>
     <div id="v3-note" class="note">Loading V3 pool...</div>
     <div class="grid">
@@ -261,18 +257,18 @@
     <h2>Liquidity around the price</h2>
     <div class="card chart-card">
       <div class="chart-legend muted">
-        <span><span class="swatch" style="background:#3b82f6"></span>Active liquidity per bucket</span>
-        <span><span class="swatch" style="background:#d97706"></span>Paper LP range</span>
+        <span><span class="swatch swatch-1"></span>Active liquidity per bucket</span>
+        <span><span class="swatch swatch-2"></span>Paper LP range</span>
         <span><span class="swatch swatch-line"></span>Pool price</span>
       </div>
       <div class="chart-wrap">
-        <canvas id="liquidity-chart" height="200" role="img" aria-label="Active liquidity by price bucket"></canvas>
+        <canvas class="chart" id="liquidity-chart" height="200" role="img" aria-label="Active liquidity by price bucket"></canvas>
         <div id="liquidity-tooltip" class="chart-tooltip"></div>
       </div>
       <div class="label chart-empty" id="liquidity-empty">No tick window loaded yet</div>
       <details class="muted"><summary>Show data table</summary>
-        <table><thead><tr><th>Price from</th><th>Price to</th><th>Liquidity</th></tr></thead>
-          <tbody id="liquidity-table"></tbody></table>
+        <div class="table-wrap"><table><thead><tr><th>Price from</th><th>Price to</th><th>Liquidity</th></tr></thead>
+          <tbody id="liquidity-table"></tbody></table></div>
       </details>
     </div>
 
@@ -296,10 +292,10 @@
     <p class="muted" id="lp-accounting">-</p>
 
     <h2>CEX market making vs on-chain LP (same window)</h2>
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr><th>Book</th><th>Revenue</th><th>Costs</th><th>Inventory / IL</th><th>Net PnL</th><th>Return</th></tr></thead>
       <tbody id="books-body"><tr><td colspan="6">Waiting for both books</td></tr></tbody>
-    </table>
+    </table></div>
     <div id="books-notes" class="muted"></div>
 
     <h2>Exact swap quote</h2>
@@ -314,21 +310,22 @@
     <div id="quote-result" class="muted">Simulated with the exact V3 integer math (matches QuoterV2 when the window is current).</div>
 
     <h2>Recent rebalances</h2>
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr><th>Time</th><th>Reason</th><th>New range (ticks)</th><th>Swap cost</th><th>Gas</th><th>Realized IL</th></tr></thead>
       <tbody id="rebalances-body"><tr><td colspan="6">No rebalances yet</td></tr></tbody>
-    </table>
+    </table></div>
 
     <h2>LP backtest (recorded mainnet observations)</h2>
     <p class="muted">Replays <span class="mono">tests/fixtures/v3_pool_observations.csv</span> across range widths.</p>
-    <button id="run-lp-backtest-btn" type="button">Run LP sweep</button>
-    <table>
+    <div class="actions"><button id="run-lp-backtest-btn" class="button-primary" type="button">Run LP sweep</button></div>
+    <div class="table-wrap"><table>
       <thead><tr><th>Width</th><th>Threshold</th><th>Rebalances</th><th>In range</th><th>Fees</th><th>IL</th><th>Net</th></tr></thead>
       <tbody id="lp-backtest-body"><tr><td colspan="7">Not run yet</td></tr></tbody>
-    </table>
+    </table></div>
   </section>
 
-  <section id="panel-arb" class="panel">
+  <section id="panel-arb" class="panel" aria-labelledby="h-arb">
+    <header class="section-head"><h1 id="h-arb">Flash arbitrage</h1><p>Each tick, the gap between the V2 and V3 pools is priced and a flash-arbitrage contract is simulated against live mainnet state, read-only.</p></header>
     <h2>Flash arbitrage: V2 vs V3, simulated against live mainnet state</h2>
     <div id="arb-note" class="note">Loading simulator status...</div>
     <div class="grid">
@@ -339,7 +336,7 @@
       <div class="card"><div class="label">Gas used · cost</div><div class="value" id="arb-gas">-</div></div>
       <div class="card"><div class="label">Estimate error</div><div class="value" id="arb-error">-</div></div>
     </div>
-    <div class="card" style="margin-top:1rem">
+    <div class="card" style="margin-top:var(--space-3)">
       <div class="label">Outcome · <span id="arb-meta">-</span></div>
       <div style="margin-top:0.4rem"><span id="arb-outcome" class="badge badge-unprofitable">-</span> <span class="badge">Simulated, never sent</span></div>
       <p id="arb-outcome-note" style="margin:0.6rem 0 0">-</p>
@@ -355,17 +352,17 @@
     <h2>Gap vs fees, recent simulations</h2>
     <div class="card chart-card">
       <div class="chart-legend muted">
-        <span><span class="swatch" style="background:#3b82f6"></span>Price gap between the pools (bps)</span>
+        <span><span class="swatch swatch-1"></span>Price gap between the pools (bps)</span>
         <span><span class="swatch swatch-line"></span>Both pools' fees: a gap must exceed this to pay</span>
       </div>
       <div class="chart-wrap">
-        <canvas id="gap-chart" height="200" role="img" aria-label="Price gap between Uniswap V2 and V3 per simulation, against the combined fee threshold"></canvas>
+        <canvas class="chart" id="gap-chart" height="200" role="img" aria-label="Price gap between Uniswap V2 and V3 per simulation, against the combined fee threshold"></canvas>
         <div id="gap-tooltip" class="chart-tooltip"></div>
       </div>
       <div class="label chart-empty" id="gap-empty">No simulations yet</div>
       <details class="muted"><summary>Show data table</summary>
-        <table><thead><tr><th>Time</th><th>Block</th><th>Gap</th><th>Outcome</th></tr></thead>
-          <tbody id="gap-table"></tbody></table>
+        <div class="table-wrap"><table><thead><tr><th>Time</th><th>Block</th><th>Gap</th><th>Outcome</th></tr></thead>
+          <tbody id="gap-table"></tbody></table></div>
       </details>
     </div>
 
@@ -378,19 +375,20 @@
     </div>
 
     <h2>Recent simulations</h2>
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr><th>Time</th><th>Block</th><th>Direction</th><th>Size</th><th>Gap</th><th>Estimate net</th><th>Simulated net</th><th>Gas</th><th>Outcome</th></tr></thead>
       <tbody id="arb-history"><tr><td colspan="9">No simulations yet</td></tr></tbody>
-    </table>
+    </table></div>
   </section>
 
-  <section id="panel-mempool" class="panel">
+  <section id="panel-mempool" class="panel" aria-labelledby="h-mempool">
+    <header class="section-head"><h1 id="h-mempool">Mempool</h1><p>Pending swaps on the two pools, predicted with exact pool math and checked against each block.</p></header>
     <h2>Mempool watcher: pending swaps on the V2 and V3 WETH/USDC pools, checked against each block</h2>
     <div class="note">
       <span id="mp-mode" class="badge">-</span>
       <span id="mp-state" class="badge">-</span>
       <span class="badge">Read-only, never sent</span>
-      <span id="mp-status" style="margin-left:0.4rem">Loading watcher status...</span>
+      <span id="mp-status" style="margin-left:var(--space-2)">Loading watcher status...</span>
     </div>
     <p class="muted" id="mp-mode-note"></p>
 
@@ -415,49 +413,50 @@
     <h2>Swaps on our pools per block: seen pending vs never public</h2>
     <div class="card chart-card">
       <div class="chart-legend muted">
-        <span><span class="swatch" style="background:#3987e5"></span>Seen pending before its block</span>
-        <span><span class="swatch" style="background:#d95926"></span>Never seen: private relay or another unseen route</span>
+        <span><span class="swatch swatch-1"></span>Seen pending before its block</span>
+        <span><span class="swatch swatch-2"></span>Never seen: private relay or another unseen route</span>
       </div>
       <div class="chart-wrap">
-        <canvas id="visibility-chart" height="200" role="img" aria-label="Per block, swap transactions on the two pools split into seen pending and never seen"></canvas>
+        <canvas class="chart" id="visibility-chart" height="200" role="img" aria-label="Per block, swap transactions on the two pools split into seen pending and never seen"></canvas>
         <div id="visibility-tooltip" class="chart-tooltip"></div>
       </div>
       <div class="label chart-empty" id="visibility-empty">No blocks processed yet</div>
       <details class="muted"><summary>Show data table</summary>
-        <table><thead><tr><th>Block</th><th>Mode</th><th>Pool swaps</th><th>Seen pending</th><th>Gap at block end</th><th>Scanner net at block end</th></tr></thead>
-          <tbody id="visibility-table"></tbody></table>
+        <div class="table-wrap"><table><thead><tr><th>Block</th><th>Mode</th><th>Pool swaps</th><th>Seen pending</th><th>Gap at block end</th><th>Scanner net at block end</th></tr></thead>
+          <tbody id="visibility-table"></tbody></table></div>
       </details>
     </div>
 
     <h2>Pending now</h2>
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr><th>Seen</th><th>Transaction</th><th>Route</th><th>Legs</th><th>Gap before / after</th><th>Opportunity</th><th>Note</th></tr></thead>
       <tbody id="mp-pending"><tr><td colspan="7">Nothing pending on our pools right now</td></tr></tbody>
-    </table>
+    </table></div>
 
     <h2>Recently verified</h2>
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr><th>Seen</th><th>Transaction</th><th>Mode</th><th>Status</th><th>Block · position</th><th>Waited</th><th>Math error</th><th>Ordering effect</th><th>Note</th></tr></thead>
       <tbody id="mp-verified"><tr><td colspan="9">No verified swaps yet</td></tr></tbody>
-    </table>
+    </table></div>
 
     <h2>Why the numbers look like this</h2>
     <div class="note explain" id="mp-explanations">Loading...</div>
 
     <h2>Mode changes</h2>
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr><th>Time</th><th>From</th><th>To</th><th>Source</th><th>Reason</th></tr></thead>
       <tbody id="mp-switches"><tr><td colspan="5">None yet</td></tr></tbody>
-    </table>
+    </table></div>
   </section>
 
-  <section id="panel-testnet" class="panel">
+  <section id="panel-testnet" class="panel" aria-labelledby="h-testnet">
+    <header class="section-head"><h1 id="h-testnet">Binance spot testnet</h1><p>Real post-only orders with fake money, compared with what each paper fill model said would happen.</p></header>
     <h2>Binance spot testnet: real post-only orders vs the paper fill models</h2>
     <div class="note">
       <span id="tn-source" class="badge">-</span>
       <span id="tn-state" class="badge">-</span>
       <span class="badge">Testnet only · fake money</span>
-      <span id="tn-status" style="margin-left:0.4rem">Loading trader status...</span>
+      <span id="tn-status" style="margin-left:var(--space-2)">Loading trader status...</span>
     </div>
     <p class="muted" id="tn-source-note"></p>
 
@@ -469,7 +468,7 @@
     </div>
 
     <h2>Paper fill models vs the real matching engine, same orders and snapshots</h2>
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr>
         <th>Fill model</th><th class="numeric">Fill rate: real / paper</th>
         <th class="numeric">Matched</th><th class="numeric">Paper only</th><th class="numeric">Real only</th><th class="numeric">Neither</th>
@@ -477,21 +476,21 @@
         <th class="numeric">PnL: real / paper / gap</th>
       </tr></thead>
       <tbody id="tn-compare"><tr><td colspan="9">Loading...</td></tr></tbody>
-    </table>
+    </table></div>
     <div class="note explain" id="tn-field-explanations"></div>
 
     <h2>Fill-model calibration: fitted on recorded sessions, judged on held-out ones</h2>
     <p class="muted" id="tn-cal-summary">Loading calibration...</p>
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr>
         <th>Held-out session</th><th class="numeric">Spread</th><th class="numeric">Orders</th><th class="numeric">Real fills</th>
         <th class="numeric">full_cross_fill</th><th class="numeric">partial_fill</th><th class="numeric">latency_prob_fill</th>
         <th class="numeric">calibrated_fill: expected / drawn</th>
       </tr></thead>
       <tbody id="tn-cal-heldout"><tr><td colspan="8">Loading...</td></tr></tbody>
-    </table>
+    </table></div>
     <p class="muted" id="tn-cal-gate"></p>
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr>
         <th>Held-out session</th><th class="numeric">Spread</th><th class="numeric">Volatility (bps/√s)</th>
         <th class="numeric">Fills the snapshots missed</th>
@@ -499,1363 +498,37 @@
         <th class="numeric">Score, base</th><th class="numeric">Score, with volatility</th>
       </tr></thead>
       <tbody id="tn-cal-forms"><tr><td colspan="8">Loading...</td></tr></tbody>
-    </table>
-    <table>
+    </table></div>
+    <div class="table-wrap"><table>
       <thead><tr><th class="numeric">Distance from the other side</th><th class="numeric">Fill chance per 2 s, uncrossed</th>
         <th class="numeric">Calm market (½ typical volatility)</th><th class="numeric">Busy market (2× typical)</th><th>Fitted range?</th></tr></thead>
       <tbody id="tn-cal-curve"><tr><td colspan="5">Loading...</td></tr></tbody>
-    </table>
+    </table></div>
     <div class="note explain" id="tn-cal-explanations"></div>
 
     <h2>Open orders</h2>
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr><th>Placed</th><th>Order</th><th>Side</th><th class="numeric">Price</th><th class="numeric">Size</th><th>State</th><th class="numeric">Filled</th></tr></thead>
       <tbody id="tn-open"><tr><td colspan="7">No open orders</td></tr></tbody>
-    </table>
+    </table></div>
 
     <h2>Recent orders and what each fill model said</h2>
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr><th>Placed</th><th>Order</th><th>Side</th><th class="numeric">Price</th><th>Final state</th><th class="numeric">Real filled</th><th class="numeric">Paper: full · partial · latency · calibrated</th><th>Life cycle</th></tr></thead>
       <tbody id="tn-recent"><tr><td colspan="8">No orders yet</td></tr></tbody>
-    </table>
+    </table></div>
 
     <h2>Real fills</h2>
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr><th>Time</th><th>Order</th><th>Side</th><th class="numeric">Price</th><th class="numeric">Size</th><th class="numeric">Fee</th></tr></thead>
       <tbody id="tn-fills"><tr><td colspan="6">No fills yet</td></tr></tbody>
-    </table>
+    </table></div>
 
     <h2>Why the numbers look like this</h2>
     <div class="note explain" id="tn-explanations">Loading...</div>
   </section>
-
-  <script>
-    const fmt = (value, digits = 4) =>
-      value === null || value === undefined ? "-" : Number(value).toFixed(digits);
-
-    const fmtTime = (iso) => {
-      if (!iso) return "-";
-      const date = new Date(iso);
-      return Number.isNaN(date.getTime()) ? iso : date.toLocaleTimeString();
-    };
-
-    const shortId = (value) => {
-      if (!value) return "-";
-      return value.length > 10 ? `${value.slice(0, 8)}…` : value;
-    };
-
-    let operatorToken = null;
-    let latestSweep = null;
-    let configCache = null;
-
-    async function fetchJson(path, options = {}) {
-      const response = await fetch(path, options);
-      if (!response.ok) {
-        let detail = `HTTP ${response.status}`;
-        try {
-          const body = await response.json();
-          if (body.detail) detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
-        } catch (_) {}
-        throw new Error(detail);
-      }
-      return response.json();
-    }
-
-    function renderChips(config, status) {
-      const chips = [
-        `exchange: ${config.exchange}`,
-        `MM: ${config.mm_symbol}`,
-        `compare: ${config.cex_compare_symbol}`,
-        `strategy: ${config.strategy}`,
-        `fill: ${config.fill_mode}`,
-        `spread: ${config.quote_spread_bps} bps`,
-        `maker fee: ${config.maker_fee_bps} bps`,
-        `DEX: ${config.dex_enabled ? "on" : "off"}`,
-        `V3 LP: ${config.lp_enabled ? `on (${config.lp_range_width_bps} bps)` : "off"}`,
-        `RPC: ${config.rpc_provider || "-"}`,
-        `market data: ${status.market_data_mode || config.market_data_mode}`,
-      ];
-      if (status.market_data_fallback) chips.push("data: fixture replay");
-      if (status.market_data_source === "fixture") chips.push("demo fallback on");
-      document.getElementById("config-chips").innerHTML = chips
-        .map((text) => `<span class="chip">${text}</span>`)
-        .join("");
-      const fallbackBanner = document.getElementById("fallback-banner");
-      if (fallbackBanner) {
-        fallbackBanner.style.display = status.market_data_fallback ? "block" : "none";
-      }
-    }
-
-    function renderQuotes(items) {
-      const body = document.getElementById("quotes-body");
-      if (!items || items.length === 0) {
-        body.innerHTML = "<tr><td colspan='5'>No open quotes</td></tr>";
-        return;
-      }
-      body.innerHTML = items.map((item) => `
-        <tr>
-          <td class="side-${item.side}">${item.side}</td>
-          <td class="numeric">${fmt(item.price, 2)}</td>
-          <td class="numeric">${fmt(item.size, 6)}</td>
-          <td class="numeric">${item.crossed_streak ?? 0}</td>
-          <td class="mono" title="${item.quote_id || ""}">${shortId(item.quote_id)}</td>
-        </tr>
-      `).join("");
-    }
-
-    function renderOpportunities(payload) {
-      const body = document.getElementById("opportunities-body");
-      const note = document.getElementById("dex-note");
-      if (!payload.dex_enabled) {
-        note.textContent = `DEX disabled (${payload.disabled_reason || "DEX_ENABLED=false"}). MM book is ${payload.mm_symbol}; compare symbol would be ${payload.cex_compare_symbol}.`;
-        body.innerHTML = "<tr><td colspan='6'>DEX disabled — no opportunities</td></tr>";
-        return;
-      }
-      note.textContent = `${payload.quote_asset_basis_note || ""} MM=${payload.mm_symbol}, compare=${payload.cex_compare_symbol}.`;
-      const items = payload.latest_tick?.length ? payload.latest_tick : payload.recent;
-      if (!items || items.length === 0) {
-        body.innerHTML = "<tr><td colspan='6'>No opportunities yet</td></tr>";
-        return;
-      }
-      body.innerHTML = items.map((item) => `
-        <tr>
-          <td>${item.venue || "uniswap_v2"}${item.fee_tier_bps ? ` (${item.fee_tier_bps} bps)` : ""}</td>
-          <td>${item.direction}</td>
-          <td class="numeric">${fmt(item.net_edge_bps, 2)}</td>
-          <td class="numeric">${fmt(item.net_edge, 4)}</td>
-          <td class="numeric">${fmt(item.trial_trade_size, 4)}</td>
-          <td class="numeric">${item.optimal_trade_size ? `${fmt(item.optimal_trade_size, 3)} → ${fmt(item.optimal_net_edge, 2)}` : "-"}</td>
-        </tr>
-      `).join("");
-    }
-
-    function renderFills(items) {
-      const body = document.getElementById("fills-body");
-      if (!items || items.length === 0) {
-        body.innerHTML = "<tr><td colspan='6'>No fills yet</td></tr>";
-        return;
-      }
-      body.innerHTML = items.map((item) => `
-        <tr>
-          <td>${fmtTime(item.timestamp)}</td>
-          <td class="side-${item.side}">${item.side}</td>
-          <td class="numeric">${fmt(item.price, 2)}</td>
-          <td class="numeric">${fmt(item.size, 6)}</td>
-          <td class="numeric">${fmt(item.fee, 4)}</td>
-          <td class="mono" title="${item.quote_id || ""}">${shortId(item.quote_id)}</td>
-        </tr>
-      `).join("");
-    }
-
-    function renderEquityCurve(points) {
-      const canvas = document.getElementById("equity-curve");
-      const empty = document.getElementById("equity-empty");
-      const startLabel = document.getElementById("equity-start");
-      const endLabel = document.getElementById("equity-end");
-      if (!points || points.length < 2) {
-        canvas.style.display = "none";
-        empty.style.display = "block";
-        startLabel.textContent = "-";
-        endLabel.textContent = "-";
-        return;
-      }
-      canvas.style.display = "block";
-      empty.style.display = "none";
-      const width = canvas.clientWidth || canvas.parentElement.clientWidth;
-      const height = 180;
-      const ratio = window.devicePixelRatio || 1;
-      canvas.width = width * ratio;
-      canvas.height = height * ratio;
-      const context = canvas.getContext("2d");
-      context.setTransform(ratio, 0, 0, ratio, 0, 0);
-      context.clearRect(0, 0, width, height);
-      const values = points.map((point) => point.total_pnl);
-      const minValue = Math.min(...values);
-      const maxValue = Math.max(...values);
-      const range = maxValue - minValue || 1;
-      const padding = 16;
-      const xForIndex = (index) => padding + (index / (points.length - 1)) * (width - padding * 2);
-      const yForValue = (value) => height - padding - ((value - minValue) / range) * (height - padding * 2);
-      if (minValue < 0 && maxValue > 0) {
-        const zeroY = yForValue(0);
-        context.strokeStyle = "#2a2f3a";
-        context.beginPath();
-        context.moveTo(padding, zeroY);
-        context.lineTo(width - padding, zeroY);
-        context.stroke();
-      }
-      context.strokeStyle = "#3b82f6";
-      context.lineWidth = 2;
-      context.beginPath();
-      points.forEach((point, index) => {
-        const x = xForIndex(index);
-        const y = yForValue(point.total_pnl);
-        if (index === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
-      });
-      context.stroke();
-      startLabel.textContent = `Start: ${fmt(points[0].total_pnl, 4)}`;
-      endLabel.textContent = `Latest: ${fmt(points[points.length - 1].total_pnl, 4)}`;
-    }
-
-    function renderCompare(rows) {
-      const body = document.getElementById("compare-body");
-      if (!rows?.length) {
-        body.innerHTML = "<tr><td colspan='6'>No rows</td></tr>";
-        return;
-      }
-      body.innerHTML = rows.map((row) => `
-        <tr>
-          <td>${row.strategy}</td>
-          <td class="numeric">${fmt(row.total_pnl, 4)}</td>
-          <td class="numeric">${fmt(row.max_drawdown, 4)}</td>
-          <td class="numeric">${fmt(row.sharpe_ratio, 3)}</td>
-          <td class="numeric">${fmt(row.fill_rate, 3)}</td>
-          <td class="numeric">${row.fill_count ?? "-"}</td>
-        </tr>
-      `).join("");
-    }
-
-    function renderSweep(rows) {
-      const body = document.getElementById("sweep-body");
-      if (!rows?.length) {
-        body.innerHTML = "<tr><td colspan='6'>No rows</td></tr>";
-        return;
-      }
-      body.innerHTML = rows.map((row) => `
-        <tr>
-          <td>${row.strategy}</td>
-          <td class="numeric">${fmt(row.quote_spread_bps, 1)}</td>
-          <td>${row.fill_mode}</td>
-          <td class="numeric">${fmt(row.total_pnl, 4)}</td>
-          <td class="numeric">${fmt(row.sharpe_ratio, 3)}</td>
-          <td class="numeric">${fmt(row.fill_rate, 3)}</td>
-        </tr>
-      `).join("");
-    }
-
-    async function refresh() {
-      try {
-        const [status, config, market, amm, position, pnl, pnlHistory, fills, opportunities, quotes] =
-          await Promise.all([
-            fetchJson("/status"),
-            fetchJson("/config"),
-            fetchJson("/market"),
-            fetchJson("/amm"),
-            fetchJson("/position"),
-            fetchJson("/pnl"),
-            fetchJson("/pnl/history?limit=200"),
-            fetchJson("/fills?limit=20"),
-            fetchJson("/opportunities?limit=5"),
-            fetchJson("/quotes"),
-          ]);
-        configCache = config;
-        renderChips(config, status);
-
-        const errorBanner = document.getElementById("error-banner");
-        if (status.last_error) {
-          errorBanner.style.display = "block";
-          errorBanner.textContent = `last_error: ${status.last_error}`;
-        } else {
-          errorBanner.style.display = "none";
-        }
-
-        const stale = market.is_stale ? " (stale)" : "";
-        document.getElementById("status-line").textContent =
-          `Tick ${status.tick} | Running: ${status.running} | Kill: ${status.kill_switch_active ? "ON" : "OFF"}${stale}`;
-
-        const audit = document.getElementById("audit-link");
-        if (status.last_tick_id) {
-          audit.href = `/audit/ticks/${status.last_tick_id}`;
-          audit.textContent = `Tick audit ${status.last_tick_id.slice(0, 8)}…`;
-        } else {
-          audit.href = "#";
-          audit.textContent = "Tick audit (waiting)";
-        }
-
-        document.getElementById("best-bid").textContent = fmt(market.best_bid, 2);
-        document.getElementById("best-ask").textContent = fmt(market.best_ask, 2);
-        document.getElementById("mid").textContent = fmt(market.mid, 2);
-        document.getElementById("spread").textContent = fmt(market.spread_bps, 2);
-        document.getElementById("cex-compare").textContent = fmt(amm.cex_compare_mid, 2);
-        document.getElementById("amm-price").textContent = fmt(amm.spot_price, 2);
-        document.getElementById("dex-spread").textContent = fmt(amm.spread_bps, 2);
-        document.getElementById("base").textContent = fmt(position.base_amount, 6);
-        document.getElementById("quote").textContent = fmt(position.quote_amount, 2);
-        document.getElementById("total-pnl").textContent = fmt(pnl.total_pnl, 4);
-        document.getElementById("pnl-breakdown").textContent =
-          `${fmt(pnl.realized_pnl, 4)} / ${fmt(pnl.unrealized_pnl, 4)} / −${fmt(pnl.total_fees, 4)}`;
-
-        renderEquityCurve(pnlHistory.points);
-        renderFills(fills.fills);
-        renderQuotes(quotes.quotes);
-        renderOpportunities(opportunities);
-
-        const btn = document.getElementById("kill-switch-btn");
-        btn.textContent = status.kill_switch_active ? "Disable kill switch" : "Enable kill switch";
-        btn.dataset.active = status.kill_switch_active ? "true" : "false";
-        btn.dataset.auth = status.operator_auth_required ? "true" : "false";
-      } catch (error) {
-        document.getElementById("status-line").textContent = `Error: ${error.message}`;
-      }
-    }
-
-    const usd = (value, digits = 2) =>
-      value === null || value === undefined ? "-" : `$${Number(value).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
-    const signedUsd = (value) =>
-      value === null || value === undefined ? "-" : `${Number(value) < 0 ? "−" : "+"}${usd(Math.abs(value))}`;
-    const compactInt = (raw) => {
-      if (!raw) return "-";
-      const n = Number(raw);
-      return n >= 1e15 ? `${(n / 1e18).toFixed(3)}e18` : n.toLocaleString("en-US");
-    };
-    let lpPoolCache = null;
-    let lpPositionCache = null;
-
-    function renderLiquidityChart(pool, position) {
-      const canvas = document.getElementById("liquidity-chart");
-      const empty = document.getElementById("liquidity-empty");
-      const buckets = pool?.window?.distribution || [];
-      if (!buckets.length) {
-        canvas.style.display = "none";
-        empty.style.display = "block";
-        return;
-      }
-      canvas.style.display = "block";
-      empty.style.display = "none";
-      const width = canvas.clientWidth || canvas.parentElement.clientWidth;
-      const height = 200;
-      const ratio = window.devicePixelRatio || 1;
-      canvas.width = width * ratio;
-      canvas.height = height * ratio;
-      const ctx = canvas.getContext("2d");
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      ctx.clearRect(0, 0, width, height);
-      const pad = { left: 8, right: 8, top: 12, bottom: 22 };
-      const plotW = width - pad.left - pad.right;
-      const plotH = height - pad.top - pad.bottom;
-      const values = buckets.map((b) => Number(b.liquidity));
-      const maxValue = Math.max(...values) || 1;
-      const lo = buckets[0].price_lower;
-      const hi = buckets[buckets.length - 1].price_upper;
-      const xFor = (price) => pad.left + ((price - lo) / (hi - lo)) * plotW;
-      const slot = plotW / buckets.length;
-      const barW = Math.max(slot - 2, 1); // 2px surface gap between bars
-
-      // LP range band behind the bars
-      if (position?.price_lower && position?.price_upper) {
-        const x1 = Math.max(xFor(position.price_lower), pad.left);
-        const x2 = Math.min(xFor(position.price_upper), pad.left + plotW);
-        if (x2 > x1) {
-          ctx.fillStyle = "rgba(217, 119, 6, 0.18)";
-          ctx.fillRect(x1, pad.top, x2 - x1, plotH);
-          ctx.strokeStyle = "#d97706";
-          ctx.lineWidth = 2;
-          ctx.strokeRect(x1, pad.top, x2 - x1, plotH);
-        }
-      }
-      // bars: thin, rounded data-end, anchored to the baseline
-      ctx.fillStyle = "#3b82f6";
-      buckets.forEach((bucket, i) => {
-        const h = (values[i] / maxValue) * plotH;
-        if (h <= 0) return;
-        const x = pad.left + i * slot + 1;
-        const y = pad.top + plotH - h;
-        const r = Math.min(4, barW / 2, h);
-        ctx.beginPath();
-        ctx.moveTo(x, pad.top + plotH);
-        ctx.lineTo(x, y + r);
-        ctx.quadraticCurveTo(x, y, x + r, y);
-        ctx.lineTo(x + barW - r, y);
-        ctx.quadraticCurveTo(x + barW, y, x + barW, y + r);
-        ctx.lineTo(x + barW, pad.top + plotH);
-        ctx.closePath();
-        ctx.fill();
-      });
-      // baseline + pool price line
-      ctx.strokeStyle = "#2a2f3a";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(pad.left, pad.top + plotH + 0.5);
-      ctx.lineTo(pad.left + plotW, pad.top + plotH + 0.5);
-      ctx.stroke();
-      const px = xFor(pool.price);
-      ctx.strokeStyle = "#e8eaed";
-      ctx.setLineDash([4, 3]);
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(px, pad.top);
-      ctx.lineTo(px, pad.top + plotH);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = "#9aa0a6";
-      ctx.font = "12px system-ui, sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillText(fmt(lo, 0), pad.left, height - 6);
-      ctx.textAlign = "right";
-      ctx.fillText(fmt(hi, 0), pad.left + plotW, height - 6);
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#e8eaed";
-      ctx.fillText(`price ${fmt(pool.price, 2)}`, Math.min(Math.max(px, 60), width - 60), height - 6);
-
-      canvas.onmousemove = (event) => {
-        const rect = canvas.getBoundingClientRect();
-        const index = Math.floor((event.clientX - rect.left - pad.left) / slot);
-        const tooltip = document.getElementById("liquidity-tooltip");
-        if (index < 0 || index >= buckets.length) {
-          tooltip.style.display = "none";
-          return;
-        }
-        const b = buckets[index];
-        tooltip.style.display = "block";
-        tooltip.style.left = `${Math.min(event.clientX - rect.left + 12, width - 190)}px`;
-        tooltip.style.top = "8px";
-        tooltip.innerHTML = `<strong>${fmt(b.price_lower, 2)} – ${fmt(b.price_upper, 2)}</strong><br>` +
-          `liquidity ${compactInt(b.liquidity)}<br>ticks ${b.tick_lower}…${b.tick_upper}`;
-      };
-      canvas.onmouseleave = () => {
-        document.getElementById("liquidity-tooltip").style.display = "none";
-      };
-      document.getElementById("liquidity-table").innerHTML = buckets
-        .filter((b) => Number(b.liquidity) > 0)
-        .map((b) => `<tr><td class="numeric">${fmt(b.price_lower, 2)}</td><td class="numeric">${fmt(b.price_upper, 2)}</td><td class="numeric mono">${compactInt(b.liquidity)}</td></tr>`)
-        .join("");
-    }
-
-    function renderPool(pool) {
-      const note = document.getElementById("v3-note");
-      if (pool.disabled_reason) {
-        note.textContent = `V3 disabled (${pool.disabled_reason}).`;
-        return;
-      }
-      if (pool.price === undefined) {
-        note.textContent = pool.status_note || "Waiting for first V3 snapshot";
-        return;
-      }
-      const flags = [];
-      if (pool.is_stale) flags.push("STALE (last good snapshot reused)");
-      if (pool.is_incomplete) flags.push("incomplete read");
-      if (pool.data_source === "fixture") flags.push("FIXTURE REPLAY of recorded mainnet data");
-      note.textContent = `${pool.pool_address} · window block ${pool.window?.block_number ?? "-"}` +
-        `${pool.window?.is_current ? " (current → quotes exact)" : " (older → quotes approximate)"}` +
-        `${flags.length ? " · " + flags.join(" · ") : ""}${pool.status_note ? " · " + pool.status_note : ""}`;
-      document.getElementById("v3-price").textContent = fmt(pool.price, 2);
-      document.getElementById("v3-tick").textContent = `${pool.tick} · ${pool.fee_tier_bps} bps`;
-      document.getElementById("v3-liquidity").textContent = compactInt(pool.liquidity);
-      document.getElementById("v3-block").textContent = `${pool.block_number} · ${pool.data_source}`;
-    }
-
-    function renderLpPosition(lp) {
-      const status = document.getElementById("lp-status");
-      if (lp.disabled_reason) {
-        status.textContent = `LP book disabled (${lp.disabled_reason})`;
-        return;
-      }
-      const label = {
-        in_range: "IN RANGE — earning fees",
-        out_of_range: "OUT OF RANGE — not earning fees",
-        frozen: "FROZEN — kill switch active",
-        not_opened: "Not opened yet",
-      }[lp.status] || lp.status;
-      status.textContent = `${label}${lp.status_note ? " · " + lp.status_note : ""}`;
-      const track = document.getElementById("range-track");
-      const band = document.getElementById("range-band");
-      const marker = document.getElementById("range-marker");
-      if (lp.price_lower && lp.price_upper && lp.pool_price) {
-        const span = lp.price_upper - lp.price_lower;
-        const lo = lp.price_lower - span;
-        const hi = lp.price_upper + span;
-        const pct = (p) => `${Math.min(Math.max(((p - lo) / (hi - lo)) * 100, 0), 100)}%`;
-        band.style.left = pct(lp.price_lower);
-        band.style.width = `calc(${pct(lp.price_upper)} - ${pct(lp.price_lower)})`;
-        marker.style.left = pct(lp.pool_price);
-        track.style.display = "block";
-        document.getElementById("range-lower").textContent = `lower ${fmt(lp.price_lower, 2)}`;
-        document.getElementById("range-upper").textContent = `upper ${fmt(lp.price_upper, 2)}`;
-      }
-      document.getElementById("lp-fees").textContent = usd(lp.fees_quote, 4);
-      document.getElementById("lp-il").textContent = signedUsd(lp.il_quote);
-      document.getElementById("lp-hodl").textContent = signedUsd(lp.hodl_pnl_quote);
-      document.getElementById("lp-costs").textContent =
-        lp.swap_cost_quote === undefined ? "-" : `${usd(lp.swap_cost_quote)} + ${usd(lp.gas_cost_quote)}`;
-      document.getElementById("lp-net").textContent =
-        lp.net_pnl_quote === undefined ? "-" : `${signedUsd(lp.net_pnl_quote)} · ${fmt(lp.return_on_capital_pct, 3)}%`;
-      document.getElementById("lp-rebalances").textContent =
-        lp.rebalance_count === undefined ? "-" : `${lp.rebalance_count} · ${lp.time_in_range_pct === null ? "-" : fmt(lp.time_in_range_pct, 1) + "%"}`;
-      document.getElementById("lp-accounting").textContent = lp.fee_accounting
-        ? `Capital ${usd(lp.capital_quote, 0)} · fee accounting: ${lp.fee_accounting} · share of active liquidity ${fmt(lp.pool_share_pct, 3)}% (fees diluted accordingly) · reconciliation error ${fmt(lp.reconciliation_error_quote, 6)} USDC`
-        : "";
-    }
-
-    function renderBooks(books) {
-      const body = document.getElementById("books-body");
-      if (!books?.cex) return;
-      const row = (side) => `
-        <tr>
-          <td>${side.label}</td>
-          <td class="numeric">${signedUsd(side.revenue_quote)}</td>
-          <td class="numeric">${usd(side.costs_quote)}</td>
-          <td class="numeric">${signedUsd(side.inventory_effect_quote)}</td>
-          <td class="numeric">${signedUsd(side.net_pnl_quote)}</td>
-          <td class="numeric">${fmt(side.return_pct, 4)}%</td>
-        </tr>`;
-      body.innerHTML = row(books.cex) + row(books.lp);
-      const winner = { cex: "CEX book ahead", lp: "LP book ahead", tie: "Tie" }[books.winner];
-      document.getElementById("books-notes").innerHTML =
-        `<strong>${winner}</strong> on return on capital. ` + (books.mismatch_notes || []).join(" ");
-    }
-
-    function renderRebalances(items) {
-      const body = document.getElementById("rebalances-body");
-      if (!items?.length) {
-        body.innerHTML = "<tr><td colspan='6'>No rebalances yet</td></tr>";
-        return;
-      }
-      body.innerHTML = items.map((item) => `
-        <tr>
-          <td>${fmtTime(item.timestamp)}</td>
-          <td>${item.reason}</td>
-          <td class="mono">${item.new_tick_lower} → ${item.new_tick_upper}</td>
-          <td class="numeric">${usd(item.swap_cost_quote, 4)}</td>
-          <td class="numeric">${usd(item.gas_cost_quote, 4)}</td>
-          <td class="numeric">${signedUsd(item.realized_il_quote)}</td>
-        </tr>`).join("");
-    }
-
-    const DIRECTION_LABEL = { v3_to_v2: "buy on V3, sell on V2", v2_to_v3: "buy on V2, sell on V3" };
-    const FEES_BPS = 35;
-    let arbHistoryCache = [];
-
-    const outcomeBadge = (outcome, id = "") => {
-      const kind = outcome?.startsWith("reverted") ? "reverted" : outcome;
-      return `<span ${id ? `id="${id}" ` : ""}class="badge badge-${kind}">${outcome}</span>`;
-    };
-
-    function renderArbStatus(payload) {
-      const status = payload.status;
-      const backend = {
-        "public-rpc": "free public RPC (state overrides)",
-        "local-fork": "local anvil fork",
-        "custom-rpc": "custom RPC",
-      }[status.backend] || "-";
-      const state = {
-        ok: "Simulator OK",
-        waiting: "Waiting",
-        unavailable: "Simulator UNAVAILABLE",
-        disabled: "Simulator off",
-      }[status.state] || status.state;
-      document.getElementById("arb-note").textContent = `${state} · backend: ${backend}` +
-        `${status.reason ? " · " + status.reason : ""}` +
-        `${status.skipped_total ? ` · ${status.skipped_total} tick(s) skipped` : ""}` +
-        " · every result is a read-only simulation; nothing is ever signed or sent.";
-    }
-
-    function renderArbLatest(latest) {
-      if (!latest) return;
-      const sim = latest.simulation;
-      document.getElementById("arb-gap").textContent = `${fmt(Math.abs(latest.gap_bps), 1)} bps / ${FEES_BPS} bps`;
-      document.getElementById("arb-trade").textContent =
-        `${DIRECTION_LABEL[latest.direction]} · ${usd(latest.notional_quote, 0)}` +
-        (latest.size_reason === "reference" ? " (reference size)" : " (best size)");
-      document.getElementById("arb-estimate").textContent =
-        `${signedUsd(latest.estimate.gross_quote)} / ${signedUsd(latest.estimate.net_quote)}`;
-      document.getElementById("arb-simulated").textContent =
-        sim.net_quote === null ? "-" : `${signedUsd(sim.gross_quote)} / ${signedUsd(sim.net_quote)}`;
-      document.getElementById("arb-gas").textContent = sim.gas_used === null ? "-" :
-        `${Number(sim.gas_used).toLocaleString("en-US")} · ${usd(sim.gas_cost_quote, 4)}`;
-      document.getElementById("arb-error").textContent = latest.estimate_error_quote === null ? "-" :
-        `${signedUsd(latest.estimate_error_quote)} · ${fmt(latest.estimate_error_bps, 3)} bps` +
-        (latest.estimate.exact ? " (exact estimate)" :
-          latest.estimate_error_quote === 0 ? " (tick window from an older block, still matched)" :
-          " (approximate: tick window from an older block)");
-      document.getElementById("arb-outcome").outerHTML = outcomeBadge(latest.outcome, "arb-outcome");
-      document.getElementById("arb-outcome-note").textContent = latest.outcome_note;
-      document.getElementById("arb-meta").textContent =
-        `block ${latest.block_number} · ${fmtTime(latest.timestamp)} · ${fmt(latest.latency_ms, 0)} ms`;
-    }
-
-    function renderAccuracy(acc) {
-      const counts = Object.entries(acc.outcome_counts || {}).map(([k, v]) => `${v} ${k}`).join(", ");
-      document.getElementById("acc-total").textContent = acc.total ? `${acc.total} · ${counts}` : "-";
-      document.getElementById("acc-agree").textContent =
-        acc.agreement_rate === null ? "-" : `${fmt(acc.agreement_rate * 100, 1)}%`;
-      document.getElementById("acc-error").textContent = acc.median_abs_error_bps === null ? "-" :
-        `${fmt(acc.median_abs_error_bps, 3)} / ${fmt(acc.p95_abs_error_bps, 3)} bps`;
-      document.getElementById("acc-exact").textContent =
-        acc.exact_match_rate === null ? "-" : `${fmt(acc.exact_match_rate * 100, 1)}%`;
-    }
-
-    function renderArbHistory(items) {
-      if (!items.length) return;
-      document.getElementById("arb-history").innerHTML = items.slice(0, 20).map((item) => `
-        <tr>
-          <td>${fmtTime(item.timestamp)}</td>
-          <td class="numeric">${item.block_number}</td>
-          <td>${DIRECTION_LABEL[item.direction]}</td>
-          <td class="numeric">${usd(item.notional_quote, 0)}</td>
-          <td class="numeric">${fmt(Math.abs(item.gap_bps), 1)} bps</td>
-          <td class="numeric">${signedUsd(item.estimate.net_quote)}</td>
-          <td class="numeric">${signedUsd(item.simulation.net_quote)}</td>
-          <td class="numeric">${item.simulation.gas_used === null ? "-" : Number(item.simulation.gas_used).toLocaleString("en-US")}</td>
-          <td>${outcomeBadge(item.outcome)}</td>
-        </tr>`).join("");
-      document.getElementById("gap-table").innerHTML = items.map((item) =>
-        `<tr><td>${fmtTime(item.timestamp)}</td><td class="numeric">${item.block_number}</td>` +
-        `<td class="numeric">${fmt(Math.abs(item.gap_bps), 1)} bps</td><td>${item.outcome}</td></tr>`).join("");
-    }
-
-    function renderGapChart(items) {
-      const canvas = document.getElementById("gap-chart");
-      const empty = document.getElementById("gap-empty");
-      const points = [...items].reverse(); // oldest first
-      if (!points.length) {
-        canvas.style.display = "none";
-        empty.style.display = "block";
-        return;
-      }
-      if (!canvas.parentElement.offsetParent) return; // tab hidden: draw when shown
-      canvas.style.display = "block";
-      empty.style.display = "none";
-      const width = canvas.clientWidth || canvas.parentElement.clientWidth;
-      const height = 200;
-      const ratio = window.devicePixelRatio || 1;
-      canvas.width = width * ratio;
-      canvas.height = height * ratio;
-      const ctx = canvas.getContext("2d");
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      ctx.clearRect(0, 0, width, height);
-      const pad = { left: 40, right: 12, top: 14, bottom: 22 };
-      const plotW = width - pad.left - pad.right;
-      const plotH = height - pad.top - pad.bottom;
-      const gaps = points.map((p) => Math.abs(p.gap_bps));
-      const top = Math.max(FEES_BPS * 1.3, Math.max(...gaps) * 1.1);
-      const xFor = (i) => pad.left + (points.length === 1 ? plotW / 2 : (i / (points.length - 1)) * plotW);
-      const yFor = (v) => pad.top + plotH - (v / top) * plotH;
-      // recessive grid and y labels (bps)
-      ctx.strokeStyle = "#2a2f3a";
-      ctx.lineWidth = 1;
-      ctx.fillStyle = "#9aa0a6";
-      ctx.font = "12px system-ui, sans-serif";
-      ctx.textAlign = "right";
-      [0, top / 2, top].forEach((v) => {
-        const y = Math.round(yFor(v)) + 0.5;
-        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + plotW, y); ctx.stroke();
-        ctx.fillText(fmt(v, 0), pad.left - 6, y + 4);
-      });
-      // fee threshold
-      const feeY = yFor(FEES_BPS);
-      ctx.strokeStyle = "#e8eaed";
-      ctx.setLineDash([4, 3]);
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(pad.left, feeY); ctx.lineTo(pad.left + plotW, feeY); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = "#e8eaed";
-      ctx.textAlign = "left";
-      ctx.fillText(`fees ${FEES_BPS} bps`, pad.left + 6, feeY - 6);
-      // gap series: 2px line, 8px markers with a 2px surface ring
-      ctx.strokeStyle = "#3b82f6";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      gaps.forEach((g, i) => (i ? ctx.lineTo(xFor(i), yFor(g)) : ctx.moveTo(xFor(i), yFor(g))));
-      ctx.stroke();
-      gaps.forEach((g, i) => {
-        ctx.beginPath();
-        ctx.arc(xFor(i), yFor(g), 4, 0, Math.PI * 2);
-        ctx.fillStyle = "#3b82f6";
-        ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = "#1a1d24";
-        ctx.stroke();
-      });
-      ctx.fillStyle = "#9aa0a6";
-      ctx.textAlign = "left";
-      ctx.fillText(fmtTime(points[0].timestamp), pad.left, height - 6);
-      ctx.textAlign = "right";
-      ctx.fillText(fmtTime(points[points.length - 1].timestamp), pad.left + plotW, height - 6);
-
-      canvas.onmousemove = (event) => {
-        const rect = canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        let index = 0;
-        points.forEach((_, i) => { if (Math.abs(xFor(i) - x) < Math.abs(xFor(index) - x)) index = i; });
-        const p = points[index];
-        const tooltip = document.getElementById("gap-tooltip");
-        tooltip.style.display = "block";
-        tooltip.style.left = `${Math.min(x + 12, width - 200)}px`;
-        tooltip.style.top = "8px";
-        tooltip.innerHTML = `<strong>block ${p.block_number}</strong> · ${fmtTime(p.timestamp)}<br>` +
-          `gap ${fmt(Math.abs(p.gap_bps), 1)} bps (fees ${FEES_BPS})<br>` +
-          `simulated net ${signedUsd(p.simulation.net_quote)}<br>${p.outcome}`;
-      };
-      canvas.onmouseleave = () => { document.getElementById("gap-tooltip").style.display = "none"; };
-    }
-
-
-    // --- Mempool watcher (specs/004-mempool-watcher) ------------------------------
-    let mpBlocksCache = [];
-    const pct = (value, digits = 1) =>
-      value === null || value === undefined ? "-" : `${(value * 100).toFixed(digits)}%`;
-    const bps = (value, digits = 2) =>
-      value === null || value === undefined ? "-" : `${Number(value).toFixed(digits)} bps`;
-    const esc = (text) => String(text ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-    const shortHash = (hash) => (hash ? `${hash.slice(0, 10)}…${hash.slice(-4)}` : "-");
-    const txLink = (hash) => `<a class="mono" href="https://etherscan.io/tx/${esc(hash)}" target="_blank" rel="noreferrer">${shortHash(hash)}</a>`;
-
-    function legText(leg) {
-      const units = leg.direction === "sell_weth" ? ["WETH", 1e18] : ["USDC", 1e6];
-      const amount = leg.amount_specified_raw ? Number(leg.amount_specified_raw) / units[1] : null;
-      const kind = leg.kind === "exact_out" ? "for exactly" : leg.kind === "exact_amounts" ? "set" : "";
-      const side = leg.direction === "sell_weth" ? "sell WETH" : "buy WETH";
-      const shown = amount === null ? "?" : amount.toLocaleString(undefined, { maximumFractionDigits: 4 });
-      const flags = leg.flags && leg.flags.length ? ` <span class="muted">[${leg.flags.join(", ")}]</span>` : "";
-      return `${leg.pool.toUpperCase()} ${side} ${kind} ${shown} ${leg.kind === "exact_out" ? (leg.direction === "sell_weth" ? "USDC" : "WETH") : units[0]}${flags}`;
-    }
-
-    function renderMempoolStatus(payload) {
-      const status = payload.status;
-      const modeBadge = document.getElementById("mp-mode");
-      const stateBadge = document.getElementById("mp-state");
-      if (!status.enabled) {
-        modeBadge.textContent = "disabled";
-        modeBadge.className = "badge";
-        stateBadge.textContent = status.state;
-        stateBadge.className = "badge";
-        document.getElementById("mp-status").textContent = `Watcher off (${status.reason}).`;
-        return;
-      }
-      const live = status.mode === "live";
-      modeBadge.textContent = live ? "live" : "replay (not live)";
-      modeBadge.className = `badge ${live ? "badge-live" : "badge-replay"}`;
-      stateBadge.textContent = status.state;
-      stateBadge.className = `badge ${status.state === "ok" ? "badge-ok" : "badge-warn"}`;
-      const c = status.counters || {};
-      const source = status.source ? ` · ${status.source}` : "";
-      const reason = status.reason ? ` · ${status.reason}` : "";
-      document.getElementById("mp-status").textContent =
-        `${status.backend || "-"}${source} · block ${status.last_block ?? "-"} · ` +
-        `${(c.seen || 0).toLocaleString()} pending seen · ${c.decoded || 0} decoded · ` +
-        `${c.not_decoded || 0} not decoded · ${c.pending_watched || 0} waiting · ` +
-        `${c.state_mismatches || 0} state mismatches${reason}`;
-      document.getElementById("mp-mode-note").textContent = payload.explanations.D2;
-      const order = ["D1", "D2", "D3", "D4", "D5", "D6", "D7"];
-      const titles = {
-        D1: "We only see a minority of the swaps.",
-        D2: "Live by default, block replay when live is impossible.",
-        D3: "Predict against the latest block, then explain the miss.",
-        D4: "Decode the common routes, count the rest.",
-        D5: "Back-runs are a stated rule, not a guess.",
-        D6: "Beside the trading loop, never inside it.",
-        D7: "Read-only and a fixed scope.",
-      };
-      document.getElementById("mp-explanations").innerHTML = order
-        .map((key) => `<p><strong>${titles[key]}</strong> ${esc(payload.explanations[key])}</p>`)
-        .join("");
-      const switches = payload.mode_changes || [];
-      document.getElementById("mp-switches").innerHTML = switches.length
-        ? switches.map((s) => `<tr><td>${fmtTime(s.at)}</td><td>${s.from_mode || "-"}</td><td>${s.to_mode}</td><td>${s.source}</td><td>${esc(s.reason)}</td></tr>`).join("")
-        : "<tr><td colspan='5'>None yet</td></tr>";
-    }
-
-    function renderMempoolSummary(payload, status) {
-      const ex = payload.explanations;
-      const live = payload.live;
-      const replay = payload.replay;
-      const none = "none verified yet";
-      const set = (id, value, note) => {
-        document.getElementById(id).innerHTML = `${value}${note ? `<span class="sub">${esc(note)}</span>` : ""}`;
-      };
-      const errors = (summary, digits) => summary && summary.math_error_bps_p50 !== null
-        ? `${bps(summary.math_error_bps_p50, digits)} / ${bps(summary.math_error_bps_p95, digits)}`
-        : none;
-
-      // Live group (D1, D4): visibility, decoding, inclusion, and the rare live predictions.
-      const liveMode = status && status.status && status.status.mode === "live";
-      if (live) {
-        set("mp-visible", pct(live.visible_share), ex.visible_share);
-        set("mp-coverage", pct(live.decode_coverage), ex.decode_coverage);
-        const latency = live.latency_blocks_p50 !== null
-          ? ` · ${fmt(live.latency_blocks_p50, 0)} blk · ${fmt(live.latency_seconds_p50, 1)} s` : "";
-        set("mp-inclusion", live.inclusion_rate === null ? none : `${pct(live.inclusion_rate)}${latency}`, ex.inclusion_rate);
-        set("mp-live-math", errors(live, 4), live.exact_rate === null ? ex.math_error_bps : `${pct(live.exact_rate)} exact`);
-        const quiet = live.watched === 0
-          ? " No public swap on our pools was decodable in this window: most of their flow is private (D1) and most public router flow now goes to Uniswap V4 pools (D4, out of scope). The replay group below checks every swap that did land."
-          : "";
-        document.getElementById("mp-window").textContent =
-          `Last ${payload.window_minutes} min: ${live.watched} live swaps watched over ${live.blocks} blocks.${quiet}`;
-      } else {
-        ["mp-visible", "mp-coverage", "mp-inclusion", "mp-live-math"].forEach((id) => set(id, liveMode ? none : "n/a (not live)"));
-        document.getElementById("mp-window").textContent = liveMode
-          ? `No live records in the last ${payload.window_minutes} minutes yet.`
-          : "The watcher is not live right now, so these numbers are not available (D2).";
-      }
-
-      // Replay group (D2, D3, D5): every swap that landed, checked with exact math.
-      if (replay) {
-        set("mp-r-count", `${replay.watched} · ${replay.blocks}`, "Swap transactions on our pools in recent blocks, not watched live.");
-        set("mp-math", errors(replay, 4), replay.exact_rate === null ? ex.math_error_bps : `${pct(replay.exact_rate)} exact. ${ex.math_error_bps}`);
-        set("mp-ordering", errors({
-          math_error_bps_p50: replay.ordering_effect_bps_p50,
-          math_error_bps_p95: replay.ordering_effect_bps_p95,
-        }, 2), ex.ordering_effect_bps);
-        set("mp-opps", `${replay.opportunities_flagged} · ${replay.opportunities_appeared} · ${replay.backruns}`, ex.capture_rate);
-        document.getElementById("mp-replay-window").textContent =
-          "Each swap is predicted from the state before its block, as if it had been seen pending, then checked against its own event. Kept apart from live numbers.";
-      } else {
-        ["mp-r-count", "mp-math", "mp-ordering", "mp-opps"].forEach((id) => set(id, "-"));
-        document.getElementById("mp-replay-window").textContent =
-          status && status.status && status.status.replay_alongside === false && liveMode
-            ? "Replay alongside live is off (MEMPOOL_REPLAY_ALONGSIDE=false)."
-            : `No replayed swaps in the last ${payload.window_minutes} minutes yet.`;
-      }
-    }
-
-    function renderMempoolSwaps(pending, verified) {
-      document.getElementById("mp-pending").innerHTML = pending.length
-        ? pending.map((s) => `<tr>
-            <td>${fmtTime(s.first_seen_at)}</td><td>${txLink(s.tx_hash)}</td><td>${s.route}</td>
-            <td>${s.legs.map(legText).join("<br>")}</td>
-            <td class="numeric">${bps(s.gap_before_bps)} → ${bps(s.gap_after_bps)}</td>
-            <td>${s.opportunity ? `${s.opportunity} (${s.opportunity_direction})` : "-"}</td>
-            <td class="muted">${esc(s.note)}</td></tr>`).join("")
-        : "<tr><td colspan='7'>Nothing pending on our pools right now (see D1)</td></tr>";
-      const done = verified.filter((s) => s.status !== "pending");
-      document.getElementById("mp-verified").innerHTML = done.length
-        ? done.map((s) => {
-            const o = s.outcome || {};
-            const legs = o.legs || [];
-            const math = legs.length ? Math.max(...legs.map((l) => l.math_error_bps)) : null;
-            const order = legs.length ? Math.max(...legs.map((l) => l.ordering_effect_bps)) : null;
-            const waited = s.mode === "live" && o.blocks_waited !== null && o.blocks_waited !== undefined
-              ? `${o.blocks_waited} blk${o.seconds_waited !== null ? ` · ${fmt(o.seconds_waited, 1)} s` : ""}` : "-";
-            return `<tr>
-              <td>${fmtTime(s.first_seen_at)}</td><td>${txLink(s.tx_hash)}</td>
-              <td><span class="badge ${s.mode === "live" ? "badge-live" : "badge-replay"}">${s.mode}</span></td>
-              <td>${s.status}</td><td class="numeric">${o.block_number ?? "-"} · ${o.tx_index ?? "-"}</td>
-              <td class="numeric">${waited}</td>
-              <td class="numeric">${math === null ? "-" : math === 0 ? "0 (exact)" : bps(math, 4)}</td>
-              <td class="numeric">${order === null ? "-" : bps(order)}</td>
-              <td class="muted">${esc(s.note)}</td></tr>`;
-          }).join("")
-        : "<tr><td colspan='9'>No verified swaps yet</td></tr>";
-    }
-
-    function renderVisibilityChart(items) {
-      const canvas = document.getElementById("visibility-chart");
-      const empty = document.getElementById("visibility-empty");
-      const points = [...items].reverse();
-      document.getElementById("visibility-table").innerHTML = items.slice(0, 50).map((b) => `<tr>
-        <td class="numeric">${b.block_number}</td><td>${b.mode}</td><td class="numeric">${b.pool_swap_txs}</td>
-        <td class="numeric">${b.mode === "live" ? b.seen_pending : "-"}</td>
-        <td class="numeric">${bps(b.gap_end_bps)}</td><td class="numeric">${b.scan_net_end_quote === null ? "-" : `$${fmt(b.scan_net_end_quote, 2)}`}</td></tr>`).join("");
-      if (!points.length) {
-        canvas.style.display = "none";
-        empty.style.display = "block";
-        return;
-      }
-      if (!canvas.parentElement.offsetParent) return;
-      canvas.style.display = "block";
-      empty.style.display = "none";
-      const width = canvas.clientWidth || canvas.parentElement.clientWidth;
-      const height = 200;
-      const ratio = window.devicePixelRatio || 1;
-      canvas.width = width * ratio;
-      canvas.height = height * ratio;
-      const ctx = canvas.getContext("2d");
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      ctx.clearRect(0, 0, width, height);
-      const pad = { left: 32, right: 12, top: 12, bottom: 22 };
-      const plotW = width - pad.left - pad.right;
-      const plotH = height - pad.top - pad.bottom;
-      const top = Math.max(2, ...points.map((p) => p.pool_swap_txs));
-      const slot = plotW / points.length;
-      const barW = Math.max(2, Math.min(18, slot - 2));
-      const yFor = (v) => pad.top + plotH - (v / top) * plotH;
-      ctx.strokeStyle = "#2a2f3a";
-      ctx.lineWidth = 1;
-      ctx.fillStyle = "#9aa0a6";
-      ctx.font = "12px system-ui, sans-serif";
-      ctx.textAlign = "right";
-      [0, Math.round(top / 2), top].forEach((v) => {
-        const y = Math.round(yFor(v)) + 0.5;
-        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + plotW, y); ctx.stroke();
-        ctx.fillText(String(v), pad.left - 6, y + 4);
-      });
-      const roundTop = (x, y, w, h) => {
-        if (h <= 0) return;
-        const r = Math.min(4, w / 2, h);
-        ctx.beginPath();
-        ctx.moveTo(x, y + h); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
-        ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h);
-        ctx.closePath(); ctx.fill();
-      };
-      points.forEach((p, i) => {
-        const x = pad.left + i * slot + (slot - barW) / 2;
-        const seen = p.mode === "live" ? p.seen_pending : 0;
-        const unseen = p.pool_swap_txs - seen;
-        const base = yFor(0);
-        const seenTop = yFor(seen);
-        if (seen > 0) {
-          ctx.fillStyle = "#3987e5";
-          if (unseen > 0) ctx.fillRect(x, seenTop, barW, base - seenTop);
-          else roundTop(x, seenTop, barW, base - seenTop);
-        }
-        if (unseen > 0) {
-          const totalTop = yFor(p.pool_swap_txs);
-          const gap = seen > 0 ? 2 : 0;
-          ctx.fillStyle = "#d95926";
-          roundTop(x, totalTop, barW, seenTop - totalTop - gap);
-        }
-      });
-      ctx.fillStyle = "#9aa0a6";
-      ctx.textAlign = "left";
-      ctx.fillText(`#${points[0].block_number}`, pad.left, height - 6);
-      ctx.textAlign = "right";
-      ctx.fillText(`#${points[points.length - 1].block_number}`, pad.left + plotW, height - 6);
-      canvas.onmousemove = (event) => {
-        const rect = canvas.getBoundingClientRect();
-        const index = Math.min(points.length - 1, Math.max(0, Math.floor((event.clientX - rect.left - pad.left) / slot)));
-        const p = points[index];
-        const tooltip = document.getElementById("visibility-tooltip");
-        const seen = p.mode === "live" ? p.seen_pending : "n/a (replay)";
-        tooltip.innerHTML = `<div class="mono">block ${p.block_number}</div>` +
-          `<div>Pool swaps: ${p.pool_swap_txs}</div><div>Seen pending: ${seen}</div>` +
-          `<div>Gap at end: ${bps(p.gap_end_bps)}</div>`;
-        tooltip.style.display = "block";
-        const left = Math.min(rect.width - 180, Math.max(0, event.clientX - rect.left + 12));
-        tooltip.style.left = `${left}px`;
-        tooltip.style.top = "8px";
-      };
-      canvas.onmouseleave = () => { document.getElementById("visibility-tooltip").style.display = "none"; };
-    }
-
-    async function refreshMempool() {
-      try {
-        const [status, summary, pending, verified, liveBlocks, replayBlocks] = await Promise.all([
-          fetchJson("/mempool/status"),
-          fetchJson("/mempool/summary?window_minutes=60"),
-          fetchJson("/mempool/swaps?status=pending&limit=20"),
-          fetchJson("/mempool/swaps?limit=40"),
-          fetchJson("/mempool/blocks?limit=60&mode=live"),
-          fetchJson("/mempool/blocks?limit=60&mode=replay"),
-        ]);
-        // One row per block: the live row while live, the replay row otherwise.
-        const blocks = status.status.mode === "replay" ? replayBlocks : liveBlocks;
-        renderMempoolStatus(status);
-        renderMempoolSummary(summary, status);
-        renderMempoolSwaps(pending.items, verified.items);
-        mpBlocksCache = blocks.items;
-        renderVisibilityChart(blocks.items);
-      } catch (error) {
-        document.getElementById("mp-status").textContent = `Mempool error: ${error.message}`;
-      }
-    }
-
-    // --- Binance spot testnet (specs/005-binance-testnet-execution) ----------------
-    const MODEL_LABELS = {
-      full_cross_fill: "full_cross_fill",
-      partial_fill: "partial_fill",
-      latency_prob_fill: "latency_prob_fill",
-      calibrated_fill: "calibrated_fill",
-    };
-    const secs = (value) => (value === null || value === undefined ? "-" : `${Number(value).toFixed(1)} s`);
-    const qty = (value) => (value === null || value === undefined ? "-" : Number(value).toFixed(5));
-    const usd2 = (value) => (value === null || value === undefined ? "-" : `${Number(value) >= 0 ? "" : "−"}$${Math.abs(Number(value)).toFixed(2)}`);
-
-    function renderTestnetStatus(payload, sessions) {
-      const status = payload.status;
-      const source = payload.source;
-      const sourceBadge = document.getElementById("tn-source");
-      sourceBadge.textContent = source === "recorded" ? "recorded (not live)" : source === "live" ? "live" : "no data";
-      sourceBadge.className = `badge ${source === "live" ? "badge-live" : source === "recorded" ? "badge-replay" : ""}`;
-      const stateBadge = document.getElementById("tn-state");
-      stateBadge.textContent = status.state;
-      stateBadge.className = `badge ${["running", "paused"].includes(status.state) ? "badge-ok" : "badge-warn"}`;
-      const c = status.counters || {};
-      const reason = status.reason ? ` · ${status.reason}` : "";
-      document.getElementById("tn-status").textContent = source === "live"
-        ? `session ${status.session_id} · ${status.open_orders} open · ${c.placed || 0} placed · ${c.cancelled || 0} cancelled · ` +
-          `${c.filled || 0} filled · ${c.partially_filled || 0} partial · weight ${pct(status.weight_used_ratio, 0)}${reason}`
-        : `Trader off${reason}.`;
-      const note = document.getElementById("tn-source-note");
-      if (source === "recorded" && payload.recorded) {
-        const r = payload.recorded;
-        const set = r.settings || {};
-        note.textContent = `Showing a recorded real testnet session from ${new Date(r.recorded_at).toLocaleString()} ` +
-          `(${r.minutes} min, spread ${set.spread_bps} bps, replace threshold ${set.replace_threshold_bps} bps). ` +
-          `${payload.how_to_enable}`;
-      } else if (source === "none") {
-        note.textContent = payload.how_to_enable;
-      } else {
-        note.textContent = payload.explanations.D3;
-      }
-      const titles = {
-        D1: "Testnet only, enforced by the lab.",
-        D2: "Without keys, a recorded session.",
-        D3: "Same inputs, different fill engines.",
-        D4: "Maker-only orders and a kill switch that cancels.",
-        D5: "Fill-model accuracy, not testnet profit.",
-        D6: "Every order reconciled with the exchange.",
-        D7: "Beside the trading loop, within the limits.",
-      };
-      document.getElementById("tn-explanations").innerHTML = Object.keys(titles)
-        .map((key) => `<p><strong>${titles[key]}</strong> ${esc(payload.explanations[key])}</p>`)
-        .join("");
-      const rec = status.reconcile || {};
-      const reconcile = source === "recorded"
-        ? `<span class="badge badge-ok">all orders final</span><span class="sub">${esc(payload.explanations.D6.split(". ")[0])}.</span>`
-        : rec.ok === null || rec.ok === undefined
-          ? "-"
-          : `<span class="badge ${rec.ok ? "badge-ok" : "badge-warn"}">${rec.ok ? "matches the exchange" : "checking"}</span>` +
-            `<span class="sub">last ${fmtTime(rec.last_at)} · ${rec.unexplained || 0} unexplained · ${c.leftovers_cancelled || 0} leftovers cancelled · ${c.resets || 0} resets</span>`;
-      document.getElementById("tn-reconcile").innerHTML = reconcile;
-    }
-
-    function renderTestnetComparison(payload, balances) {
-      const models = payload.models || [];
-      const first = models[0];
-      const ex = payload.explanations || {};
-      document.getElementById("tn-orders").innerHTML = first
-        ? `${first.orders} · ${first.real_filled}<span class="sub">${esc(ex.fill_rate)}</span>`
-        : "-";
-      const r = payload.rejects || {};
-      const rejected = Object.values(r).reduce((a, b) => a + b, 0);
-      document.getElementById("tn-rejects").innerHTML =
-        `${rejected}<span class="sub">post-only ${r.post_only || 0} · min size ${r.min_size || 0} · min value ${r.min_notional || 0} · unfundable ${r.unfundable || 0}. ${esc(ex.rejects)}</span>`;
-      const v = balances.virtual;
-      document.getElementById("tn-pnl").innerHTML = v && v.pnl !== null && v.pnl !== undefined
-        ? `${usd2(v.pnl)}<span class="sub">${qty(v.base)} BTC · ${usd2(v.quote)} USDT at mid ${fmt(v.mid, 2)}. Testnet PnL, not a mainnet forecast (D5).</span>`
-        : "-";
-      const none = "no fills yet";
-      document.getElementById("tn-compare").innerHTML = models.length && first.orders
-        ? models.map((m) => `<tr>
-            <td class="mono">${MODEL_LABELS[m.fill_model] || m.fill_model}</td>
-            <td class="numeric">${m.real_fill_rate === null ? none : `${pct(m.real_fill_rate)} / ${pct(m.paper_fill_rate)}`}</td>
-            <td class="numeric">${m.matched}</td><td class="numeric">${m.paper_only}</td>
-            <td class="numeric">${m.real_only}</td><td class="numeric">${m.neither}</td>
-            <td class="numeric">${secs(m.median_time_to_fill_real_sec)} / ${secs(m.median_time_to_fill_paper_sec)}</td>
-            <td class="numeric">${m.mean_size_diff === null ? "-" : `${qty(m.mean_size_diff)} · ${bps(m.mean_price_diff_bps)}`}</td>
-            <td class="numeric">${usd2(m.real_pnl)} / ${usd2(m.paper_pnl)} / ${usd2(m.pnl_gap)}</td>
-          </tr>`).join("")
-        : `<tr><td colspan="9">${payload.source === "none" ? "No testnet data: set free testnet keys to run it live." : "No orders yet"}</td></tr>`;
-      const order = ["matched", "paper_only", "real_only", "time_to_fill", "size_price", "pnl_gap"];
-      document.getElementById("tn-field-explanations").innerHTML = order
-        .map((key) => `<p><strong>${key.replace(/_/g, " ")}:</strong> ${esc(ex[key])}</p>`)
-        .join("");
-    }
-
-    function renderTestnetOrders(open, recent, fills) {
-      document.getElementById("tn-open").innerHTML = open.length
-        ? open.map((o) => `<tr><td>${fmtTime(o.placed_at)}</td><td class="mono">${esc(o.client_order_id)}</td><td>${o.side}</td>
-            <td class="numeric">${fmt(o.price, 2)}</td><td class="numeric">${qty(o.size)}</td><td>${o.state}</td><td class="numeric">${qty(o.filled_size)}</td></tr>`).join("")
-        : "<tr><td colspan='7'>No open orders</td></tr>";
-      document.getElementById("tn-recent").innerHTML = recent.length
-        ? recent.map((o) => {
-            const p = o.paper || {};
-            const events = (o.events || []).map((e) => e.kind).join(" → ");
-            return `<tr><td>${fmtTime(o.placed_at)}</td><td class="mono">${esc(o.client_order_id)}</td><td>${o.side}</td>
-              <td class="numeric">${fmt(o.price, 2)}</td><td>${o.state}${o.reject_reason ? ` (${o.reject_reason})` : ""}</td>
-              <td class="numeric">${qty(o.filled_size)}</td>
-              <td class="numeric">${qty(p.full_cross_fill || 0)} · ${qty(p.partial_fill || 0)} · ${qty(p.latency_prob_fill || 0)} · ${qty(p.calibrated_fill || 0)}</td>
-              <td class="muted">${esc(events)}</td></tr>`;
-          }).join("")
-        : "<tr><td colspan='8'>No orders yet</td></tr>";
-      document.getElementById("tn-fills").innerHTML = fills.length
-        ? fills.map((f) => `<tr><td>${fmtTime(f.at)}</td><td class="mono">${esc(f.client_order_id)}</td><td>${f.side}</td>
-            <td class="numeric">${fmt(f.price, 2)}</td><td class="numeric">${qty(f.size)}</td><td class="numeric">${fmt(f.fee, 6)} ${esc(f.fee_asset)}</td></tr>`).join("")
-        : "<tr><td colspan='6'>No fills yet</td></tr>";
-    }
-
-    // --- fill-model calibration (specs/006-fill-model-calibration) ------------------
-    function renderCalibration(payload) {
-      const cal = payload.calibration;
-      const titles = {
-        D1: "A fill chance for touches the snapshots cannot see.",
-        D2: "Fitted from recorded real sessions, offline.",
-        D3: "Judged on sessions it was not fitted on.",
-        D4: "An option, not the default; labeled outside its range.",
-        D5: "Random but repeatable; expected count shown.",
-        D6: "Several spreads, every recording replayed.",
-        trades: "What the public trades show.",
-        volatility: "Volatility: tested, not adopted.",
-        volatility_measure: "Measured from the snapshots the model already has.",
-        volatility_gate: "Kept only if it wins on held-out sessions.",
-        volatility_sessions: "Spreads alternated; replay checks every model.",
-      };
-      document.getElementById("tn-cal-explanations").innerHTML = Object.keys(titles)
-        .map((key) => `<p><strong>${titles[key]}</strong> ${esc(payload.explanations[key])}</p>`)
-        .join("");
-      if (!payload.available || !cal) {
-        document.getElementById("tn-cal-summary").textContent =
-          `No calibration file: calibrated_fill behaves like full_cross_fill. Create one with ${payload.how_to_calibrate}`;
-        document.getElementById("tn-cal-heldout").innerHTML = "<tr><td colspan='8'>No calibration yet</td></tr>";
-        document.getElementById("tn-cal-curve").innerHTML = "<tr><td colspan='5'>No calibration yet</td></tr>";
-        document.getElementById("tn-cal-forms").innerHTML = "<tr><td colspan='8'>No calibration yet</td></tr>";
-        document.getElementById("tn-cal-gate").textContent = "";
-        return;
-      }
-      const range = cal.distance_range_bps || [];
-      const decay = cal.decay_bps === null ? "no decay" : `falls by e every ${fmt(cal.decay_bps, 2)} bps`;
-      const v = cal.validation;
-      const verdict = v
-        ? ` Held out, calibrated_fill was closest to the real count in ${v.calibrated_closest_in} of ${v.held_out.length} sessions` +
-          ` (goal: ${Math.ceil(0.75 * v.held_out.length)}) — ${v.goal_met ? "goal met" : "goal not met"}.`
-        : " Leave-one-out needs at least two sessions.";
-      const vol = cal.volatility_exponent === null || cal.volatility_exponent === undefined
-        ? ""
-        : `, scales as (volatility / ${fmt(cal.volatility_reference, 2)} bps/√s)^${fmt(cal.volatility_exponent, 2)}`;
-      document.getElementById("tn-cal-summary").textContent =
-        `Fill rate at the touch ${fmt(cal.touch_rate_per_sec, 5)} per second, ${decay}${vol}; fitted on ${cal.sources.length} sessions, ` +
-        `${cal.intervals} intervals, ${cal.events} fills the snapshots missed, distances ${fmt(range[0], 2)} to ${fmt(range[1], 2)} bps.${verdict}`;
-      const rows = v ? v.held_out.map((r) => `<tr>
-          <td class="mono">${esc(r.session_id)}</td><td class="numeric">${fmt(r.spread_bps, 0)} bps</td>
-          <td class="numeric">${r.orders}</td><td class="numeric"><strong>${r.real_fills}</strong></td>
-          <td class="numeric">${r.models.full_cross_fill}</td><td class="numeric">${r.models.partial_fill}</td>
-          <td class="numeric">${r.models.latency_prob_fill}</td>
-          <td class="numeric">${fmt(r.calibrated_expected, 1)} / ${r.models.calibrated_fill}</td></tr>`) : [];
-      if (v) {
-        const e = v.mean_abs_error;
-        rows.push(`<tr><td colspan="4"><strong>Mean |model − real|</strong></td>
-          <td class="numeric">${fmt(e.full_cross_fill, 1)}</td><td class="numeric">${fmt(e.partial_fill, 1)}</td>
-          <td class="numeric">${fmt(e.latency_prob_fill, 1)}</td><td class="numeric">${fmt(e.calibrated_fill, 1)} (expected)</td></tr>`);
-      }
-      document.getElementById("tn-cal-heldout").innerHTML = rows.length ? rows.join("") : "<tr><td colspan='8'>Leave-one-out needs at least two sessions</td></tr>";
-      const gate = cal.gate;
-      document.getElementById("tn-cal-gate").textContent = gate
-        ? `Volatility term: scored better on ${gate.held_out_wins} of ${gate.sessions} held-out sessions (needs ${gate.needed}), ` +
-          `k above zero: ${gate.k_positive ? "yes" : "no"} — ${gate.passed ? "kept, in use" : "not kept, base form in use"}. ` +
-          "Score: log-likelihood of every look at every order in the held-out session; higher is better."
-        : "Volatility term: not tested (needs at least two sessions).";
-      document.getElementById("tn-cal-forms").innerHTML = v && v.held_out[0] && v.held_out[0].forms
-        ? v.held_out.map((r) => {
-            const b = r.forms.base, w = r.forms.volatility;
-            const better = w.log_likelihood > b.log_likelihood;
-            return `<tr>
-              <td class="mono">${esc(r.session_id)}</td><td class="numeric">${fmt(r.spread_bps, 0)} bps</td>
-              <td class="numeric">${fmt(r.volatility_bps_sqrt_s, 2)}</td><td class="numeric"><strong>${r.unseen_fills}</strong></td>
-              <td class="numeric">${fmt(b.expected, 1)} / ${b.drawn}</td><td class="numeric">${fmt(w.expected, 1)} / ${w.drawn}</td>
-              <td class="numeric">${fmt(b.log_likelihood, 1)}</td>
-              <td class="numeric">${better ? "<strong>" : ""}${fmt(w.log_likelihood, 1)}${better ? "</strong>" : ""}</td></tr>`;
-          }).join("")
-        : "<tr><td colspan='8'>Not available</td></tr>";
-      const chanceCell = (value) => (value === null || value === undefined ? "—" : pct(value, 2));
-      document.getElementById("tn-cal-curve").innerHTML = payload.rate_curve.map((p) => `<tr>
-          <td class="numeric">${fmt(p.distance_bps, 1)} bps</td><td class="numeric">${pct(p.fill_chance_per_tick, 2)}</td>
-          <td class="numeric">${chanceCell(p.fill_chance_calm)}</td><td class="numeric">${chanceCell(p.fill_chance_busy)}</td>
-          <td>${p.extended ? '<span class="badge badge-warn">extended, not measured</span>' : '<span class="badge badge-ok">calibrated</span>'}</td></tr>`).join("");
-    }
-
-    let calibrationLoaded = false;
-    async function refreshCalibration() {
-      if (calibrationLoaded) return;
-      try {
-        renderCalibration(await fetchJson("/testnet/calibration"));
-        calibrationLoaded = true;
-      } catch (error) {
-        document.getElementById("tn-cal-summary").textContent = `Calibration error: ${error.message}`;
-      }
-    }
-
-    async function refreshTestnet() {
-      refreshCalibration();
-      try {
-        const [status, comparison, balances, open, recent, fills] = await Promise.all([
-          fetchJson("/testnet/status"),
-          fetchJson("/testnet/comparison?window_minutes=1440"),
-          fetchJson("/testnet/balances"),
-          fetchJson("/testnet/orders?state=open&limit=20"),
-          fetchJson("/testnet/orders?state=final&limit=25"),
-          fetchJson("/testnet/fills?limit=20"),
-        ]);
-        renderTestnetStatus(status);
-        renderTestnetComparison(comparison, balances);
-        renderTestnetOrders(open.items, recent.items, fills.items);
-      } catch (error) {
-        document.getElementById("tn-status").textContent = `Testnet error: ${error.message}`;
-      }
-    }
-
-    async function refreshArb() {
-      try {
-        const [latest, history, accuracy] = await Promise.all([
-          fetchJson("/arb/simulation"),
-          fetchJson("/arb/simulations?limit=120"),
-          fetchJson("/arb/accuracy"),
-        ]);
-        renderArbStatus(latest);
-        renderArbLatest(latest.latest);
-        arbHistoryCache = history.items;
-        renderArbHistory(history.items);
-        renderGapChart(history.items);
-        renderAccuracy(accuracy);
-      } catch (error) {
-        document.getElementById("arb-note").textContent = `Flash-arb error: ${error.message}`;
-      }
-    }
-
-    async function refreshLp() {
-      try {
-        const [pool, lp, books, rebalances] = await Promise.all([
-          fetchJson("/v3/pool"),
-          fetchJson("/lp/position"),
-          fetchJson("/research/books"),
-          fetchJson("/lp/rebalances?limit=10"),
-        ]);
-        lpPoolCache = pool;
-        lpPositionCache = lp;
-        renderPool(pool);
-        renderLpPosition(lp);
-        renderLiquidityChart(pool, lp);
-        renderBooks(books);
-        renderRebalances(rebalances.items);
-      } catch (error) {
-        document.getElementById("v3-note").textContent = `V3/LP error: ${error.message}`;
-      }
-    }
-
-    document.getElementById("quote-btn").addEventListener("click", async () => {
-      const side = document.getElementById("quote-side").value;
-      const amount = document.getElementById("quote-amount").value;
-      const out = document.getElementById("quote-result");
-      out.textContent = "Quoting…";
-      try {
-        const q = await fetchJson(`/v3/quote?side=${side}&amount=${encodeURIComponent(amount)}`);
-        if (q.disabled_reason) {
-          out.textContent = `V3 disabled (${q.disabled_reason})`;
-          return;
-        }
-        const outUnit = side === "sell_base" ? "USDC" : "WETH";
-        const limit = q.limit_reason ? ` · LIMITED: ${q.limit_reason} (consumed ${fmt(q.amount_in_consumed, 6)})` : "";
-        out.textContent = `Out ${fmt(q.amount_out, 6)} ${outUnit} · exec price ${fmt(q.execution_price, 2)} · ` +
-          `impact ${fmt(q.price_impact_bps, 2)} bps · ticks crossed ${q.ticks_crossed} · ` +
-          `${q.exact ? "exact at block " + q.block_number : "window from block " + q.window_block_number}${limit}`;
-      } catch (error) {
-        out.textContent = `Quote failed: ${error.message}`;
-      }
-    });
-
-    document.getElementById("run-lp-backtest-btn").addEventListener("click", async () => {
-      const body = document.getElementById("lp-backtest-body");
-      body.innerHTML = "<tr><td colspan='7'>Running…</td></tr>";
-      try {
-        const payload = await fetchJson("/research/lp-backtest?widths_bps=20,50,200&thresholds_bps=10,40");
-        body.innerHTML = payload.rows.map((r) => `
-          <tr>
-            <td class="numeric">${r.range_width_bps}</td>
-            <td class="numeric">${r.rebalance_threshold_bps}</td>
-            <td class="numeric">${r.rebalance_count}</td>
-            <td class="numeric">${fmt(r.time_in_range_pct, 1)}%</td>
-            <td class="numeric">${usd(r.fees_quote, 4)}</td>
-            <td class="numeric">${signedUsd(r.il_quote)}</td>
-            <td class="numeric">${signedUsd(r.net_pnl_quote)}</td>
-          </tr>`).join("");
-      } catch (error) {
-        body.innerHTML = `<tr><td colspan='7'>Error: ${error.message}</td></tr>`;
-      }
-    });
-
-    document.querySelectorAll(".tab").forEach((tab) => {
-      tab.addEventListener("click", () => {
-        document.querySelectorAll(".tab").forEach((node) => node.classList.remove("active"));
-        document.querySelectorAll(".panel").forEach((node) => node.classList.remove("active"));
-        tab.classList.add("active");
-        document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
-        if (tab.dataset.tab === "lp") renderLiquidityChart(lpPoolCache, lpPositionCache);
-        if (tab.dataset.tab === "arb") renderGapChart(arbHistoryCache);
-        if (tab.dataset.tab === "mempool") renderVisibilityChart(mpBlocksCache);
-        history.replaceState(null, "", `#${tab.dataset.tab}`);
-      });
-    });
-    const initialTab = document.querySelector(`.tab[data-tab="${location.hash.slice(1)}"]`);
-    if (initialTab) initialTab.click();
-
-    document.getElementById("kill-switch-btn").addEventListener("click", async () => {
-      const btn = document.getElementById("kill-switch-btn");
-      const enabling = btn.dataset.active !== "true";
-      const action = enabling ? "ENABLE" : "DISABLE";
-      if (!window.confirm(`${action} kill switch? This cancels open quotes when enabling.`)) {
-        return;
-      }
-      const headers = { "Content-Type": "application/json" };
-      if (btn.dataset.auth === "true") {
-        if (!operatorToken) {
-          operatorToken = window.prompt("Operator token required for kill switch");
-        }
-        if (!operatorToken) return;
-        headers["X-Operator-Token"] = operatorToken;
-      }
-      try {
-        await fetchJson("/kill-switch", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ active: enabling }),
-        });
-        await refresh();
-      } catch (error) {
-        operatorToken = null;
-        window.alert(`Kill switch failed: ${error.message}`);
-      }
-    });
-
-    document.getElementById("run-compare-btn").addEventListener("click", async () => {
-      const body = document.getElementById("compare-body");
-      body.innerHTML = "<tr><td colspan='6'>Running…</td></tr>";
-      try {
-        const payload = await fetchJson("/research/compare");
-        renderCompare(payload.rows);
-      } catch (error) {
-        body.innerHTML = `<tr><td colspan='6'>Error: ${error.message}</td></tr>`;
-      }
-    });
-
-    document.getElementById("run-sweep-btn").addEventListener("click", async () => {
-      const body = document.getElementById("sweep-body");
-      body.innerHTML = "<tr><td colspan='6'>Running…</td></tr>";
-      try {
-        const payload = await fetchJson("/research/sweep", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            spreads_bps: configCache ? [configCache.quote_spread_bps, configCache.quote_spread_bps * 1.5] : [30, 45],
-            fill_modes: configCache ? [configCache.fill_mode] : ["full_cross_fill"],
-          }),
-        });
-        latestSweep = payload;
-        renderSweep(payload.rows);
-        document.getElementById("export-sweep-btn").disabled = false;
-      } catch (error) {
-        body.innerHTML = `<tr><td colspan='6'>Error: ${error.message}</td></tr>`;
-      }
-    });
-
-    document.getElementById("export-sweep-btn").addEventListener("click", () => {
-      if (!latestSweep) return;
-      const blob = new Blob([JSON.stringify(latestSweep, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "crypto-mm-lab-sweep.json";
-      link.click();
-      URL.revokeObjectURL(url);
-    });
-
-    window.addEventListener("resize", () => {
-      fetchJson("/pnl/history?limit=200")
-        .then((payload) => renderEquityCurve(payload.points))
-        .catch(() => {});
-    });
-
-    window.addEventListener("resize", () => renderLiquidityChart(lpPoolCache, lpPositionCache));
-
-    refresh();
-    refreshLp();
-    setInterval(refresh, 2000);
-    setInterval(refreshLp, 4000);
-    refreshArb();
-    setInterval(refreshArb, 4000);
-    refreshMempool();
-    setInterval(refreshMempool, 4000);
-    refreshTestnet();
-    setInterval(refreshTestnet, 4000);
-  </script>
+      </main>
+    </div>
+  </div>
 </body>
 </html>

@@ -5,7 +5,7 @@
 [![CI](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/hudsonferraz/crypto-mm-lab/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/hudsonferraz/crypto-mm-lab/branch/main/graph/badge.svg)](https://codecov.io/gh/hudsonferraz/crypto-mm-lab)
 
-**A paper market-making research lab for crypto.** It quotes on live Binance order books, runs a paper Uniswap V3 liquidity position, simulates a Solidity flash-arbitrage contract against live mainnet state, watches the public mempool, and checks its paper fill models against real orders on the Binance testnet. Everything runs on free public data, with no API keys, no wallet and no real money.
+**A paper market-making research lab for crypto.** Any visitor can run their own market-making simulation on real Binance, Kraken or Coinbase data in the browser. Alongside, it quotes on live Binance order books, runs a paper Uniswap V3 liquidity position, simulates a Solidity flash-arbitrage contract against live mainnet state, watches the public mempool, and checks its paper fill models against real orders on the Binance testnet. Everything runs on free public data, with no API keys, no wallet and no real money.
 
 This is an **education and research project**, not production trading infrastructure.
 
@@ -17,16 +17,18 @@ This is an **education and research project**, not production trading infrastruc
 | Smart contracts | An owner-only flash-arbitrage contract with unit, fuzz and invariant tests, 100% branch coverage and a gas gate. Every tick it is simulated against live mainnet state, and the scanner's estimate matches to the unit | [Flash-arbitrage executor](#flash-arbitrage-executor-solidity) |
 | Mempool | Pending swaps on the two pools are decoded and their price impact predicted, then checked against the block they land in. Every replayed swap is reproduced with zero math error | [Mempool watcher](#mempool-watcher) |
 | Execution realism | Real post-only orders on the Binance testnet show the paper fill models are too pessimistic (50% vs 67% fill rate). A fill model fitted on 8 recorded sessions is the closest to real fills in 8 of 8 sessions it was not fitted on. A volatility term was tested against a rule fixed in advance, failed, and was reported as failed | [Testnet execution](#binance-spot-testnet-execution) |
+| Simulation lab | Any visitor picks an exchange, a real pair and a strategy, records the live book or uses a bundled real recording, and compares runs side by side. Runs are kept apart per visitor, never touch the live loop, and can fill on real public trades | [Simulation lab](#simulation-lab) |
 | Market making | Pure, inventory-skew and volatility-adjusted strategies, with position caps, a kill switch, backtests and strategy sweeps | [Capabilities](#capabilities) |
-| Engineering | FastAPI, web3.py with Multicall3, Solidity 0.8.28 with Foundry, SQLAlchemy, Prometheus and Grafana; 570+ tests in CI; every design choice written down with its trade-off | [Design decisions](docs/design-decisions.md) |
+| Engineering | FastAPI, web3.py with Multicall3, Solidity 0.8.28 with Foundry, SQLAlchemy, Prometheus and Grafana; 630+ tests in CI; every design choice written down with its trade-off | [Design decisions](docs/design-decisions.md) |
 
 Start with the [Quickstart](#quickstart-local): four commands run the whole lab locally, without keys. See also the [simulation assumptions](#simulation-assumptions) and the [interview story](docs/interview-story.md).
 
-![Demo: the Live MM, Opportunities, On-chain LP, Flash arb, Mempool and Testnet tabs](docs/images/demo.gif)
+![Demo: the overview, a simulation lab run and a comparison of three runs, then the live market maker, Uniswap V3 LP, flash arbitrage, mempool and testnet sections](docs/images/demo.gif)
 
 ## Highlights
 
-- **Product dashboard** — paper-trading banner, config chips, seven tabs (Live MM, Opportunities, Research, On-chain LP, Flash arb, Mempool, Testnet), each result explained in plain language
+- **Simulation lab** — per-visitor paper simulations on real data from Binance, Kraken or Coinbase: record a pair's live book and public trades for 30 to 120 seconds, or replay a bundled real recording at once. Real market rules, a trade-driven fill model, a holding baseline, plain-language summaries and side-by-side comparison
+- **Product dashboard** — redesigned with section navigation, an overview, dark and light themes and a phone layout; still plain HTML, CSS and JavaScript with no build step. Every result is explained in plain language
 - **Execution simulation** — cash-account fills (`full_cross_fill`, `partial_fill`, toy `latency_prob_fill`, or `calibrated_fill` fitted on real testnet sessions), auditable quote and fill IDs, per-tick `tick_id` joins
 - **Risk and inventory controls** — position caps, cumulative cash reservation, kill switch (optional operator token), stale-tick safeguards
 - **Strategy research** — pure MM, inventory skew, volatility-adjusted spread, with API/CLI comparison and sweeps
@@ -41,9 +43,13 @@ Start with the [Quickstart](#quickstart-local): four commands run the whole lab 
 
 ## Screenshots
 
-| Dashboard (live) | Kill switch |
-|------------------|-------------|
-| ![Dashboard](docs/images/dashboard.png) | ![Kill switch](docs/images/dashboard-killswitch.png) |
+| Simulation lab | Kill switch |
+|----------------|-------------|
+| ![Simulation lab](docs/images/dashboard.png) | ![Kill switch](docs/images/dashboard-killswitch.png) |
+
+| Simulation lab: a result, your runs, and three runs compared |
+|---------------------------------------------------------------|
+| ![Simulation lab, full page](docs/images/dashboard-lab.png) |
 
 | Architecture | Backtest report |
 |--------------|-----------------|
@@ -176,8 +182,38 @@ docker compose up --build
 | `GET /testnet/comparison` | Per fill model: fill rate real vs paper, matched / paper only / real only / neither, time to fill, PnL gap (`?window_minutes=60`) |
 | `GET /testnet/sessions` | Testnet sessions and why they ended |
 | `GET /testnet/calibration` | The fitted `calibrated_fill` parameters and the form in use, their source sessions, the leave-one-session-out results for both forms and the gate, the fill-chance curve (with calm and busy columns when the volatility form is in use) and the explanations |
+| `GET /lab/options` | Simulation lab: exchanges and their real pairs with market rules, bundled recordings, strategies, fill models, limits and the D1–D6 explanations |
+| `POST /lab/runs` | Start a run (header `X-Visitor-Id`): bundled (`bundle_id`) or live (`exchange`, `symbol`, `duration_sec`), plus `strategy`, `spread_bps`, `fill_model`. Refusals say which limit applied and when to retry |
+| `GET /lab/runs` | This visitor's runs only |
+| `GET /lab/runs/{run_id}` | One of this visitor's runs: stage, then the full result (404 for anyone else's) |
+| `POST /live/pair` | Operator only (`X-Operator-Token`): switch the live loop to another allowed Binance pair from a fresh paper position |
 | `POST /kill-switch` | Enable/disable kill switch (`{"active": true}`) |
 | `GET /dashboard` | Static monitoring UI |
+
+## Simulation lab
+
+The dashboard's **Simulation lab** lets any visitor run their own paper market maker on real market data. Choose:
+
+- **Market data**: a bundled recording (real books and public trades, 5 minutes each, from Binance BTC/USDT and ETH/USDT, Coinbase SOL/USD and Kraken BTC/USD), which runs at once, or **record live**: the lab records the chosen pair's book and public trades for 30 to 120 seconds, then simulates.
+- **Exchange and pair**: Binance, Kraken or Coinbase, and any pair from an allowlist of liquid coins that the exchange's own market list shows as active.
+- **Strategy, spread and fill model**: the three strategies of the live loop, the four existing fill models, and a new **trade-driven** model.
+
+The result shows the strategy's final value against simply holding the starting portfolio, fees, fills, the value and inventory over time, the fills, and a plain-language summary. Finished runs can be compared side by side, each keeping its color.
+
+A live recording finishes about a second after it ends when no one is waiting (a 30-second Kraken run took 31 s locally). On the bundled BTC/USDT recording, every fill model loses to holding at a 1 bps spread: the 2 bps maker fee is larger than the half-spread the strategy earns. That is the kind of result the lab is for.
+
+### Why it's built this way
+
+- **Your runs are yours.** The browser creates a random id and keeps it; runs belong to it, and another id gets "not found" for them. No login and no personal data: the goal is that visitors do not see or disturb each other, not secrecy. The lab holds no reference to the live loop, so it cannot change its pair, position or history.
+- **Record now, or use a bundled recording.** No exchange gives free history of full order books. Recording makes any allowed pair possible; bundled recordings make the lab instant and keep working if an exchange is unreachable. The 10-row test fixtures were not used: their prices are made up.
+- **Real pairs, real market rules.** A visitor's choice reaches ccxt only as a symbol from the allowlist that the exchange lists as active. Prices round to the market's price step (bids down, asks up, so rounding never narrows the spread), sizes to its size step and minimum. Each quote is worth about 100 in the quote currency, since a fixed coin amount would be far too small for some coins and far too large for others.
+- **Fills from real trades.** The trade-driven model fills a resting quote when a public trade printed at or through its price, up to that trade's size. Snapshot models miss touches between snapshots (feature 006 found that on the testnet); trades show them. It assumes our order was first in line, so it is optimistic where the snapshot models are pessimistic. The testnet calibration rejected a trade-driven model because backtests had no trade feed and testnet trades are thin; lab recordings carry their trade feed, and the recorded pairs trade hundreds to thousands of times in five minutes.
+- **Limits that keep the demo up.** The hosted demo is one small free server, and exchanges limit public data. At most 2 recordings run at once and 10 wait; each browser has one run at a time, 10 live recordings and 60 bundled runs per hour, and the hourly limits also apply per network address. Runs are kept 2 hours in memory and a restart clears them. Kraken allows about one request a second, so its recordings take a snapshot every 2 seconds.
+- **Compared with doing nothing.** Every run starts with 10,000 in value, half in the coin and half in cash. Market making earns spread but carries inventory, so the result is shown against holding that same start.
+- **Off the live loop.** Recording and simulation run on the lab's own thread pool with their own ccxt clients. With two recordings running, the live loop's 95th-percentile tick time rose 3.6% (329 to 341 ms; `scripts/measure_lab_tick_impact.py`), within the 10% bound.
+- **The operator can move the live loop.** With the operator token, `POST /live/pair` switches the live loop to another allowed Binance pair from a fresh paper position, with quote size scaled to keep the same value. It lasts until the next restart. Visitors cannot do it.
+
+Re-record the bundled recordings with `python scripts/record_lab_bundle.py --duration 300` (public data only).
 
 ## Uniswap V3 concentrated liquidity
 
@@ -487,7 +523,11 @@ See `.env.example`. Key variables:
 | `FILL_MODE` | `full_cross_fill`, `partial_fill`, `latency_prob_fill`, or `calibrated_fill` |
 | `FILL_CALIBRATION_PATH` | Calibration file for `calibrated_fill` (default `app/execution/fill_calibration.json`, written by `scripts/calibrate_fill_model.py`) |
 | `MARKET_DATA_MODE` | `poll` (default) or `websocket` (falls back to poll if unsupported) |
-| `OPERATOR_API_TOKEN` | Optional; protects kill switch when set |
+| `OPERATOR_API_TOKEN` | Optional; protects the kill switch and the live pair switch when set |
+| `LAB_ENABLED` | Simulation lab (default on) |
+| `LAB_CONCURRENT_RECORDINGS`, `LAB_QUEUE_SIZE` | Live recordings at once (2) and waiting (10) |
+| `LAB_RUNS_PER_HOUR`, `LAB_BUNDLED_RUNS_PER_HOUR` | Per browser and per network address: live recordings (10) and bundled runs (60) per hour |
+| `LAB_KEEP_HOURS`, `LAB_RUNS_KEPT` | How long runs stay in memory (2 h) and how many per browser (10) |
 | `DEX_ENABLED` | Enable on-chain pool reader + arbitrage scanner |
 | `METRICS_ENABLED` | Export Prometheus metrics from the loop |
 | `V3_ENABLED`, `V3_POOL_ADDRESS` | Uniswap V3 reader (default WETH/USDC 5 bps pool) |

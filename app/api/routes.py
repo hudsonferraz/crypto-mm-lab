@@ -97,6 +97,7 @@ async def status(request: Request) -> dict:
         "last_tick_id": loop.last_tick_id,
         "kill_switch_active": loop.kill_switch.active,
         "open_quotes": loop.open_quote_count,
+        "mm_symbol": loop.settings.symbol,
         "last_error": loop.last_error or market_data_error,
         "paper_trading": True,
         "market_data_mode": settings.market_data_mode,
@@ -127,13 +128,19 @@ def _fill_calibration_config(path: str) -> dict:
     }
 
 
+def _live_symbol(request: Request, settings: Settings) -> str:
+    """The pair the live loop trades now; an operator switch changes it (specs/009 US4)."""
+    loop = getattr(request.app.state, "market_maker_loop", None)
+    return loop.settings.symbol if loop is not None else settings.symbol
+
+
 @router.get("/config")
-async def config() -> dict:
+async def config(request: Request) -> dict:
     settings = get_settings()
     return {
         "paper_trading": True,
         "exchange": settings.exchange,
-        "mm_symbol": settings.symbol,
+        "mm_symbol": _live_symbol(request, settings),
         "cex_compare_symbol": settings.cex_compare_symbol,
         "strategy": settings.strategy,
         "fill_mode": settings.fill_mode,
@@ -268,7 +275,8 @@ async def pnl_history(
     limit: int = Query(default=200, ge=1, le=1000),
 ) -> dict:
     loop = _get_loop(request)
-    points = loop.repository.get_pnl_history(limit=limit)
+    # specs/009 R10: after an operator pair switch, only the current pair's history.
+    points = loop.repository.get_pnl_history(limit=limit, symbol=loop.settings.symbol)
     return {"points": [pnl_history_point(point) for point in points]}
 
 
@@ -278,7 +286,7 @@ async def fills(
     limit: int = Query(default=20, ge=1, le=100),
 ) -> dict:
     loop = _get_loop(request)
-    stored_fills = loop.repository.get_latest_fills(limit=limit)
+    stored_fills = loop.repository.get_latest_fills(limit=limit, symbol=loop.settings.symbol)
     return {"fills": [fill_to_dict(fill) for fill in stored_fills]}
 
 
@@ -321,7 +329,7 @@ async def amm(request: Request) -> dict:
     compare_mid = loop.last_compare_mid
     base = {
         "dex_enabled": settings.dex_enabled,
-        "mm_symbol": settings.symbol,
+        "mm_symbol": _live_symbol(request, settings),
         "cex_compare_symbol": settings.cex_compare_symbol,
         "quote_asset_basis_note": (
             "Observational only: CEX compare mid is typically USDT-quoted while "
@@ -381,7 +389,7 @@ async def opportunities(
     latest = loop.last_opportunities
     return {
         "dex_enabled": settings.dex_enabled,
-        "mm_symbol": settings.symbol,
+        "mm_symbol": _live_symbol(request, settings),
         "cex_compare_symbol": settings.cex_compare_symbol,
         "quote_asset_basis_note": (
             "Edges compare CEX mid vs AMM spot across potentially different quote assets "

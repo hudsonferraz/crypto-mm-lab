@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -9,11 +10,13 @@ from app.api.arb_routes import router as arb_router
 from app.api.lp_routes import router as lp_router
 from app.api.mempool_routes import router as mempool_router
 from app.api.routes import router
+from app.api.simlab_routes import router as simlab_router
 from app.api.testnet_routes import router as testnet_router
 from app.config.settings import get_settings
 from app.services.market_maker_loop import MarketMakerLoop
 from app.services.mempool.watcher import MempoolWatcher
 from app.services.testnet.trader import TestnetTrader
+from app.simlab.service import SimLab
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -34,6 +37,10 @@ async def lifespan(app: FastAPI):
         else None
     )
     app.state.testnet_trader = trader
+    # The simulation lab never touches the loop: separate clients, threads and state (specs/009).
+    simlab = SimLab(settings) if settings.lab_enabled else None
+    app.state.simlab = simlab
+    warm_task = asyncio.create_task(simlab.warm()) if simlab is not None else None
     if settings.loop_enabled:
         await loop.start()
     if watcher is not None:
@@ -41,6 +48,10 @@ async def lifespan(app: FastAPI):
     if trader is not None:
         await trader.start()
     yield
+    if warm_task is not None:
+        warm_task.cancel()
+    if simlab is not None:
+        await simlab.stop()
     if trader is not None:
         await trader.stop()
     if watcher is not None:
@@ -55,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(arb_router)
     app.include_router(mempool_router)
     app.include_router(testnet_router)
+    app.include_router(simlab_router)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/")
